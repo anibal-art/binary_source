@@ -3,3 +3,4 @@ lightcurves_binary/
 binary_source/.ipynb_checkpoints/*
 *png
 *pdf
+binary_source/__pycache__/*

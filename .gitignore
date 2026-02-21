@@ -1,2 +1,3 @@
 lightcurves_binary/
 *.npz
+binary_source/.ipynb_checkpoints/*

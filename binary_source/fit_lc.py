@@ -59,7 +59,6 @@ def event_creation(Source, path_ephemerides, wfirst_lc, lsst_u, lsst_g,
     return e
     
 
-# def model_rubin_roman(Source, true_model, event_params, path_ephemerides, model,ORIGIN, wfirst_lc, lsst_u, lsst_g, lsst_r, lsst_i, lsst_z, lsst_y):
 def fit_rubin_roman(Source, event_params, path_save, path_ephemerides, model, algo, Origin, rango, wfirst_lc, lsst_u, lsst_g,
                     lsst_r, lsst_i, lsst_z,
                     lsst_y):

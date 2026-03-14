@@ -2,13 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
 import scipy.optimize as so
-import pandas as pd
+
 from pyLIMA import event, telescopes
 from pyLIMA.models import PSPL_model
 from pyLIMA.simulations import simulator
-from Chebyshev import Chebyhev_coefficients
-from Chebyshev import evaluate_chebyshev
-from func_tools import *
+
 # =========================
 # helpers
 # =========================
@@ -151,90 +149,11 @@ def single_period_fit_and_plot(
 
     # reconstruct fitted curves
     best_full = np.concatenate([best, [fs, fsecond]])
-    
-
     py_best = model_pspl.compute_pyLIMA_parameters(best_full)
 
     F_fit = model_pspl.compute_the_microlensing_model(ev.telescopes[0], py_best)["photometry"]
     A_truth = model_xal.model_magnification(ev.telescopes[0], py_params_xal)
     A_fit   = model_pspl.model_magnification(ev.telescopes[0], py_best)
-    # ===========================================================================
-    
-    residual_structure =detect_residual_structure_envelope(
-    t=t,
-    A_truth=A_truth,
-    A_fit=A_fit,
-    t0_ref=t0_true,          # o t0_ml
-    smooth_window=80,
-    fraction_of_peak=0.001,   # probá también 0.02 o 0.01 si querés tomar más ancho
-    min_points=5,
-    pad_fraction=0.20
-)
-    
-    
-    df_truth_struct = residual_structure["df_interval_truth"]
-    df_fit_struct   = residual_structure["df_interval_fit"]
-    
-    t0_interval = residual_structure["t0_interval"]
-    tE_interval = residual_structure["tE_interval"]
-
-    # ===========================================================================
-    degree_cheb = 50
-    t0_ml, u0_ml, tE_ml = best_full[0],best_full[1],best_full[2]
-    # df_truth = pd.DataFrame({'t': t, 'A': A_truth})
-    # df_fit   = pd.DataFrame({'t': t, 'A': A_fit})
-    
-    
-    coeff_truth = Chebyhev_coefficients(
-        df_truth_struct,
-        t0_interval,
-        tE_interval,
-        degree_cheb
-    )
-    
-    coeff_fit = Chebyhev_coefficients(
-        df_fit_struct,
-        t0_interval,
-        tE_interval,
-        degree_cheb
-    )
-    
-    cheb_truth = evaluate_chebyshev(
-        df_truth_struct,
-        t0_interval,
-        tE_interval,
-        coeff_truth
-    )
-    
-    cheb_fit = evaluate_chebyshev(
-        df_fit_struct,
-        t0_interval,
-        tE_interval,
-        coeff_fit
-    )
-    
-    t_cheb_truth = np.sort(df_truth_struct["t"].values)
-    t_cheb_fit   = np.sort(df_fit_struct["t"].values)
-    # =========================
-    # plot Chebyshev
-    # =========================
-    
-    plt.figure(figsize=(7,4))
-    
-    plt.plot(t, A_truth, label="Truth")
-    plt.plot(t_cheb_truth, cheb_truth, '--', label="Chebyshev truth")
-    plt.xlabel("Time [days]")
-    plt.ylabel("Magnification")
-    plt.legend()
-    plt.show()
-    
-    plt.plot(t, A_fit, label="PSPL fit")
-    plt.plot(t_cheb_fit, cheb_fit, '--', label="Chebyshev fit")
-    plt.xlabel("Time [days]")
-    plt.ylabel("Magnification")
-    plt.legend()
-    plt.show()
-    
 
     # residuals
     resid_F = F_truth - F_fit
@@ -252,37 +171,36 @@ def single_period_fit_and_plot(
     # =========================
     # plots: FLUX + residual
     # =========================
-    if False:
-        fig = plt.figure(figsize=(7.2, 5.2))
-        gs = fig.add_gridspec(2, 1, height_ratios=[3.2, 1.2], hspace=0.06)
-        ax = fig.add_subplot(gs[0, 0])
-        axr = fig.add_subplot(gs[1, 0], sharex=ax)
-    
-        ax.plot(t[mask], F_truth[mask], label="Xallarap (truth)")
-        ax.plot(t[mask], F_fit[mask], "--", label="PSPL fit")
-        ax.set_ylabel("Flux")
-        ax.legend(frameon=False, loc="best")
-    
-        ax.text(
-            0.02, 0.95,
-            rf"$P={P_days:.2f}\,\mathrm{{d}}$" + "\n" + rf"$\mathrm{{RMS}}_F={rms_F:.3e}$",
-            transform=ax.transAxes, va="top", ha="left",
-            bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="none", alpha=0.85),
-        )
-    
-        axr.plot(t[mask], resid_F[mask])
-        axr.axhline(0.0, linestyle=":", linewidth=1.0)
-        axr.set_xlabel("Time [days]")
-        axr.set_ylabel("Residual")
-        ax.yaxis.set_minor_locator(AutoMinorLocator())
-        axr.yaxis.set_minor_locator(AutoMinorLocator())
-        axr.xaxis.set_minor_locator(AutoMinorLocator())
-        plt.setp(ax.get_xticklabels(), visible=False)
-    
-        fig.tight_layout()
-        fig.savefig(f"{out_prefix}_flux.pdf", bbox_inches="tight")
-        fig.savefig(f"{out_prefix}_flux.png", bbox_inches="tight")
-        plt.show()
+    #fig = plt.figure(figsize=(7.2, 5.2))
+    #gs = fig.add_gridspec(2, 1, height_ratios=[3.2, 1.2], hspace=0.06)
+    #ax = fig.add_subplot(gs[0, 0])
+    #axr = fig.add_subplot(gs[1, 0], sharex=ax)
+
+    #ax.plot(t[mask], F_truth[mask], label="Xallarap (truth)")
+    #ax.plot(t[mask], F_fit[mask], "--", label="PSPL fit")
+    #ax.set_ylabel("Flux")
+    #ax.legend(frameon=False, loc="best")
+
+    #ax.text(
+     #   0.02, 0.95,
+     #   rf"$P={P_days:.2f}\,\mathrm{{d}}$" + "\n" + rf"$\mathrm{{RMS}}_F={rms_F:.3e}$",
+      #  transform=ax.transAxes, va="top", ha="left",
+       # bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="none", alpha=0.85),
+    #)
+
+    #axr.plot(t[mask], resid_F[mask])
+    #axr.axhline(0.0, linestyle=":", linewidth=1.0)
+    #axr.set_xlabel("Time [days]")
+    #axr.set_ylabel("Residual")
+    #ax.yaxis.set_minor_locator(AutoMinorLocator())
+    #axr.yaxis.set_minor_locator(AutoMinorLocator())
+    #axr.xaxis.set_minor_locator(AutoMinorLocator())
+    #plt.setp(ax.get_xticklabels(), visible=False)
+
+    #fig.tight_layout()
+    #fig.savefig(f"{out_prefix}_flux.pdf", bbox_inches="tight")
+    #fig.savefig(f"{out_prefix}_flux.png", bbox_inches="tight")
+    #plt.show()
 
     # =========================
     # plots: MAGNIFICATION + residual
@@ -305,7 +223,6 @@ def single_period_fit_and_plot(
     )
 
     axr.plot(t[mask], resid_A[mask])
-    axr.axvspan(t0_interval-tE_interval,t0_interval+tE_interval,alpha=0.4)
     axr.axhline(0.0, linestyle=":", linewidth=1.0)
     axr.set_xlabel("Time [days]")
     axr.set_ylabel(r"$\Delta A$")
@@ -340,18 +257,64 @@ def single_period_fit_and_plot(
 # EJEMPLO DE USO (elegí tu P)
 # =========================
 # Ej: aislar un solo período
-# %matplotlib inline
-plt.close("all")
-out = single_period_fit_and_plot(
-    P_days=573,
-    t0_true=50.0, u0_true=0.1, tE_true=573.0,
-    xiE=0.1,            # poné tu valor
-    theta=0.0, phi0=0.0,
-    lambda_xi=0.5*np.pi,
-    q_mass=1.0, qflux=0.0,
-    fs=1.0,
-    fsecond=1.0,        # OJO: si tu modelo usa ftotal, esto debería ser ftotal
-    override_xiE=None,  # o override_xiE=0.1 para forzar amplitud fija
-    window_k=5.0,       # None para todo el rango
-    out_prefix="singleP_210d",
-)
+#%matplotlib inline
+#plt.close("all")
+#out = single_period_fit_and_plot(
+#    P_days=173/2,
+#    t0_true=50.0, u0_true=0.1, tE_true=173.0,
+#    xiE=0.1,            # poné tu valor
+#    theta=0.0, phi0=0.0,
+#    lambda_xi=0.5*np.pi,
+#    q_mass=1.0, qflux=0.0,
+#    fs=1.0,
+#    fsecond=1.0,        # OJO: si tu modelo usa ftotal, esto debería ser ftotal
+#    override_xiE=None,  # o override_xiE=0.1 para forzar amplitud fija
+#    window_k=5.0,       # None para todo el rango
+#    out_prefix="singleP_210d",
+#)
+
+import argparse
+#import numpy as np
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--P_days", type=float, required=True)
+    parser.add_argument("--t0_true", type=float, default=50.0)
+    parser.add_argument("--u0_true", type=float, default=0.1)
+    parser.add_argument("--tE_true", type=float, default=173.0)
+
+    parser.add_argument("--xiE", type=float, default=0.1)
+    parser.add_argument("--theta", type=float, default=0.0)
+    parser.add_argument("--phi0", type=float, default=0.0)
+    parser.add_argument("--lambda_xi", type=float, default=0.5*np.pi)
+
+    parser.add_argument("--q_mass", type=float, default=1.0)
+    parser.add_argument("--qflux", type=float, default=0.0)
+
+    parser.add_argument("--fs", type=float, default=1.0)
+    parser.add_argument("--fsecond", type=float, default=1.0)
+
+    parser.add_argument("--window_k", type=float, default=5.0)
+
+    parser.add_argument("--out_prefix", type=str, default="singleP")
+
+    args = parser.parse_args()
+
+    out = single_period_fit_and_plot(
+        P_days=args.P_days,
+        t0_true=args.t0_true,
+        u0_true=args.u0_true,
+        tE_true=args.tE_true,
+        xiE=args.xiE,
+        theta=args.theta,
+        phi0=args.phi0,
+        lambda_xi=args.lambda_xi,
+        q_mass=args.q_mass,
+        qflux=args.qflux,
+        fs=args.fs,
+        fsecond=args.fsecond,
+        window_k=args.window_k,
+        out_prefix=args.out_prefix,
+    )

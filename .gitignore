@@ -5,3 +5,4 @@ binary_source/.ipynb_checkpoints/*
 *pdf
 binary_source/__pycache__/*
 *.gif
+results/

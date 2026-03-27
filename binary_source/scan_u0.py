@@ -36,9 +36,13 @@ P_grid = np.logspace(1, 5, 60)  # 10 d → 100000 d
 N_u0 = 25
 u0_grid = np.linspace(0.01, 1.0, N_u0)   # elegí rango; ajustalo a tu caso
 # tE_true = 100.0
+import os
+home_path = os.path.expanduser("~")
+
 for tE_true in [50,150,500,1000]: 
     for k, u0_true in enumerate(u0_grid):
-        directory = f"/home/anibal/binary_source/results/scan_u0_tE{int(tE_true)}/"
+        
+        directory =home_path+ f"/binary_source/results/scan_u0_tE{int(tE_true)}/"
         os.makedirs(directory, exist_ok=True)
         out_name = directory+f"scan_kepler_u0_{k:03d}.npz"
     

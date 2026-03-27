@@ -40,9 +40,10 @@ Mtot_grid = np.logspace(-1, 1, 30)           # 0.1 a 10 Msun
 # ============================================================
 # scan in tE
 # ============================================================
+home_path = os.path.expanduser("~")
 for tE_true in [50, 150, 500, 1000]:
 
-    directory = f"/home/anibal-pc/binary_source/results/scan_aRE_Mtot_tE{int(tE_true)}/"
+    directory = home_path+f"/binary_source/results/scan_aRE_Mtot_tE{int(tE_true)}/"
     os.makedirs(directory, exist_ok=True)
 
     for ia, a_over_RE in enumerate(a_over_RE_grid):

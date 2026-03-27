@@ -1,7 +1,7 @@
 
 from degeneracy_fit import run_grid_and_save_npz_kepler
 import numpy as np
-
+import os
 # time
 t = np.linspace(-500, 500, 5000)
 
@@ -22,8 +22,12 @@ P_grid = np.logspace(1, 5, 60)   # 10 d → 100000 d
 N_lambda = 25  # fix resolution
 lambda_xi_grid = np.linspace(0.0, 0.5*np.pi, N_lambda)
 
+home_path = os.path.expanduser("~")
 for k, lambda_xi in enumerate(lambda_xi_grid):
-    out_name = f"scan_kepler_lambda_{k:03d}.npz"
+    directory = home_path+f"/binary_source/results/scan_lambda_tE{int(tE_true)}/"
+    os.makedirs(directory, exist_ok=True)
+
+    out_name = directory+f"scan_kepler_lambda_{k:03d}.npz"
 
     run_grid_and_save_npz_kepler(
         out_npz_path=out_name,

@@ -42,8 +42,10 @@ q_grid = np.logspace(-2, 1, N_q)   # 0.01 -> 10
 # ============================================================
 # scan over tE and q
 # ============================================================
+home_path = os.path.expanduser("~")
+
 for tE_true in [50, 150, 500, 1000]:
-    directory = os.path.expanduser("~")+f"/binary_source/results/scan_q_tE{int(tE_true)}/"
+    directory = home_path+f"/binary_source/results/scan_q_tE{int(tE_true)}/"
     os.makedirs(directory, exist_ok=True)
 
     for k, q_true in enumerate(q_grid):

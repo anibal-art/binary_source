@@ -4,7 +4,7 @@ import os
 # ============================================================
 # time grid
 # ============================================================
-t = np.linspace(-500, 500, 5000)
+
 
 # ============================================================
 # "truth" PSPL params (base)
@@ -41,7 +41,7 @@ home_path = os.path.expanduser("~")
 
 for tE_true in [50,150,500,1000]: 
     for k, u0_true in enumerate(u0_grid):
-        
+        t = np.linspace(-3.5*tE_true, 3.5*tE_true, 20*7*tE_true)
         directory =home_path+ f"/binary_source/results/scan_u0_tE{int(tE_true)}/"
         os.makedirs(directory, exist_ok=True)
         

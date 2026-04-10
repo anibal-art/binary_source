@@ -474,7 +474,7 @@ import os
 # ============================================================
 # time grid
 # ============================================================
-t = np.linspace(-500, 500, 5000)
+
 
 # ============================================================
 # "truth" PSPL params (base)
@@ -512,7 +512,7 @@ for tE_true in [50,100,150,200,300,400,500,1000]:
         directory = f"/home/anibal/binary_source/results/scan_u0_tE{int(tE_true)}/"
         os.makedirs(directory, exist_ok=True)
         out_name = directory+f"scan_kepler_u0_{k:03d}.npz"
-    
+        t = np.linspace(-3.5*tE_true, 3.5*tE_true, int(7*tE_true*24*4))
         run_grid_and_save_npz_kepler(
             out_npz_path=out_name,
             t=t,

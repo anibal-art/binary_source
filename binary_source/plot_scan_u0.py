@@ -14,12 +14,13 @@ if len(files) == 0:
 # -------------------------------------------------
 data_list = []
 u0_values = []
+metric ="intL1"
 
 for fn in files:
     d = np.load(fn, allow_pickle=False)
 
     P_grid = d["P_grid"].astype(float)
-    RMS = d["RMS"].astype(float)
+    RMS = d[metric].astype(float)
     SUCCESS = d["SUCCESS"].astype(bool)
     truth = d["truth"].astype(float)
 
@@ -56,7 +57,13 @@ for u0_true, Pp, Rp in data_list:
     ax.semilogx(Pp/tE_true, Rp, color=color, linewidth=lw)
 
 ax.set_xlabel(r"$P/tE$")
-ax.set_ylabel(r"RMS (magnification)")
+if metric=="RMS":
+    ax.set_ylabel(r"RMS (magnification)")
+elif metric=="MAXABS":
+    ax.set_ylabel(r"$MAX |A_{\xi_E} - A_{PSPL}|$")
+elif metric=="intL1":
+    ax.set_ylabel(r"$\int |A_{\xi_E} - A_{PSPL}| dt$")
+    
 ax.set_yscale("log")
 ax.grid(True, which="both", alpha=0.3)
 ax.set_title(r"Kepler-consistent scan: RMS($P$) colored by $u_0$")

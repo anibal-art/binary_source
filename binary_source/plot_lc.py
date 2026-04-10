@@ -93,7 +93,7 @@ def single_period_fit_and_plot(
       - float: plotea solo |t-t0| <= window_k * tE_true
     """
     # time grid
-    t = np.linspace(-500, 500, 5000)
+    t = np.linspace(-3.5*tE_true, 3.5*tE_true, int(20*7*tE_true))
 
     # omega
     omega = 2.0*np.pi/float(P_days)
@@ -217,7 +217,7 @@ def single_period_fit_and_plot(
     INT_L1 = float(np.trapz(np.abs(resid_A[mask]), t[mask]))
     ax.text(
         0.02, 0.95,
-        rf"$P={P_days:.2f}\,\mathrm{{d}}$" + "\n" + rf"$\mathrm{{RMS}}_A={rms_A:.3e}$"+"\n"+f"Int L1= {round(INT_L1,3)}"+"\n"+r"MAX $|F_\xi-F_{PSPL}|$="+f" {round(max(abs(resid_F)),3)}",
+        rf"P/tE={P_days/tE_true:.2f}" + "\n" + r"$\mathrm{{RMS}}(|A_\xi - A_{PSPL}|)="+f"{rms_A:.3e}$"+"\n"+r"$\int |A_\xi-A_{PSPL}|dt$= "+f"{round(INT_L1,3)}"+"\n"+r"MAX $|A_\xi-A_{PSPL}|$="+f" {round(max(abs(resid_F)),3)}",
         transform=ax.transAxes, va="top", ha="left",
         bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="none", alpha=0.85),
     )
@@ -231,7 +231,7 @@ def single_period_fit_and_plot(
     axr.xaxis.set_minor_locator(AutoMinorLocator())
     plt.setp(ax.get_xticklabels(), visible=False)
    
-    
+    plt.suptitle("$u_0$="+f"{u0_true:.2f}"+"  tE="+f"{tE_true:.2f}")
     fig.tight_layout()
     fig.savefig(f"{out_prefix}_mag.pdf", bbox_inches="tight")
     fig.savefig(f"{out_prefix}_mag.png", bbox_inches="tight")

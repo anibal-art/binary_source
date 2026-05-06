@@ -1,237 +1,23 @@
 import numpy as np
-import matplotlib.pyplot as plt
-
-from pyLIMA import event, telescopes
-from pyLIMA.models import PSPL_model
-from pyLIMA.simulations import simulator
-from pyLIMA.fits import TRF_fit
-import pyLIMA, os, sys
-
 import pandas as pd
-import matplotlib.pyplot as plt
-from pyLIMA import event, telescopes
-from pyLIMA.simulations import simulator
-from pyLIMA.models import FSPL_model,USBL_model,PSPL_model
-# from ipywidgets import interactive, HBox, VBox, Layout
-# from ipywidgets import (FloatSlider, FloatLogSlider, interactive_output, HBox, VBox, GridBox, Layout, Label)
-# from IPython.display import display
+# import matplotlib.pyplot as plt
+import os, sys
 current_path = os.getcwd()
 parent_directory = os.path.abspath(os.path.join(current_path, os.pardir))
 print("Parent Directory:", parent_directory)
 sys.path.append(parent_directory)
-import pyLIMA_plots
-from astropy import units as u
-from astropy import constants as C
-from pyLIMA.xallarap.xallarap import xallarap_shifts, compute_xallarap_curvature
 
-
-def orbital_period_kepler(a_au, M_tot_Msun):
-    """
-    Compute the orbital period of a binary system using Kepler's third law
-    in astronomical units.
-
-    Parameters
-    ----------
-    a_au : float or array-like
-        Semimajor axis in astronomical units (AU).
-    M_tot_Msun : float or array-like
-        Total mass of the system in solar masses (M_sun).
-
-    Returns
-    -------
-    P_yr : float or ndarray
-        Orbital period in years.
-    """
-    a_au = np.asarray(a_au, dtype=float)
-    M_tot_Msun = np.asarray(M_tot_Msun, dtype=float)
-    print("Period ", np.sqrt(a_au**3 / M_tot_Msun), "years")
-    print("converting to ", np.sqrt(a_au**3 / M_tot_Msun)*365.25, "days (to use in pyLIMA)")
-    return np.sqrt(a_au**3 / M_tot_Msun)*365.25*(1/u.day)
-def build_case(case_name, DS, DL, rEhat, v_perp, a, M1, M2,
-               t0=50, u0=0.1, xi_phase=0, xi_inclination=np.pi/2, flux_ratio=0.0):
-    """
-    Construye un diccionario con los parámetros de un caso de xallarap.
-    """
-    q_xi = (M1 / M2).decompose().value
-    P = orbital_period_kepler(a, M1 + M2)
-
-    # tE = (rEhat * DL / DS) / v_perp
-    tE = (rEhat) / v_perp
-    return {
-        "case": case_name,
-        "DS_kpc": DS.to(u.kpc).value,
-        "DL_kpc": DL.to(u.kpc).value,
-        "rEhat_AU": rEhat.to(u.AU).value,
-        "v_perp_kms": v_perp.to(u.km/u.s).value,
-        "a_AU": a.to(u.AU).value,
-        "M1_Msun": M1.to(u.M_sun).value,
-        "M2_Msun": M2.to(u.M_sun).value,
-        "xi_mass_ratio": q_xi,
-        "tE": tE.to(u.day).value,
-        "t0": t0,
-        "u0": u0,
-        "xiE": (a / rEhat).decompose().value,
-        "omega_xi_1_per_day": (2*np.pi / P).value,
-        "xi_phase": xi_phase,
-        "xi_inclination": xi_inclination,
-        "flux_ratio": flux_ratio,
-        "P": P.value,
-    }
-
-DS = 8 * u.kpc
-DL = 4 * u.kpc
-v_perp = 50 * u.km / u.s
-a = 2 * u.AU
-
-rows = []
-
-# =========================
-# rEhat = 5 AU
-# =========================
-
-rEhat = 5 * u.AU
-
-# Case 1: face-on, P > tE
-rows.append(build_case(
-    "case1", DS, DL, rEhat, v_perp, a,
-    M1=2*u.M_sun, M2=1.4*u.M_sun
-))
-
-# Case 2: face-on, P < tE
-rows.append(build_case(
-    "case2", DS, DL, rEhat, v_perp, a,
-    M1=1.4*u.M_sun, M2=100*u.M_sun
-))
-
-# Case 3a: edge-on, low mass ratio
-rows.append(build_case(
-    "case3a", DS, DL, rEhat, v_perp, a,
-    M1=2*u.M_sun, M2=1.4*u.M_sun,
-    xi_inclination=np.pi/2
-))
-
-# Case 3b: edge-on, high mass ratio
-rows.append(build_case(
-    "case3b", DS, DL, rEhat, v_perp, a,
-    M1=1.4*u.M_sun, M2=100*u.M_sun,
-    xi_inclination=np.pi/2
-))
-
-# =========================
-# rEhat = 2 AU  (Case 4)
-# =========================
-rEhat = 2 * u.AU
-
-rows.append(build_case(
-    "case4-1", DS, DL, rEhat, v_perp, a,
-    M1=2*u.M_sun, M2=1.4*u.M_sun,
-    xi_inclination=0
-))
-
-rows.append(build_case(
-    "case4-2", DS, DL, rEhat, v_perp, a,
-    M1=1.4*u.M_sun, M2=100*u.M_sun,
-    xi_inclination=0
-))
-
-rows.append(build_case(
-    "case4-3a", DS, DL, rEhat, v_perp, a,
-    M1=2*u.M_sun, M2=1.4*u.M_sun,
-    xi_inclination=np.pi/2
-))
-
-rows.append(build_case(
-    "case4-3b", DS, DL, rEhat, v_perp, a,
-    M1=1.4*u.M_sun, M2=100*u.M_sun,
-    xi_inclination=np.pi/2
-))
-
-df_cases = pd.DataFrame(rows).set_index("case")
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-from pyLIMA import event, telescopes
+# from pyLIMA import event, telescopes
 from pyLIMA.models import PSPL_model
-from pyLIMA.simulations import simulator
-from pyLIMA.fits import TRF_fit
+# from pyLIMA.simulations import simulator
+# from pyLIMA.fits import TRF_fit
+# from astropy import units as u
+# from astropy import constants as C
+# from pyLIMA.xallarap.xallarap import xallarap_shifts, compute_xallarap_curvature
 
-import numpy as np
 import scipy.optimize as so
-
-
-def chi2_theoretical(fit_params, your_model, use_magnification=False,
-                     fs_fixed=1.0, ftotal_fixed=1.0):
-    """
-    SSE (sin pesos): compara data vs modelo.
-    fit_params = [t0,u0,tE]
-    Fija flujos: fsource=fs_fixed, ftotal=ftotal_fixed (porque blend_flux_parameter='ftotal' default).
-    """
-    fit_params = np.asarray(fit_params, dtype=float)
-    full_params = np.concatenate([fit_params, [fs_fixed, ftotal_fixed]])
-
-    py_params = your_model.compute_pyLIMA_parameters(full_params)
-
-    sse = 0.0
-    for telescope in your_model.event.telescopes:
-        if telescope.lightcurve is None:
-            continue
-
-        data = telescope.lightcurve['flux'].value
-
-        if use_magnification:
-            model_pred = your_model.model_magnification(telescope, py_params)
-        else:
-            model_pred = your_model.compute_the_microlensing_model(
-                telescope, py_params
-            )['photometry']
-
-        resid = data - model_pred
-        sse += np.sum(resid**2)
-
-    return float(sse)
-
-
-
-def build_sim_event(time, mag0=19.0, emag=0.01, filt="G"):
-    """
-    Crea un Event con un Telescope con columnas time/mag/err_mag.
-    simulator.simulate_lightcurve(...) llenará flux/err_flux (si lo usás).
-    """
-    ev = event.Event()
-    ev.name = "Simulated"
-    ev.ra = 170
-    ev.dec = -70
-
-    lightcurve_sim = np.c_[time, np.full_like(time, mag0), np.full_like(time, emag)]
-    tel = telescopes.Telescope(
-        name="Simulation",
-        camera_filter=filt,
-        lightcurve=lightcurve_sim.astype(float),
-        lightcurve_names=["time", "mag", "err_mag"],
-        lightcurve_units=["JD", "mag", "mag"],
-        location="Earth",
-    )
-    ev.telescopes.append(tel)
-    return ev
-
-
-import numpy as np
-import scipy.optimize as so
-from pyLIMA.models import PSPL_model
-
-
-def a_from_P_kepler_days(P_days, Mtot_Msun):
-    """
-    Kepler: a^3 = Mtot * P^2, con P en años, a en AU, Mtot en Msun.
-    Devuelve a en AU (float).
-    """
-    P_yr = np.asarray(P_days, dtype=float) / 365.25
-    return (Mtot_Msun * P_yr**2)**(1.0/3.0)
-
-import numpy as np
-import scipy.optimize as so
-from pyLIMA.models import PSPL_model
+# from scipy.interpolate import interp1d
+from functions_aux import mag,flux_to_mag, sigma_W149_func, mag_to_flux, sigma_flux_from_sigma_mag, sigma_flux_from_flux, orbital_period_kepler, chi2_theoretical, build_sim_event, a_from_P_kepler_days
 
 def run_grid_and_save_npz_kepler(
     out_npz_path: str,
@@ -252,8 +38,8 @@ def run_grid_and_save_npz_kepler(
     # grid (P is scanned)
     P_grid: np.ndarray,
     # fixed photometric wrapper
-    fsource_true: float = 1.0,
-    fblend_true: float = 0.0,
+    msource_true: float = 1.0,
+    mtotal_true: float = 0.0,
     # objective config (kept for compatibility; example uses flux fit)
     use_magnification_fit: bool = False,
     # storage
@@ -276,7 +62,7 @@ def run_grid_and_save_npz_kepler(
       - usa xiE fijo (como a/rEhat), y P solo define omega.
       - esto reproduce el estilo "a fijo, P kepleriano" de tu ejemplo puntual.
     """
-    ftotal_true = fsource_true + fblend_true
+    #ftotal_true = fsource_true + fblend_true
     P_grid = np.asarray(P_grid, dtype=float)
 
     # ============================================================
@@ -294,6 +80,7 @@ def run_grid_and_save_npz_kepler(
     DU0     = np.full(n_P, np.nan, dtype=float)
     DTE     = np.full(n_P, np.nan, dtype=float)
     SUCCESS = np.zeros(n_P, dtype=bool)
+    Q_A = np.full(n_P, np.nan, dtype=float)
 
     BEST_T0U0TE = np.full((n_P, 3), np.nan, dtype=float)
     XI_E = np.full(n_P, np.nan, dtype=float)
@@ -333,6 +120,12 @@ def run_grid_and_save_npz_kepler(
                 ev, parallax=["None", 0.0], double_source=["Circular", t0_true]
             )
             model_xal.define_model_parameters()
+
+            ZP =27.615
+            fsource_true = mag_to_flux(msource_true, zp=ZP)
+            ftotal_true =mag_to_flux(mtotal_true, zp=ZP)
+            fblend_true=0
+
 
             params_xal = [
                 t0_true, u0_true, tE_true,
@@ -376,7 +169,7 @@ def run_grid_and_save_npz_kepler(
                 x0=x0,
                 args=(model_pspl, False, fsource_true, ftotal_true),  # <-- [CAMBIO] fit en flujo como tu ejemplo
                 method="Nelder-Mead",
-                options=dict(maxiter=20000, xatol=1e-10, fatol=1e-10),
+                options=dict(maxiter=20000, xatol=1e-10, fatol=1e-6),
             )
             if not res.success:
                 SUCCESS[j_P] = False
@@ -401,6 +194,24 @@ def run_grid_and_save_npz_kepler(
             else:
                 # si quisieras RMS en flujo
                 resid = ev.telescopes[0].lightcurve['flux'].value - F_fit
+
+            mag_truth = flux_to_mag(F_truth)
+            mag_fit   = flux_to_mag(F_fit)
+            
+            mask = ((mag_truth >= 12.0) & (mag_truth <= 27.0)
+                & (mag_fit   >= 12.0) & (mag_fit   <= 27.0)
+            )
+            F_truth_m = F_truth[mask]
+            F_fit_m   = F_fit[mask]
+            
+            err_truth = sigma_flux_from_flux(F_truth_m)
+            err_fit   = sigma_flux_from_flux(F_fit_m)
+            residuals = F_truth_m - F_fit_m
+            
+            q_A = np.sum((residuals / err_truth)**2) / (len(residuals))
+            Q_A[j_P] = q_A
+            
+
 
             RMS[j_P]    = float(np.sqrt(np.mean(resid**2)))
             MAXABS[j_P] = float(np.max(np.abs(resid)))
@@ -433,6 +244,7 @@ def run_grid_and_save_npz_kepler(
         DTE=DTE,
         SUCCESS=SUCCESS,
         BEST_T0U0TE=BEST_T0U0TE,
+        Q_A=np.sqrt(Q_A),
         truth=np.array([t0_true, u0_true, tE_true, phi_true, i_true,
                         M1_Msun, M2_Msun, rEhat_AU, qflux_true, theta_true,
                         fsource_true, fblend_true,
@@ -455,13 +267,13 @@ def run_grid_and_save_npz_kepler(
 import numpy as np
 
 # Tiempo
-t = np.linspace(-500, 500, 5000)
+
 
 # PSPL base
 t0_true = 50.0
 u0_true = 0.1
 tE_true = 173.0
-
+t = np.linspace(-3.5*tE_true , 3.5*tE_true , 10000)
 # Parámetros orbitales
 phi_true = 0.0
 i_true = np.pi/2
@@ -506,7 +318,7 @@ run_grid_and_save_npz_kepler(
     M2_Msun=M2,
     rEhat_AU=rEhat,
     P_grid=P_grid,
-    fsource_true=1.0,
-    fblend_true=0.0,
+    msource_true= 24.0,
+    mtotal_true= 24.0,
     override_xiE=None,  # <-- importante: Kepler-consistente real
 )

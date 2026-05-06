@@ -9,13 +9,13 @@ import matplotlib.colors as colors
 # [NUEVO BLOQUE 1]
 # parámetros del gráfico
 # ============================================================
-tE_true = 50.0
+tE_true = 150.0
 home_path = os.path.expanduser("~")
 directory = home_path+f"/binary_source/results/scan_u0_tE{int(tE_true)}/"
 pattern = os.path.join(directory, "scan_kepler_u0_*.npz")
 
 # si querés usar MAXABS en vez de RMS, cambiá esta variable
-metric_key = "RMS"   # opciones típicas: "RMS" o "MAXABS"
+metric_key = "Q_A"   # opciones típicas: "RMS" o "MAXABS"
 
 files = sorted(glob.glob(pattern))
 
@@ -250,8 +250,8 @@ ax.grid(True, which="both", alpha=0.25)
 cbar = fig.colorbar(pcm, ax=ax)
 if metric_key == "RMS":
     cbar.set_label(r"RMS residual magnification", fontsize=15)
-else:
-    cbar.set_label(metric_key, fontsize=15)
+elif metric_key == "Q_A":
+    cbar.set_label(r"$\sqrt{\chi^2/N}$", fontsize=15)
 
 plt.tight_layout()
 

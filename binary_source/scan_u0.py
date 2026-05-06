@@ -39,9 +39,9 @@ u0_grid = np.linspace(0.01, 1.0, N_u0)   # elegí rango; ajustalo a tu caso
 
 home_path = os.path.expanduser("~")
 
-for tE_true in [50,150,500,1000]: 
+for tE_true in [150]: 
     for k, u0_true in enumerate(u0_grid):
-        t = np.linspace(-3.5*tE_true, 3.5*tE_true, 20*7*tE_true)
+        t = np.linspace(-3.5*tE_true, 3.5*tE_true, 10000)
         directory =home_path+ f"/binary_source/results/scan_u0_tE{int(tE_true)}/"
         os.makedirs(directory, exist_ok=True)
         
@@ -51,18 +51,18 @@ for tE_true in [50,150,500,1000]:
             out_npz_path=out_name,
             t=t,
             t0_true=t0_true,
-            u0_true=float(u0_true),      # <-- [CAMBIO CLAVE] barrido en u0
+            u0_true=0.5,      # <-- [CAMBIO CLAVE] barrido en u0
             tE_true=tE_true,
             phi_true=phi_true,
             i_true=float(lambda_xi_fixed),   # <-- fijo: lambda_xi = pi/2
-            qflux_true=qflux_true,
+            qflux_true=float(u0_true),
             theta_true=theta_true,
             M1_Msun=M1,
             M2_Msun=M2,
             rEhat_AU=rEhat,
             P_grid=P_grid,
-            fsource_true=1.0,
-            fblend_true=0.0,
+            msource_true= 24.0,
+            mtotal_true= 24.0,
             override_xiE=None,               # Kepler-consistente
             set_flux_from_truth_photometry=True,
             rms_on_magnification=True,

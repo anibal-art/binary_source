@@ -1,10 +1,13 @@
-import glob
+import glob, os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as colors
-tE_true =100
-pattern = f"/home/anibal/binary_source/results/scan_u0_tE{int(tE_true)}/"+"/scan_kepler_u0_*.npz"
+tE_true =150
+home_path = os.path.expanduser("~")
+pattern = home_path+f"/binary_source/results/test_resultsu0/scan_u0_tE{int(tE_true)}/"+"/scan_kepler_u0_*.npz"
+directory = home_path+f"/binary_source/results/test_resultsu0/scan_u0_tE{int(tE_true)}/"
+
 files = sorted(glob.glob(pattern))
 if len(files) == 0:
     raise FileNotFoundError(f"No encontré archivos con patrón: {pattern}")
@@ -14,7 +17,7 @@ if len(files) == 0:
 # -------------------------------------------------
 data_list = []
 u0_values = []
-metric ="intL1"
+metric ="RMS"
 
 for fn in files:
     d = np.load(fn, allow_pickle=False)

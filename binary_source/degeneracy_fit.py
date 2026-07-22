@@ -137,8 +137,10 @@ def run_grid_and_save_npz_kepler(
             py_params_xal = model_xal.compute_pyLIMA_parameters(params_xal)
 
             # Curva verdadera en magnificación
-            A_truth = model_xal.model_magnification(ev.telescopes[0], py_params_xal)
-
+            A_truth = model_xal.model_magnification(
+                ev.telescopes[0],
+                py_params_xal
+            ) / (1.0 + qflux_true)
             # ============================================================
             # [NUEVO BLOQUE] construir "data" exactamente como tu ejemplo
             # ============================================================

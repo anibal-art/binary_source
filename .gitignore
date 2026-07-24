@@ -6,3 +6,4 @@ binary_source/.ipynb_checkpoints/*
 binary_source/__pycache__/*
 *.gif
 results/
+binary_source/pspl_trilegal_blending_output/simdr2_cache_*.csv

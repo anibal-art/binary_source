@@ -11,7 +11,7 @@ t = np.linspace(-500, 500, 5000)
 # "truth" PSPL params (base)
 # ============================================================
 t0_true = 50.0
-u0_true = 0.1   # <-- fijo para este mapa; cambialo si querés otro valor
+u0_true = 1   # <-- fijo para este mapa; cambialo si querés otro valor
 
 # ============================================================
 # orbital / xallarap angles (fixed)
@@ -41,9 +41,9 @@ P_grid = np.logspace(1, 5, 60)   # 10 d -> 100000 d
 # ============================================================
 # scan in tE
 # ============================================================
-for tE_true in [50, 150, 500, 1000]:
+for tE_true in [150]:
 
-    directory = f"/home/anibal-pc/binary_source/results/scan_aRE_P_tE{int(tE_true)}/"
+    directory = f"/home/anibal/binary_source/results/scan_aRE_P_tE{int(tE_true)}/"
     os.makedirs(directory, exist_ok=True)
 
     # ========================================================

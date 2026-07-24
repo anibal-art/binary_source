@@ -176,68 +176,6 @@ def _worker_single_P_kepler(args):
         )["photometry"]
 
         # ============================================================
-        # [NUEVO BLOQUE AGREGADO] detección de estructura residual
-        # ============================================================
-        # residual_structure = detect_residual_structure_envelope(
-        #     t=t,
-        #     A_truth=A_truth,
-        #     A_fit=A_fit,
-        #     t0_ref=t0_true,
-        #     smooth_window=80,
-        #     fraction_of_peak=0.001,
-        #     min_points=5,
-        #     pad_fraction=0.20
-        # )
-
-        # df_truth_struct = residual_structure["df_interval_truth"]
-        # df_fit_struct   = residual_structure["df_interval_fit"]
-
-        # t0_interval = residual_structure["t0_interval"]
-        # tE_interval = residual_structure["tE_interval"]
-
-        # result["t0_interval"] = t0_interval
-        # result["tE_interval"] = tE_interval
-
-        # # ============================================================
-        # # [NUEVO BLOQUE AGREGADO] Chebyshev en el intervalo detectado
-        # # ============================================================
-        # degree_cheb = 50
-
-        # coeff_truth = Chebyhev_coefficients(
-        #     df_truth_struct,
-        #     t0_interval,
-        #     tE_interval,
-        #     degree_cheb
-        # )
-
-        # coeff_fit = Chebyhev_coefficients(
-        #     df_fit_struct,
-        #     t0_interval,
-        #     tE_interval,
-        #     degree_cheb
-        # )
-
-        # result["CHEB_COEFF_TRUTH"] = np.asarray(coeff_truth, dtype=float)
-        # result["CHEB_COEFF_FIT"] = np.asarray(coeff_fit, dtype=float)
-
-        # cheb_truth = evaluate_chebyshev(
-        #     df_truth_struct,
-        #     t0_interval,
-        #     tE_interval,
-        #     coeff_truth
-        # )
-
-        # cheb_fit = evaluate_chebyshev(
-        #     df_fit_struct,
-        #     t0_interval,
-        #     tE_interval,
-        #     coeff_fit
-        # )
-
-        # t_cheb_truth = np.sort(df_truth_struct["t"].values)
-        # t_cheb_fit   = np.sort(df_fit_struct["t"].values)
-
-        # ============================================================
         # RMS
         # ============================================================
         if rms_on_magnification:
@@ -508,10 +446,10 @@ P_grid = np.logspace(1, 5, 60)  # 10 d → 100000 d
 N_u0 = 25
 u0_grid = np.linspace(0.01, 2.0, N_u0)   # elegí rango; ajustalo a tu caso
 # tE_true = 100.0
-for tE_true in [50,100,200,300,400,500,1000]: 
+for tE_true in [150]: 
     print("scan u0 for tE", tE_true)
     for k, u0_true in enumerate(u0_grid):
-        directory = f"/home/anibal-pc/binary_source/results/scan_u0_tE{int(tE_true)}/"
+        directory = f"/home/anibal/binary_source/results/scan_u0_tE{int(tE_true)}/"
         os.makedirs(directory, exist_ok=True)
         out_name = directory+f"scan_kepler_u0_{k:03d}.npz"
         t = np.linspace(-3.5*tE_true, 3.5*tE_true, int(7*tE_true*24*4))

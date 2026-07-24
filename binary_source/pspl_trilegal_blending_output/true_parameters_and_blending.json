@@ -1,0 +1,20 @@
+{
+  "t0":0.0,
+  "u0":0.1,
+  "tE":20.0,
+  "band":"i",
+  "source_index":4714,
+  "ra":267.8361126461,
+  "dec":-29.24695508,
+  "mag_source":24.47,
+  "F_source":16.2929603264,
+  "F_blend":47.0387631544,
+  "F_base":63.3317234808,
+  "f_source":0.2572638076,
+  "g_blend":2.8870605594,
+  "mag_baseline":22.9959467328,
+  "n_neighbors":8,
+  "radius_arcsec":0.8,
+  "fwhm_arcsec":0.8,
+  "psf_weighted":true
+}

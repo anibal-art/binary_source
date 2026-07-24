@@ -5,8 +5,8 @@ import matplotlib.cm as cm
 import matplotlib.colors as colors
 tE_true =150
 home_path = os.path.expanduser("~")
-pattern = home_path+f"/binary_source/results/test_resultsu0/scan_u0_tE{int(tE_true)}/"+"/scan_kepler_u0_*.npz"
-directory = home_path+f"/binary_source/results/test_resultsu0/scan_u0_tE{int(tE_true)}/"
+pattern = home_path+f"/binary_source/results/scan_u0_tE{int(tE_true)}/"+"/scan_kepler_u0_*.npz"
+directory = home_path+f"/binary_source/results/scan_u0_tE{int(tE_true)}/"
 
 files = sorted(glob.glob(pattern))
 if len(files) == 0:

@@ -17,10 +17,12 @@ lambda_xi_fixed = 0.5 * np.pi
 M1 = 2.0
 M2 = 1.0
 rEhat = 5.0
+qflux_value = 0.0
 # Barrido en período
-P_grid = np.logspace(1, 5, 60)
+N_u0, N_P = 100, 100
+P_grid = np.logspace(1, 5, N_P)
 # Barrido en u0
-N_u0 = 25
+
 u0_grid = np.logspace(-2, 1, N_u0)
 
 def run_single_u0(task):
@@ -59,7 +61,7 @@ def run_single_u0(task):
         tE_true=tE_true,
         phi_true=phi_true,
         i_true=float(lambda_xi_fixed),
-        qflux_true=0,
+        qflux_true=qflux_value,
         theta_true=theta_true,
         M1_Msun=M1,
         M2_Msun=M2,

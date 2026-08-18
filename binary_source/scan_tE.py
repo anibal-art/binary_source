@@ -29,7 +29,7 @@ rEhat = 5.0
 P_grid = np.logspace(
     -5,
     5,
-    60,
+    200,
 )  # 10 días -> 100000 días
 
 
@@ -37,7 +37,7 @@ P_grid = np.logspace(
 # Barrido en tiempo de Einstein
 # ============================================================
 
-N_tE = 30
+N_tE = 200
 
 tE_grid = np.logspace(
     np.log10(1.0),

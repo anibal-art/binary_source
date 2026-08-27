@@ -1288,91 +1288,51 @@ def run_grid_and_save_npz_kepler(
 # EJEMPLO DE EJECUCIÓN
 # ============================================================
 
-# PSPL base
+if __name__ == "__main__":
 
-t0_true = 50.0
-u0_true = 0.1
-tE_true = 173.0
+    t0_true = 50.0
+    u0_true = 0.1
+    tE_true = 173.0
 
-t = np.linspace(
-    -3.5 * tE_true,
-    3.5 * tE_true,
-    10000,
-)
+    t = np.linspace(
+        t0_true - 3.5 * tE_true,
+        t0_true + 3.5 * tE_true,
+        10000,
+    )
 
+    phi_true = 0.0
+    i_true = np.pi / 2.0
+    theta_true = 0.0
+    qflux_true = 0.0
 
-# ============================================================
-# Parámetros orbitales
-# ============================================================
+    M1 = 2.0
+    M2 = 1.0
+    rEhat = 5.0
 
-phi_true = 0.0
+    P_grid = np.logspace(
+        1,
+        5,
+        60,
+    )
 
-i_true = (
-    np.pi / 2.0
-)
-
-theta_true = 0.0
-
-qflux_true = 0.0
-
-
-# ============================================================
-# Sistema físico
-# ============================================================
-
-M1 = 2.0
-M2 = 1.0
-
-rEhat = 5.0
-
-P_grid = np.logspace(
-    1,
-    5,
-    60,
-)
-
-
-# ============================================================
-# Ejecutar scan
-# ============================================================
-
-run_grid_and_save_npz_kepler(
-
-    out_npz_path="scan_kepler.npz",
-
-    t=t,
-
-    t0_true=t0_true,
-
-    u0_true=u0_true,
-
-    tE_true=tE_true,
-
-    phi_true=phi_true,
-
-    i_true=i_true,
-
-    qflux_true=qflux_true,
-
-    theta_true=theta_true,
-
-    M1_Msun=M1,
-
-    M2_Msun=M2,
-
-    rEhat_AU=rEhat,
-
-    P_grid=P_grid,
-
-    msource_true=24.0,
-
-    mtotal_true=24.0,
-
-    override_xiE=None,
-
-    set_flux_from_truth_photometry=True,
-
-    rms_on_magnification=True,
-
-    store_curves=True,
-)
+    run_grid_and_save_npz_kepler(
+        out_npz_path="scan_kepler.npz",
+        t=t,
+        t0_true=t0_true,
+        u0_true=u0_true,
+        tE_true=tE_true,
+        phi_true=phi_true,
+        i_true=i_true,
+        qflux_true=qflux_true,
+        theta_true=theta_true,
+        M1_Msun=M1,
+        M2_Msun=M2,
+        rEhat_AU=rEhat,
+        P_grid=P_grid,
+        msource_true=24.0,
+        mtotal_true=24.0,
+        override_xiE=None,
+        set_flux_from_truth_photometry=True,
+        rms_on_magnification=True,
+        store_curves=True,
+    )

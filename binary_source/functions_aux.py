@@ -4,7 +4,7 @@ import pandas as pd
 import os, sys
 current_path = os.getcwd()
 parent_directory = os.path.abspath(os.path.join(current_path, os.pardir))
-print("Parent Directory:", parent_directory)
+# diagnostic print disabled for production runs
 sys.path.append(parent_directory)
 
 from pyLIMA import event, telescopes
@@ -110,8 +110,8 @@ def orbital_period_kepler(a_au, M_tot_Msun):
     """
     a_au = np.asarray(a_au, dtype=float)
     M_tot_Msun = np.asarray(M_tot_Msun, dtype=float)
-    print("Period ", np.sqrt(a_au**3 / M_tot_Msun), "years")
-    print("converting to ", np.sqrt(a_au**3 / M_tot_Msun)*365.25, "days (to use in pyLIMA)")
+    # diagnostic print disabled for production runs
+    # diagnostic print disabled for production runs
     return np.sqrt(a_au**3 / M_tot_Msun)*365.25*(1/u.day)
 
 def build_case(case_name, DS, DL, rEhat, v_perp, a, M1, M2,

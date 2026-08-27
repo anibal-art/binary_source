@@ -2,18 +2,84 @@ import numpy as np
 import pandas as pd
 import os
 import sys
-
-current_path = os.getcwd()
-parent_directory = os.path.abspath(
-    os.path.join(current_path, os.pardir)
-)
-
-print("Parent Directory:", parent_directory)
-sys.path.append(parent_directory)
+import subprocess
+from pathlib import Path
 
 from pyLIMA.models import PSPL_model
 
 import scipy.optimize as so
+
+
+from functions_aux import (
+    mag,
+    flux_to_mag,
+    sigma_W149_func,
+    mag_to_flux,
+    sigma_flux_from_sigma_mag,
+    sigma_flux_from_flux,
+    orbital_period_kepler,
+    build_sim_event,
+    a_from_P_kepler_days,
+)
+
+
+# ============================================================
+# Numerical-method provenance
+# ============================================================
+
+FIT_OBJECTIVE = "intrinsic_magnification_trapezoid"
+
+
+def _get_git_state():
+    """
+    Return repository commit and dirty-state information.
+
+    These values are stored in every final NPZ file so that each
+    numerical result can be traced back to the exact code version.
+    """
+
+    repo_root = Path(__file__).resolve().parents[1]
+
+    try:
+
+        commit = subprocess.check_output(
+            [
+                "git",
+                "rev-parse",
+                "--short=12",
+                "HEAD",
+            ],
+            cwd=repo_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+
+        status = subprocess.check_output(
+            [
+                "git",
+                "status",
+                "--porcelain",
+            ],
+            cwd=repo_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+
+        dirty = bool(
+            status.strip()
+        )
+
+    except Exception:
+
+        commit = "unknown"
+        dirty = True
+
+    return commit, dirty
+
+
+CODE_COMMIT, CODE_DIRTY = _get_git_state()
+
+
 def pspl_magnification(
     t,
     t0,
@@ -124,18 +190,8 @@ def intrinsic_magnification_objective(
             x=t,
         )
     )
-from functions_aux import (
-    mag,
-    flux_to_mag,
-    sigma_W149_func,
-    mag_to_flux,
-    sigma_flux_from_sigma_mag,
-    sigma_flux_from_flux,
-    orbital_period_kepler,
-    chi2_theoretical,
-    build_sim_event,
-    a_from_P_kepler_days,
-)
+
+
 
 
 # ============================================================
@@ -585,7 +641,8 @@ def run_grid_and_save_npz_kepler(
     msource_true: float = 1.0,
     mtotal_true: float = 0.0,
 
-    # objective config
+    # legacy wrapper configuration; the intrinsic PSPL fit
+    # is always performed in magnification space
     use_magnification_fit: bool = False,
 
     # storage
@@ -1320,6 +1377,38 @@ def run_grid_and_save_npz_kepler(
 
         Q_A=np.sqrt(Q_A),
 
+
+        # ================================================
+        # Numerical provenance
+        # ================================================
+
+        fit_objective=np.array(FIT_OBJECTIVE),
+
+        code_commit=np.array(CODE_COMMIT),
+
+        code_dirty=np.bool_(CODE_DIRTY),
+
+        n_time=np.int64(n_t),
+
+        n_period=np.int64(n_P),
+
+        time_min=np.float64(np.min(t)),
+
+        time_max=np.float64(np.max(t)),
+
+        n_success=np.int64(np.count_nonzero(SUCCESS)),
+
+        n_failed=np.int64(n_P - np.count_nonzero(SUCCESS)),
+
+        q_mass_true=np.float64(q_mass_true),
+
+        Mtot_Msun=np.float64(Mtot_Msun),
+
+        qflux_true=np.float64(qflux_true),
+
+        rEhat_AU=np.float64(rEhat_AU),
+
+        store_curves=np.bool_(store_curves),
         truth=np.array(
             [
                 t0_true,
@@ -1387,7 +1476,9 @@ def run_grid_and_save_npz_kepler(
     )
 
     print(
-        f"Saved: {out_npz_path}"
+        f"Saved: {out_npz_path} | "
+        f"fits={np.count_nonzero(SUCCESS)}/{n_P} | "
+        f"failed={n_P - np.count_nonzero(SUCCESS)}"
     )
 
 

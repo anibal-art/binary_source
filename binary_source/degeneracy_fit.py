@@ -14,7 +14,116 @@ sys.path.append(parent_directory)
 from pyLIMA.models import PSPL_model
 
 import scipy.optimize as so
+def pspl_magnification(
+    t,
+    t0,
+    u0,
+    tE,
+):
+    """
+    Standard PSPL magnification.
 
+    Parameters
+    ----------
+    t : array-like
+        Times.
+    t0 : float
+        Time of closest approach.
+    u0 : float
+        Impact parameter.
+    tE : float
+        Einstein timescale.
+
+    Returns
+    -------
+    A : ndarray
+        PSPL magnification.
+    """
+
+    t = np.asarray(
+        t,
+        dtype=float,
+    )
+
+    if (
+        not np.isfinite(t0)
+        or not np.isfinite(u0)
+        or not np.isfinite(tE)
+        or tE <= 0.0
+        or u0 < 0.0
+    ):
+        return None
+
+    tau = (
+        t - t0
+    ) / tE
+
+    u = np.sqrt(
+        u0**2
+        + tau**2
+    )
+
+    A = (
+        u**2 + 2.0
+    ) / (
+        u
+        * np.sqrt(
+            u**2 + 4.0
+        )
+    )
+
+    return A
+
+
+def intrinsic_magnification_objective(
+    fit_params,
+    t,
+    A_truth,
+):
+    """
+    Intrinsic BSPL--PSPL objective.
+
+    Minimizes exactly the squared mismatch in magnification:
+
+        S_A = integral [A_BSPL(t) - A_PSPL(t)]^2 dt
+
+    This is the numerator of D^2, apart from its normalization.
+    """
+
+    t0, u0, tE = np.asarray(
+        fit_params,
+        dtype=float,
+    )
+
+    A_fit = pspl_magnification(
+        t=t,
+        t0=t0,
+        u0=u0,
+        tE=tE,
+    )
+
+    if A_fit is None:
+        return 1e100
+
+    residual = (
+        np.asarray(
+            A_truth,
+            dtype=float,
+        )
+        - A_fit
+    )
+
+    if not np.all(
+        np.isfinite(residual)
+    ):
+        return 1e100
+
+    return float(
+        np.trapezoid(
+            residual**2,
+            x=t,
+        )
+    )
 from functions_aux import (
     mag,
     flux_to_mag,
@@ -880,19 +989,17 @@ def run_grid_and_save_npz_kepler(
             )
 
             res = so.minimize(
-                chi2_theoretical,
+                intrinsic_magnification_objective,
                 x0=x0,
                 args=(
-                    model_pspl,
-                    False,
-                    fsource_true,
-                    ftotal_true,
+                    t,
+                    A_truth,
                 ),
                 method="Nelder-Mead",
                 options=dict(
                     maxiter=20000,
                     xatol=1e-10,
-                    fatol=1e-6,
+                    fatol=1e-12,
                 ),
             )
 

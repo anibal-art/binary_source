@@ -7,3 +7,11 @@ binary_source/__pycache__/*
 *.gif
 results/
 binary_source/pspl_trilegal_blending_output/simdr2_cache_*.csv
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/

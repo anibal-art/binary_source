@@ -227,7 +227,10 @@ ax.grid(True, which="both", alpha=0.25)
 
 # dejar más espacio a la derecha para el eje secundario
 fig.subplots_adjust(right=0.82)
-plt.title("$M_{total} = 3M_{\odot},\ t_E=$"+f"{tE_true} days"+"$,\ u_0$=0.1",fontsize=20)
+plt.title(
+    rf"$M_{{\rm total}} = 3M_\odot,\quad t_E={tE_true:g}\,{{\rm days}},\quad u_0=0.1$",
+    fontsize=20,
+)
 # colorbar más separado
 cbar = fig.colorbar(pcm, ax=ax, pad=0.2)
 cbar.set_label(r"RMS residual magnification", fontsize=14)

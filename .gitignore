@@ -62,3 +62,16 @@ __pycache__/
 # ============================================================
 
 binary_source/pspl_trilegal_blending_output/simdr2_cache_*.csv
+
+# ============================================================
+# Local/reproducible microlensing outputs and caches
+# ============================================================
+
+/binary_source/fits_pspl/
+/binary_source/resultsDb_sqlite.db
+/binary_source/.rr_cache/
+
+/binary_source/pspl_trilegal_blending_output/pspl_blended_lightcurve.csv
+
+# Legacy TRILEGAL/GENULENS chunks
+/chunks_TRILEGAL_GENULENS/

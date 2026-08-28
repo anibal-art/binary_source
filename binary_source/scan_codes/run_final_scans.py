@@ -63,6 +63,12 @@ from final_config import (
 )
 
 
+from final_remaining_experiments import (
+    run_mass_luminosity,
+    run_photocenter,
+)
+
+
 # ============================================================
 # Common physical/numerical configuration
 # ============================================================
@@ -1068,6 +1074,12 @@ EXPERIMENTS = {
 
     "qmass_qflux":
         run_qmass_qflux,
+
+    "mass_luminosity":
+        run_mass_luminosity,
+
+    "photocenter":
+        run_photocenter,
 }
 
 

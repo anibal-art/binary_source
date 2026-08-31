@@ -445,11 +445,18 @@ def symmetric_limit(
     )
 
 
+
 def configure_log_map_axis(
     ax,
     qM,
     qf_positive,
+    *,
+    show_ylabel=True,
+    label_diagonal=False,
 ):
+
+    import matplotlib.patheffects as pe
+
 
     ax.set_xscale(
         "log"
@@ -458,6 +465,7 @@ def configure_log_map_axis(
     ax.set_yscale(
         "log"
     )
+
 
     ax.set_xlim(
         qM.min(),
@@ -469,15 +477,34 @@ def configure_log_map_axis(
         qf_positive.max(),
     )
 
+
     ax.set_xlabel(
         r"$q_M$"
     )
 
-    ax.set_ylabel(
-        r"$q_f$"
-    )
 
-    # First-order photocenter cancellation.
+    if show_ylabel:
+
+        ax.set_ylabel(
+            r"$q_f$"
+        )
+
+    else:
+
+        ax.set_ylabel(
+            ""
+        )
+
+
+    # ========================================================
+    # First-order photocenter-cancellation locus:
+    #
+    #                    q_f = q_M
+    #
+    # White dashed line + dark outline gives high contrast over
+    # the full logarithmic color scale.
+    # ========================================================
+
     q_diag_min = max(
         qM.min(),
         qf_positive.min(),
@@ -488,18 +515,88 @@ def configure_log_map_axis(
         qf_positive.max(),
     )
 
+
     diagonal = np.logspace(
-        np.log10(q_diag_min),
-        np.log10(q_diag_max),
-        300,
+        np.log10(
+            q_diag_min
+        ),
+        np.log10(
+            q_diag_max
+        ),
+        400,
     )
 
-    ax.plot(
+
+    line, = ax.plot(
         diagonal,
         diagonal,
+        color="white",
         linestyle="--",
-        linewidth=1.4,
+        linewidth=1.35,
+        zorder=7,
     )
+
+
+    line.set_path_effects(
+        [
+            pe.Stroke(
+                linewidth=2.4,
+                foreground="black",
+                alpha=0.55,
+            ),
+            pe.Normal(),
+        ]
+    )
+
+
+    if label_diagonal:
+
+        # Put the label in log-space so its location is stable
+        # when the map extent changes.
+
+        log_min = np.log10(
+            q_diag_min
+        )
+
+        log_max = np.log10(
+            q_diag_max
+        )
+
+
+        q_label = 10.0 ** (
+            log_min
+            + 0.66
+            * (
+                log_max
+                - log_min
+            )
+        )
+
+
+        txt = ax.text(
+            q_label,
+            q_label * 1.30,
+            r"$q_f=q_M$",
+            color="white",
+            fontsize=10,
+            rotation=45,
+            rotation_mode="anchor",
+            ha="center",
+            va="bottom",
+            zorder=8,
+        )
+
+
+        txt.set_path_effects(
+            [
+                pe.Stroke(
+                    linewidth=2.5,
+                    foreground="black",
+                    alpha=0.85,
+                ),
+                pe.Normal(),
+            ]
+        )
 
 
 # ============================================================
@@ -507,45 +604,60 @@ def configure_log_map_axis(
 # qM-qf D maps
 # ============================================================
 
+
 def plot_qmass_qflux(
     filename,
     output_dir,
 ):
+
+    import matplotlib.patheffects as pe
+
 
     print()
     print("=" * 80)
     print("FIGURE: qM-qf D map")
     print("=" * 80)
 
+
+    # ========================================================
+    # Load numerical summary
+    # ========================================================
+
     with np.load(
         filename,
         allow_pickle=False,
     ) as d:
+
 
         qM = np.asarray(
             d["qM_grid"],
             dtype=float,
         )
 
+
         qf = np.asarray(
             d["qf_grid"],
             dtype=float,
         )
+
 
         P_over_tE = np.asarray(
             d["P_over_tE_grid"],
             dtype=float,
         )
 
+
         D = np.asarray(
             d["D"],
             dtype=float,
         )
 
+
         success = np.asarray(
             d["SUCCESS"],
             dtype=bool,
         )
+
 
         dataset_commit = str(
             d["code_commit"].item()
@@ -561,15 +673,20 @@ def plot_qmass_qflux(
         )
 
 
-    # qf=0 is stored in the numerical dataset but cannot be
-    # displayed on a logarithmic y axis.
+    # ========================================================
+    # qf=0 exists in the numerical grid but cannot be shown
+    # on a logarithmic qf axis.
+    # ========================================================
+
     positive_qf = (
         qf > 0.0
     )
 
+
     qf_plot = qf[
         positive_qf
     ]
+
 
     D_plot = D[
         :,
@@ -578,8 +695,28 @@ def plot_qmass_qflux(
     ]
 
 
+    # ========================================================
+    # One common color normalization for every P/tE.
+    # ========================================================
+
     vmin, vmax = lognorm_limits(
         D_plot
+    )
+
+
+    # ========================================================
+    # Quantitative contours.
+    #
+    # Only levels contained inside each panel are plotted.
+    # ========================================================
+
+    contour_levels = np.array(
+        [
+            1e-3,
+            1e-2,
+            1e-1,
+        ],
+        dtype=float,
     )
 
 
@@ -595,7 +732,7 @@ def plot_qmass_qflux(
         1,
         n_period,
         figsize=(
-            4.4 * n_period,
+            4.35 * n_period,
             4.4,
         ),
         sharex=True,
@@ -612,6 +749,10 @@ def plot_qmass_qflux(
     mappable = None
 
 
+    # ========================================================
+    # Panels
+    # ========================================================
+
     for i_P, ax in enumerate(
         axes
     ):
@@ -626,6 +767,10 @@ def plot_qmass_qflux(
         )
 
 
+        # ----------------------------------------------------
+        # Main D map
+        # ----------------------------------------------------
+
         mappable = ax.pcolormesh(
             qM,
             qf_plot,
@@ -636,13 +781,70 @@ def plot_qmass_qflux(
                 vmin=vmin,
                 vmax=vmax,
             ),
+            rasterized=True,
         )
 
+
+        # ----------------------------------------------------
+        # Quantitative D contours
+        # ----------------------------------------------------
+
+        finite_Z = Z[
+            np.isfinite(Z)
+            & (Z > 0.0)
+        ]
+
+
+        if finite_Z.size > 0:
+
+
+            zmin = np.min(
+                finite_Z
+            )
+
+            zmax = np.max(
+                finite_Z
+            )
+
+
+            levels_here = contour_levels[
+                (contour_levels >= zmin)
+                & (contour_levels <= zmax)
+            ]
+
+
+            if len(
+                levels_here
+            ) > 0:
+
+
+                contours = ax.contour(
+                    qM,
+                    qf_plot,
+                    Z,
+                    levels=levels_here,
+                    colors="white",
+                    linewidths=0.85,
+                    alpha=0.80,
+                    zorder=5,
+                )
+
+
+
+        # ----------------------------------------------------
+        # Axes and qf=qM diagonal
+        # ----------------------------------------------------
 
         configure_log_map_axis(
             ax,
             qM,
             qf_plot,
+            show_ylabel=(
+                i_P == 0
+            ),
+            label_diagonal=(
+                i_P == 0
+            ),
         )
 
 
@@ -658,8 +860,14 @@ def plot_qmass_qflux(
             transform=ax.transAxes,
             ha="left",
             va="top",
+            fontweight="bold",
+            zorder=10,
         )
 
+
+    # ========================================================
+    # Shared colorbar
+    # ========================================================
 
     cbar = fig.colorbar(
         mappable,
@@ -667,12 +875,18 @@ def plot_qmass_qflux(
         pad=0.02,
     )
 
+
     cbar.set_label(
         r"$D_{\rm BSPL-PSPL}$"
     )
 
 
+    # ========================================================
+    # Metadata
+    # ========================================================
+
     metadata = {
+
         "figure":
             "qmass_qflux_D_map",
 
@@ -690,6 +904,9 @@ def plot_qmass_qflux(
 
         "photocenter_cancellation_line":
             "qf=qM",
+
+        "contour_levels_D":
+            contour_levels.tolist(),
 
         "D_vmin":
             vmin,

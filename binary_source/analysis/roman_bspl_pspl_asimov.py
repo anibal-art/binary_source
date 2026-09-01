@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import sys
 import traceback
+import re
 from pathlib import Path
 
 import numpy as np
@@ -1355,6 +1356,270 @@ def run_smoke_test(
 
 
 # ============================================================
+# Intrinsic u0 x P grid
+# ============================================================
+
+def load_intrinsic_u0_period_grid(
+    directory,
+    u0_max=None,
+):
+    """
+    Reconstruct the intrinsic u0 x P grid used in the
+    BSPL -> PSPL analysis.
+
+    Expected files:
+        scan_kepler_u0_000.npz
+        scan_kepler_u0_001.npz
+        ...
+
+    Returns the exact u0 and P nodes together with the
+    intrinsic D_BSPL-PSPL map.
+
+    If u0_max is supplied, rows above that value are removed
+    without interpolating or regenerating the grid.
+    """
+
+    directory = Path(directory)
+
+    if not directory.exists():
+        raise FileNotFoundError(
+            f"Intrinsic grid directory not found: {directory}"
+        )
+
+    files = list(
+        directory.glob(
+            "scan_kepler_u0_*.npz"
+        )
+    )
+
+    if not files:
+        raise RuntimeError(
+            f"No scan_kepler_u0_*.npz files in {directory}"
+        )
+
+    def file_index(fn):
+
+        match = re.search(
+            r"scan_kepler_u0_(\d+)\.npz$",
+            fn.name,
+        )
+
+        if match is None:
+            raise RuntimeError(
+                f"Cannot parse u0 index from {fn}"
+            )
+
+        return int(
+            match.group(1)
+        )
+
+    files = sorted(
+        files,
+        key=file_index,
+    )
+
+    u0_values = []
+    D_rows = []
+    success_rows = []
+
+    P_ref = None
+    tE_ref = None
+
+    for fn in files:
+
+        with np.load(
+            fn,
+            allow_pickle=False,
+        ) as d:
+
+            required = [
+                "truth",
+                "P_grid",
+                "D",
+                "SUCCESS",
+            ]
+
+            missing = [
+                key
+                for key in required
+                if key not in d.files
+            ]
+
+            if missing:
+                raise RuntimeError(
+                    f"{fn} missing keys: {missing}"
+                )
+
+            truth = np.asarray(
+                d["truth"],
+                dtype=float,
+            )
+
+            u0 = float(
+                truth[1]
+            )
+
+            tE = float(
+                truth[2]
+            )
+
+            P = np.asarray(
+                d["P_grid"],
+                dtype=float,
+            )
+
+            D = np.asarray(
+                d["D"],
+                dtype=float,
+            )
+
+            success = np.asarray(
+                d["SUCCESS"],
+                dtype=bool,
+            )
+
+            if not (
+                len(P)
+                == len(D)
+                == len(success)
+            ):
+                raise RuntimeError(
+                    f"Inconsistent array lengths in {fn}"
+                )
+
+            if P_ref is None:
+
+                P_ref = P.copy()
+                tE_ref = tE
+
+            else:
+
+                if not np.allclose(
+                    P,
+                    P_ref,
+                    rtol=0.0,
+                    atol=1.0e-12,
+                ):
+                    raise RuntimeError(
+                        f"Inconsistent P_grid in {fn}"
+                    )
+
+                if not np.isclose(
+                    tE,
+                    tE_ref,
+                    rtol=0.0,
+                    atol=1.0e-12,
+                ):
+                    raise RuntimeError(
+                        f"Inconsistent tE in {fn}"
+                    )
+
+            u0_values.append(
+                u0
+            )
+
+            D_rows.append(
+                D
+            )
+
+            success_rows.append(
+                success
+            )
+
+    u0_grid = np.asarray(
+        u0_values,
+        dtype=float,
+    )
+
+    D_intrinsic = np.asarray(
+        D_rows,
+        dtype=float,
+    )
+
+    success_intrinsic = np.asarray(
+        success_rows,
+        dtype=bool,
+    )
+
+    # --------------------------------------------------------
+    # Optional exact row selection
+    # --------------------------------------------------------
+
+    if u0_max is not None:
+
+        mask = (
+            u0_grid
+            <= float(u0_max)
+        )
+
+        if not np.any(mask):
+            raise RuntimeError(
+                f"No intrinsic u0 values <= {u0_max}"
+            )
+
+        u0_grid = (
+            u0_grid[mask]
+        )
+
+        D_intrinsic = (
+            D_intrinsic[mask]
+        )
+
+        success_intrinsic = (
+            success_intrinsic[mask]
+        )
+
+    if not np.all(
+        success_intrinsic
+    ):
+        nbad = int(
+            np.count_nonzero(
+                ~success_intrinsic
+            )
+        )
+
+        raise RuntimeError(
+            f"Intrinsic grid contains {nbad} failed fits"
+        )
+
+    if not np.all(
+        np.isfinite(
+            D_intrinsic
+        )
+    ):
+        raise RuntimeError(
+            "Intrinsic D map contains non-finite values"
+        )
+
+    return {
+        "directory": str(
+            directory
+        ),
+
+        "u0_grid": u0_grid,
+
+        "P_grid": P_ref,
+
+        "P_over_tE": (
+            P_ref
+            / float(tE_ref)
+        ),
+
+        "D_intrinsic": (
+            D_intrinsic
+        ),
+
+        "success_intrinsic": (
+            success_intrinsic
+        ),
+
+        "tE_intrinsic": float(
+            tE_ref
+        ),
+    }
+
+
+# ============================================================
 # Full grid
 # ============================================================
 
@@ -1366,6 +1631,8 @@ def run_grid(
     P_grid,
     magnitudes,
     output_npz,
+    D_intrinsic=None,
+    intrinsic_grid_dir=None,
 ):
     """
     Ejecuta la grilla Roman.
@@ -1395,6 +1662,28 @@ def run_grid(
         len(u0_grid),
         len(P_grid),
     )
+
+    if D_intrinsic is not None:
+
+        D_intrinsic = np.asarray(
+            D_intrinsic,
+            dtype=float,
+        )
+
+        expected_intrinsic_shape = (
+            len(u0_grid),
+            len(P_grid),
+        )
+
+        if (
+            D_intrinsic.shape
+            != expected_intrinsic_shape
+        ):
+            raise ValueError(
+                "D_intrinsic has shape "
+                f"{D_intrinsic.shape}, expected "
+                f"{expected_intrinsic_shape}"
+            )
 
     DELTA_CHI2 = np.full(
         shape,
@@ -1719,6 +2008,10 @@ def run_grid(
             N_BRIGHT_FLOOR=(
                 N_BRIGHT_FLOOR
             ),
+            D_intrinsic=D_intrinsic,
+            intrinsic_grid_dir=(
+                intrinsic_grid_dir
+            ),
         )
 
     # ========================================================
@@ -1767,6 +2060,8 @@ def save_grid_npz(
     DTE_OVER_TE,
     SUCCESS,
     N_BRIGHT_FLOOR,
+    D_intrinsic=None,
+    intrinsic_grid_dir=None,
 ):
     output_npz = Path(
         output_npz
@@ -1781,8 +2076,29 @@ def save_grid_npz(
         git_state()
     )
 
+    intrinsic_payload = {}
+
+    if D_intrinsic is not None:
+
+        intrinsic_payload[
+            "D_INTRINSIC"
+        ] = np.asarray(
+            D_intrinsic,
+            dtype=float,
+        )
+
+    if intrinsic_grid_dir is not None:
+
+        intrinsic_payload[
+            "intrinsic_grid_dir"
+        ] = np.array(
+            str(intrinsic_grid_dir)
+        )
+
     np.savez_compressed(
         output_npz,
+
+        **intrinsic_payload,
 
         # grids
         roman_times=np.asarray(
@@ -2055,6 +2371,26 @@ def build_parser():
     )
 
     parser.add_argument(
+        "--intrinsic-grid-dir",
+        default=None,
+        help=(
+            "Directory containing scan_kepler_u0_*.npz. "
+            "If supplied, Roman uses exactly the same u0 and "
+            "period nodes as the intrinsic BSPL-PSPL scan."
+        ),
+    )
+
+    parser.add_argument(
+        "--intrinsic-u0-max",
+        type=float,
+        default=1.0,
+        help=(
+            "Maximum u0 retained from --intrinsic-grid-dir. "
+            "Use a negative value to keep the full intrinsic grid."
+        ),
+    )
+
+    parser.add_argument(
         "--output",
         default=(
             "results/roman_asimov/"
@@ -2173,25 +2509,124 @@ def main():
             "P-min debe ser > 0."
         )
 
-    u0_grid = np.logspace(
-        np.log10(
-            args.u0_min
-        ),
-        np.log10(
-            args.u0_max
-        ),
-        args.n_u0,
-    )
+    D_intrinsic = None
+    intrinsic_grid_dir = None
 
-    P_grid = np.logspace(
-        np.log10(
-            args.P_min
-        ),
-        np.log10(
-            args.P_max
-        ),
-        args.n_P,
-    )
+    if args.intrinsic_grid_dir is not None:
+
+        if args.intrinsic_u0_max < 0.0:
+            intrinsic_u0_max = None
+        else:
+            intrinsic_u0_max = (
+                args.intrinsic_u0_max
+            )
+
+        intrinsic = (
+            load_intrinsic_u0_period_grid(
+                directory=(
+                    args.intrinsic_grid_dir
+                ),
+                u0_max=(
+                    intrinsic_u0_max
+                ),
+            )
+        )
+
+        u0_grid = (
+            intrinsic[
+                "u0_grid"
+            ]
+        )
+
+        P_grid = (
+            intrinsic[
+                "P_grid"
+            ]
+        )
+
+        D_intrinsic = (
+            intrinsic[
+                "D_intrinsic"
+            ]
+        )
+
+        intrinsic_grid_dir = (
+            intrinsic[
+                "directory"
+            ]
+        )
+
+        if not np.isclose(
+            intrinsic[
+                "tE_intrinsic"
+            ],
+            tE_true,
+            rtol=0.0,
+            atol=1.0e-12,
+        ):
+            raise ValueError(
+                "Intrinsic tE does not match Roman tE: "
+                f"{intrinsic['tE_intrinsic']} vs {tE_true}"
+            )
+
+        print()
+        print("=" * 80)
+        print("INTRINSIC GRID IMPORTED")
+        print("=" * 80)
+
+        print(
+            f"directory = {intrinsic_grid_dir}"
+        )
+
+        print(
+            f"Nu0 = {len(u0_grid)}"
+        )
+
+        print(
+            f"NP = {len(P_grid)}"
+        )
+
+        print(
+            f"u0 = "
+            f"{u0_grid.min():.8g} -- "
+            f"{u0_grid.max():.8g}"
+        )
+
+        print(
+            f"P/tE = "
+            f"{(P_grid/tE_true).min():.8g} -- "
+            f"{(P_grid/tE_true).max():.8g}"
+        )
+
+        print(
+            f"D intrinsic = "
+            f"{D_intrinsic.min():.8e} -- "
+            f"{D_intrinsic.max():.8e}"
+        )
+
+        print("=" * 80)
+
+    else:
+
+        u0_grid = np.logspace(
+            np.log10(
+                args.u0_min
+            ),
+            np.log10(
+                args.u0_max
+            ),
+            args.n_u0,
+        )
+
+        P_grid = np.logspace(
+            np.log10(
+                args.P_min
+            ),
+            np.log10(
+                args.P_max
+            ),
+            args.n_P,
+        )
 
     run_grid(
         t=t,
@@ -2204,6 +2639,10 @@ def main():
         ),
         output_npz=(
             args.output
+        ),
+        D_intrinsic=D_intrinsic,
+        intrinsic_grid_dir=(
+            intrinsic_grid_dir
         ),
     )
 

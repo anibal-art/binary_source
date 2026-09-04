@@ -23,6 +23,7 @@ import multiprocessing as mp
 import subprocess
 import sys
 import time
+import os
 
 from concurrent.futures import (
     ProcessPoolExecutor,
@@ -635,7 +636,7 @@ QMQF_QF_GRID = np.concatenate(
     ]
 )
 
-QMQF_TE = 150.0
+QMQF_TE = float(os.environ.get("BINARY_SOURCE_QMQF_TE", "150.0"))
 
 QMQF_P_GRID = (
     P_OVER_TE_QMQF
@@ -942,7 +943,7 @@ def build_qmqf_summary(
 def run_qmass_qflux():
 
     directory = final_output_dir(
-        "qmass_qflux_tE150"
+        f"qmass_qflux_tE{format_number(QMQF_TE)}"
     )
 
     tasks = [

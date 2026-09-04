@@ -460,6 +460,13 @@ QM_GRID = np.logspace(
     FINAL_N_2D,
 )
 
+QMASS_TE = float(
+    os.environ.get(
+        "BINARY_SOURCE_QMASS_TE",
+        "150.0",
+    )
+)
+
 
 def worker_qmass(task):
 
@@ -469,7 +476,7 @@ def worker_qmass(task):
         directory,
     ) = task
 
-    tE = 150.0
+    tE = QMASS_TE
 
     outfile = (
         Path(directory)
@@ -531,7 +538,7 @@ def worker_qmass(task):
 def run_qmass():
 
     directory = final_output_dir(
-        "qmass_fixed_mtot_tE150"
+        f"qmass_fixed_mtot_tE{format_number(QMASS_TE)}"
     )
 
     tasks = [

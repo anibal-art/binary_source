@@ -1,0 +1,16 @@
+figures/figures_lightcurves/example_1.png
+figures/figures_lightcurves/example_2_confused.png
+figures/current/D_heatmap_tE30_complete_contour.pdf
+figures/current/D_contours_many_tE_complete.pdf
+figures/current/paper_tE_bias_D_contours_tE30.pdf
+figures/current/paper_u0_tE_correlated_bias_tE30.pdf
+figures/current/qmass_qflux_D_map.pdf
+figures/current/photocenter_scaling.pdf
+figures/current/physical_qM_qf_PARSECF146.pdf
+figures/current/physical_photocenter_suppression_PARSECF146.pdf
+figures/current/qmass_qflux_biases.pdf
+figures/current/roman_intrinsic_comparison.pdf
+figures/appendix/optimizer_stratified_refit_audit.pdf
+figures/appendix/window_sensitivity.pdf
+figures/appendix/roman_te_bound_validation.pdf
+figures/appendix/geometry_robustness_appendix.pdf

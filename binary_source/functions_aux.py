@@ -36,7 +36,7 @@ sigma_W149 = np.array([
     0.13351, 0.20964, 0.32165, 0.51373, 1.0
 ])
 
-# Interpolación en log10(sigma)
+# Interpolation in log10(sigma)
 sigma_interp_log = interp1d(
     mag,
     np.log10(sigma_W149),
@@ -53,9 +53,9 @@ def flux_to_mag(flux, zp=27.615):
 
 def sigma_W149_func(W149):
     """
-    Devuelve sigma_W149 [mag / 15 min] para una magnitud W149.
+    Return sigma_W149 [mag / 15 min] for a W149 magnitude.
 
-    Válido para 12 <= W149 <= 27.
+    Valid for 12 <= W149 <= 27.
     """
     W149 = np.asarray(W149)
 
@@ -212,9 +212,9 @@ def sigma_flux_from_sigma_mag(mag, sigma_mag, zp=0.0):
 
 def sigma_flux_from_flux(flux, zp=27.615):
     """
-    Devuelve el error absoluto en flujo usando la curva sigma_W149(mag).
+    Return the absolute flux uncertainty using the sigma_W149(mag) relation.
     
-    Requiere que sigma_W149_func(mag) ya esté definida.
+    Requires sigma_W149_func(mag) to be defined.
     """
     flux = np.asarray(flux)
 
@@ -251,7 +251,7 @@ def orbital_period_kepler(a_au, M_tot_Msun):
 def build_case(case_name, DS, DL, rEhat, v_perp, a, M1, M2,
                t0=50, u0=0.1, xi_phase=0, xi_inclination=np.pi/2, flux_ratio=0.0):
     """
-    Construye un diccionario con los parámetros de un caso de xallarap.
+    Build a dictionary with the parameters of a xallarap configuration.
     """
     q_xi = (M1 / M2).decompose().value
     P = orbital_period_kepler(a, M1 + M2)
@@ -387,7 +387,7 @@ def chi2_theoretical(fit_params, your_model, use_magnification=False,
 def build_sim_event(time, mag0=19.0, emag=0.01, filt="G"):
     """
     Crea un Event con un Telescope con columnas time/mag/err_mag.
-    simulator.simulate_lightcurve(...) llenará flux/err_flux (si lo usás).
+    simulator.simulate_lightcurve(...) will populate flux/err_flux if used.
     """
     ev = event.Event()
     ev.name = "Simulated"
@@ -411,8 +411,8 @@ def build_sim_event(time, mag0=19.0, emag=0.01, filt="G"):
 
 def a_from_P_kepler_days(P_days, Mtot_Msun):
     """
-    Kepler: a^3 = Mtot * P^2, con P en años, a en AU, Mtot en Msun.
-    Devuelve a en AU (float).
+    Kepler: a^3 = Mtot * P^2, with P in years, a in AU, and Mtot in Msun.
+    Return a in AU as a float.
     """
     P_yr = np.asarray(P_days, dtype=float) / 365.25
     return (Mtot_Msun * P_yr**2)**(1.0/3.0)

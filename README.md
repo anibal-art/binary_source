@@ -8,6 +8,22 @@ This README is intended both for collaborators and as a practical **"future me" 
 
 ---
 
+
+## Repository scope
+
+This repository contains the **source code required to regenerate the
+numerical analyses and figures used in the paper**.
+
+It intentionally does **not** contain:
+
+- numerical production outputs under `results/`;
+- generated figures;
+- the LaTeX manuscript and bibliography.
+
+The manuscript is maintained separately in Overleaf. The definitive list of
+paper figures expected from this repository is stored in
+`tools/paper_figure_manifest.txt`.
+
 ## 1. Scientific idea
 
 A binary source can produce a light curve that differs from a PSPL event because the luminous source(s) move around the source-system center of mass.
@@ -116,11 +132,8 @@ figures/
 ├── appendix/
 └── figures_lightcurves/
 
-latex/
 ├── manuscript.tex
-└── sample.bib
 
-main.tex
 ```
 
 ---
@@ -522,38 +535,6 @@ Do not quantitatively interpolate physical PARSEC systems directly on a qM-qf gr
 
 ---
 
-## 13. Manuscript
-
-The paper is organized as:
-
-```text
-main.tex
-latex/manuscript.tex
-latex/sample.bib
-```
-
-Root `main.tex` is a proxy:
-
-```latex
-\RequirePackage{import}
-\import{latex/}{manuscript.tex}
-```
-
-Compile from the repository root:
-
-```bash
-latexmk -pdf main.tex
-```
-
-The bibliography currently lives in:
-
-```text
-latex/sample.bib
-```
-
-If bibliography errors appear after a long break, first check the final bibliography command inside `latex/manuscript.tex`.
-
----
 
 ## 14. Scientific conventions that are easy to forget
 
@@ -716,8 +697,6 @@ Recommended sequence:
 6. Check whether the F146 Roman production completed.
 7. Run the F146 smoke test.
 8. Regenerate the main figures.
-9. Compile main.tex.
-10. Only then resume scientific modifications.
 ```
 
 In commands:
@@ -747,7 +726,6 @@ python binary_source/plot_codes/plot_intrinsic_tE_paper.py
 python binary_source/plot_codes/plot_intrinsic_biases_paper.py
 python binary_source/plot_codes/plot_roman_intrinsic_comparison.py
 
-latexmk -pdf main.tex
 ```
 
 ---
@@ -784,3 +762,86 @@ This repository contains several scientifically useful legacy runs. Avoid overwr
 ## 20. One-sentence project summary
 
 > We quantify when orbital motion in binary-source microlensing produces an intrinsically distinguishable signal and when that signal can instead be absorbed by a standard PSPL fit, with particular attention to photocenter cancellation and Roman F146 detectability.
+
+<!-- PAPER_REPRO_START -->
+
+## Reproducing every paper figure
+
+GitHub contains the code required to regenerate the numerical analyses and all paper figures. Numerical products in `results/`, generated figures, legacy material, and the manuscript itself are not versioned.
+
+The authoritative figure list is `tools/paper_figure_manifest.txt`.
+
+All commands assume:
+
+```bash
+cd ~/binary_source
+conda activate rubin-sim
+```
+
+The primary manuscript analysis uses `tE = 30 d`.
+
+| Paper asset | Numerical production | Figure generation |
+|---|---|---|
+| `figures/figures_lightcurves/example_1.png` | `none` | `python binary_source/plot_codes/plot_lightcurve_examples.py` |
+| `figures/figures_lightcurves/example_2_confused.png` | `none` | `python binary_source/plot_codes/plot_lightcurve_examples.py` |
+| `figures/current/D_heatmap_tE30_complete_contour.pdf` | `python binary_source/scan_codes/run_final_scans.py` | `python binary_source/plot_codes/plot_intrinsic_tE_paper.py` |
+| `figures/current/D_contours_many_tE_complete.pdf` | `python binary_source/scan_codes/run_final_scans.py` | `python binary_source/plot_codes/plot_intrinsic_tE_paper.py` |
+| `figures/current/paper_tE_bias_D_contours_tE30.pdf` | `python binary_source/scan_codes/run_final_scans.py` | `python binary_source/plot_codes/plot_intrinsic_biases_paper.py` |
+| `figures/current/paper_u0_tE_correlated_bias_tE30.pdf` | `python binary_source/scan_codes/run_final_scans.py` | `python binary_source/plot_codes/plot_intrinsic_biases_paper.py` |
+| `figures/current/qmass_qflux_D_map.pdf` | `python binary_source/scan_codes/scan_qmass_qflux.py` | `python binary_source/plot_codes/run_paper_figures.py` |
+| `figures/current/photocenter_scaling.pdf` | `python binary_source/scan_codes/scan_photocenter_limit.py && python binary_source/analysis/analyze_photocenter_scaling.py` | `python binary_source/plot_codes/plot_photocenter_scaling.py` |
+| `figures/current/physical_qM_qf_PARSECF146.pdf` | `none` | `python isochrone_phot_cancel.py` |
+| `figures/current/physical_photocenter_suppression_PARSECF146.pdf` | `none` | `python isochrone_phot_cancel.py` |
+| `figures/current/qmass_qflux_biases.pdf` | `python binary_source/scan_codes/scan_qmass_qflux.py` | `python binary_source/plot_codes/run_paper_figures.py` |
+| `figures/current/roman_intrinsic_comparison.pdf` | `Roman F146 grid; see command below` | `python binary_source/plot_codes/plot_roman_intrinsic_comparison.py` |
+| `figures/appendix/optimizer_stratified_refit_audit.pdf` | `python binary_source/validation/validate_optimizer_and_grid_audit.py` | `python binary_source/plot_codes/plot_stratified_refit_audit.py` |
+| `figures/appendix/window_sensitivity.pdf` | `python binary_source/validation/validate_window_and_blending.py` | `python binary_source/plot_codes/plot_final_validation.py` |
+| `figures/appendix/roman_te_bound_validation.pdf` | `python binary_source/validation/validate_roman_te_bound.py` | `python binary_source/plot_codes/plot_roman_te_bound_validation.py` |
+| `figures/appendix/geometry_robustness_appendix.pdf` | `python binary_source/validation/validate_geometry_robustness.py` | `python binary_source/plot_codes/plot_geometry_robustness_appendix.py` |
+
+### Roman F146 production
+
+Before the full Roman run, use the smoke test:
+
+```bash
+python binary_source/analysis/roman_bspl_pspl_asimov.py --mode smoke --tE 30 --source-mag 21
+```
+
+The expected sampling is 8390 F146 epochs.
+
+Generate the final Roman grid with:
+
+```bash
+mkdir -p results/roman_asimov_f146_tE30
+
+python binary_source/analysis/roman_bspl_pspl_asimov.py \
+    --mode grid \
+    --tE 30 \
+    --magnitudes 19 21 23 \
+    --anchor-season 2 \
+    --fit-window-tE 3.5 \
+    --intrinsic-grid-dir results/scan_many_tE_200x200/scan_u0_tE30 \
+    --intrinsic-u0-max 1.0 \
+    --output results/roman_asimov_f146_tE30/roman_intrinsic_grid_f146_tE30.npz
+```
+
+Then run:
+
+```bash
+python binary_source/plot_codes/plot_roman_intrinsic_comparison.py
+```
+
+### Reproducibility audit
+
+```bash
+python tools/audit_paper_reproducibility.py
+```
+
+Expected result:
+
+```text
+Total manuscript figure assets: 16
+Potential Spanish documentation lines: 0
+```
+
+<!-- PAPER_REPRO_END -->

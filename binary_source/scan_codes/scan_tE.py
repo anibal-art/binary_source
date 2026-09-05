@@ -15,34 +15,34 @@ import os
 
 
 # ============================================================
-# Parámetros globales del experimento
+# Global experiment parameters
 # ============================================================
 
 t0_true = 50.0
 
-# Ángulos orbitales / xallarap
+# Orbital angles / xallarap
 phi_true = 0.0
 theta_true = 0.0
 lambda_xi_fixed = 0.5 * np.pi
 
-# Sistema físico
+# Physical system
 M1 = 2.0
 M2 = 1.0
 rEhat = 5.0
 
 # ============================================================
-# Barrido en período orbital
+# Orbital-period scan
 # ============================================================
 
 P_grid = np.logspace(
     -5,
     5,
     200,
-)  # 10 días -> 100000 días
+)  # 10 days -> 100000 days
 
 
 # ============================================================
-# Barrido en tiempo de Einstein
+# Einstein-timescale scan
 # ============================================================
 
 N_tE = 200
@@ -68,7 +68,7 @@ u0_fixed_values = np.array([
 
 
 # ============================================================
-# Configuración temporal
+# Time configuration
 # ============================================================
 
 N_time_points = 10_000
@@ -77,8 +77,8 @@ time_window_tE = 3.5
 
 def format_float_for_path(value, precision=4):
     """
-    Convierte un número flotante en una cadena segura para usar
-    en nombres de directorios y archivos.
+    Convert a floating-point number into a safe string for use
+    in directory and file names.
 
     Ejemplos
     --------
@@ -90,21 +90,21 @@ def format_float_for_path(value, precision=4):
 
 def run_single_tE(task):
     """
-    Ejecuta el barrido completo en P para una combinación fija
+    Run the complete P scan for a fixed combination
     de u0 y tE.
 
-    Cada proceso escribe un archivo NPZ diferente.
+    Each process writes a different NPZ file.
 
     Parameters
     ----------
     task : tuple
         Contiene:
 
-        - índice de u0
-        - índice de tE
-        - u0 verdadero
-        - tE verdadero
-        - directorio de salida
+        - u0 index
+        - tE index
+        - true u0
+        - true tE
+        - output directory
     """
 
     iu0, itE, u0_true, tE_true, directory = task
@@ -117,7 +117,7 @@ def run_single_tE(task):
     )
 
     # --------------------------------------------------------
-    # Evitar recalcular resultados existentes
+    # Avoid recomputing existing results
     # --------------------------------------------------------
 
     if os.path.exists(out_name):
@@ -178,7 +178,7 @@ def run_single_tE(task):
 def main():
     home_path = os.path.expanduser("~")
 
-    # Ajustar según la cantidad de núcleos y memoria disponible
+    # Adjust according to the available CPU cores and memory
     max_workers = min(
         12,
         os.cpu_count() or 1,
@@ -187,7 +187,7 @@ def main():
     all_tasks = []
 
     # ========================================================
-    # Crear un directorio para cada valor fijo de u0
+    # Create one directory for each fixed u0 value
     # ========================================================
 
     for iu0, u0_true in enumerate(u0_fixed_values):
@@ -209,7 +209,7 @@ def main():
             exist_ok=True,
         )
 
-        # Una tarea por cada valor de tE
+        # One task for each tE value
         for itE, tE_true in enumerate(tE_grid):
 
             task = (
@@ -228,18 +228,18 @@ def main():
     print("Barrido Kepleriano en tE y P")
     print("=" * 70)
     print(f"Valores fijos de u0 : {u0_fixed_values}")
-    print(f"Número de valores tE: {len(tE_grid)}")
+    print(f"Number of tE values: {len(tE_grid)}")
     print(
         f"Rango de tE         : "
-        f"{tE_grid.min():.3f} - {tE_grid.max():.3f} días"
+        f"{tE_grid.min():.3f} - {tE_grid.max():.3f} days"
     )
-    print(f"Número de valores P : {len(P_grid)}")
+    print(f"Number of P values : {len(P_grid)}")
     print(
         f"Rango de P          : "
-        f"{P_grid.min():.3f} - {P_grid.max():.3f} días"
+        f"{P_grid.min():.3f} - {P_grid.max():.3f} days"
     )
     print(f"Tareas totales      : {total_tasks}")
-    print(f"Procesos simultáneos: {max_workers}")
+    print(f"Concurrent processes: {max_workers}")
     print("=" * 70)
 
     # ========================================================

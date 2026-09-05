@@ -195,18 +195,18 @@ def intrinsic_magnification_objective(
 
 
 # ============================================================
-# Función auxiliar:
+# Helper function:
 # t_dev = FWHM de la feature dominante de |residual|
 # ============================================================
 
 def compute_tdev_fwhm(t, residual):
     """
-    Calcula t_dev, definido como el ancho temporal del intervalo
-    CONTIGUO que contiene el máximo global de |residual| y satisface
+    Compute t_dev, defined as the temporal width of the interval
+    CONTIGUOUS interval containing the global maximum of |residual| and satisfying
 
         |residual(t)| >= 0.5 * max(|residual|)
 
-    Los cruces con half maximum se interpolan linealmente entre
+    The half-maximum crossings are linearly interpolated between
     puntos consecutivos.
 
     Parameters
@@ -225,7 +225,7 @@ def compute_tdev_fwhm(t, residual):
 
     censored : bool
         True si la feature alcanza alguno de los extremos de la
-        ventana temporal, de modo que el FWHM completo podría
+        time window, so the full FWHM may
         extenderse fuera del intervalo simulado.
     """
 
@@ -235,7 +235,7 @@ def compute_tdev_fwhm(t, residual):
     if len(t) != len(residual):
 
         raise ValueError(
-            "t y residual deben tener la misma longitud."
+            "t and residual must have the same length."
         )
 
     if len(t) < 2:
@@ -253,8 +253,8 @@ def compute_tdev_fwhm(t, residual):
 
         return np.nan, True
 
-    # En principio t y resid deberían ser completamente válidos,
-    # pero mantenemos este tratamiento por robustez.
+    # In principle, t and resid should already be fully valid,
+    # but we retain this treatment for robustness.
 
     t_valid = t[valid]
     y_valid = abs_resid[valid]
@@ -270,7 +270,7 @@ def compute_tdev_fwhm(t, residual):
     t_valid = t_valid[order]
     y_valid = y_valid[order]
 
-    # Máximo global de |residual|
+    # Global maximum of |residual|
 
     i_max = int(
         np.argmax(y_valid)
@@ -290,7 +290,7 @@ def compute_tdev_fwhm(t, residual):
     half_max = 0.5 * r_max
 
     # ========================================================
-    # Buscar el intervalo CONTIGUO alrededor del máximo
+    # Find the CONTIGUOUS interval around the maximum
     # ========================================================
 
     i_left = i_max
@@ -319,7 +319,7 @@ def compute_tdev_fwhm(t, residual):
 
     if i_left == 0:
 
-        # La señal todavía está por encima de half max
+        # The signal is still above half maximum
         # en el borde izquierdo.
 
         t_left = t_valid[0]
@@ -333,7 +333,7 @@ def compute_tdev_fwhm(t, residual):
         y1 = y_valid[i_left - 1]
         y2 = y_valid[i_left]
 
-        # Interpolación lineal:
+        # Linear interpolation:
         #
         # y(t_cross) = half_max
 
@@ -366,7 +366,7 @@ def compute_tdev_fwhm(t, residual):
 
     if i_right == len(y_valid) - 1:
 
-        # La señal todavía está por encima de half max
+        # The signal is still above half maximum
         # en el borde derecho.
 
         t_right = t_valid[-1]
@@ -426,7 +426,7 @@ def compute_tdev_fwhm(t, residual):
 
 # ============================================================
 # NUEVO
-# Métrica normalizada de degeneración BSPL--PSPL
+# Normalized BSPL--PSPL degeneracy metric
 # ============================================================
 
 def compute_D_metric(
@@ -435,7 +435,7 @@ def compute_D_metric(
     A_fit,
 ):
     """
-    Calcula la métrica adimensional
+    Compute the dimensionless metric
 
                     integral [A_truth(t) - A_fit(t)]^2 dt
         D^2 =      ------------------------------------------
@@ -445,8 +445,8 @@ def compute_D_metric(
 
         D = ||A_truth - A_fit||_2 / ||A_truth - 1||_2.
 
-    La métrica compara el residual irreducible del mejor ajuste
-    PSPL con la escala total de la señal de microlensing BSPL
+    The metric compares the irreducible residual of the best fit
+    PSPL relative to the total scale of the BSPL microlensing signal
     respecto del baseline A = 1.
 
     Parameters
@@ -455,29 +455,29 @@ def compute_D_metric(
         Vector temporal.
 
     A_truth : array-like
-        Magnificación verdadera del modelo BSPL.
+        True magnification of the BSPL model.
 
     A_fit : array-like
-        Magnificación del mejor ajuste PSPL.
+        Magnification of the best-fitting PSPL model.
 
     Returns
     -------
     D : float
-        Métrica adimensional de mismatch.
+        Dimensionless mismatch metric.
 
         D -> 0:
-            degeneración BSPL--PSPL muy fuerte.
+            very strong BSPL--PSPL degeneracy.
 
         D grande:
-            una fracción importante de la estructura de la curva
-            BSPL no puede ser reproducida por el PSPL.
+            a significant fraction of the light-curve structure
+            BSPL cannot be reproduced by the PSPL model.
 
     Notes
     -----
-    D no depende de las unidades temporales, porque el mismo
+    D does not depend on the time units because the same
     diferencial dt aparece en numerador y denominador.
 
-    Tampoco requiere asumir una precisión fotométrica particular.
+    It also does not require assuming a particular photometric precision.
     """
 
     t = np.asarray(
@@ -496,7 +496,7 @@ def compute_D_metric(
     )
 
     # --------------------------------------------------------
-    # Verificar tamaños
+    # Check array sizes
     # --------------------------------------------------------
 
     if not (
@@ -506,11 +506,11 @@ def compute_D_metric(
     ):
 
         raise ValueError(
-            "t, A_truth y A_fit deben tener la misma longitud."
+            "t, A_truth, and A_fit must have the same length."
         )
 
     # --------------------------------------------------------
-    # Máscara de valores válidos
+    # Mask of valid values
     # --------------------------------------------------------
 
     valid = (
@@ -555,7 +555,7 @@ def compute_D_metric(
     )
 
     # --------------------------------------------------------
-    # Señal total de microlensing respecto del baseline A = 1
+    # Total microlensing signal relative to the A = 1 baseline
     # --------------------------------------------------------
 
     signal_A = (
@@ -611,7 +611,7 @@ def compute_D_metric(
 
 
 # ============================================================
-# Función principal
+# Main function
 # ============================================================
 
 def run_grid_and_save_npz_kepler(
@@ -649,7 +649,7 @@ def run_grid_and_save_npz_kepler(
     store_curves: bool = True,
 
     # ========================================================
-    # Configuración adicional
+    # Additional configuration
     # ========================================================
 
     override_xiE: float | None = None,
@@ -660,25 +660,25 @@ def run_grid_and_save_npz_kepler(
 ):
 
     """
-    Para cada período:
+    For each period:
 
-    1) Genera el modelo BSPL/xallarap verdadero.
-    2) Construye la fotometría teórica.
+    1) Generate the true BSPL/xallarap model.
+    2) Build the theoretical photometry.
     3) Ajusta un PSPL variando [t0, u0, tE].
-    4) Calcula las métricas de los residuos.
-    5) Guarda los resultados en un archivo NPZ.
+    4) Compute the residual metrics.
+    5) Save the results to an NPZ file.
 
-    Métricas guardadas
+    Stored metrics
     ------------------
     RMS
         RMS del residual.
 
     MAXABS
-        Máximo absoluto del residual.
+        Maximum absolute residual.
 
     D
-        Distancia normalizada entre la curva BSPL y su mejor
-        ajuste PSPL:
+        Normalized distance between the BSPL light curve and its best
+        PSPL fit:
 
             D = sqrt[
                     integral (A_BSPL - A_PSPL)^2 dt
@@ -686,7 +686,7 @@ def run_grid_and_save_npz_kepler(
                     integral (A_BSPL - 1)^2 dt
                 ]
 
-        Esta métrica se calcula siempre usando magnificación.
+        This metric is always computed in magnification space.
 
     TDEV
         FWHM temporal de la feature dominante de |residual|.
@@ -695,11 +695,11 @@ def run_grid_and_save_npz_kepler(
         Alias de TDEV.
 
     TDEV_CENSORED
-        True cuando la región por encima del half maximum alcanza
-        alguno de los extremos de la ventana temporal.
+        True when the region above half maximum reaches
+        either edge of the time window.
 
     Q_A
-        sqrt(chi2/N), según la implementación original.
+        sqrt(chi2/N), following the original implementation.
     """
 
     P_grid = np.asarray(
@@ -728,7 +728,7 @@ def run_grid_and_save_npz_kepler(
     n_t = len(t)
 
     # ========================================================
-    # Arrays de resultados
+    # Result arrays
     # ========================================================
 
     RMS = np.full(
@@ -745,7 +745,7 @@ def run_grid_and_save_npz_kepler(
 
     # ========================================================
     # NUEVO:
-    # Métrica normalizada de degeneración
+    # Normalized degeneracy metric
     # ========================================================
 
     D = np.full(
@@ -755,7 +755,7 @@ def run_grid_and_save_npz_kepler(
     )
 
     # ========================================================
-    # duración FWHM de la feature dominante
+    # FWHM duration of the dominant feature
     # ========================================================
 
     TDEV = np.full(
@@ -821,7 +821,7 @@ def run_grid_and_save_npz_kepler(
     )
 
     # ========================================================
-    # Guardar curvas completas
+    # Save complete light curves
     # ========================================================
 
     if store_curves:
@@ -851,7 +851,7 @@ def run_grid_and_save_npz_kepler(
         )
 
     # ========================================================
-    # Loop en período
+    # Loop over period
     # ========================================================
 
     for j_P, P in enumerate(P_grid):
@@ -914,7 +914,7 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
-            # Modelo BSPL/xallarap verdadero
+            # True BSPL/xallarap model
             # =================================================
 
             model_xal = PSPL_model.PSPLmodel(
@@ -964,7 +964,7 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
-            # Curva verdadera en magnificación
+            # True magnification light curve
             # =================================================
 
             A_truth = (
@@ -981,7 +981,7 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
-            # Curva verdadera en flujo
+            # True light curve in flux
             # =================================================
 
             F_truth = (
@@ -997,7 +997,7 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
-            # Construcción de los datos
+            # Data construction
             # =================================================
 
             if set_flux_from_truth_photometry:
@@ -1033,7 +1033,7 @@ def run_grid_and_save_npz_kepler(
             model_pspl.define_model_parameters()
 
             # =================================================
-            # Ajuste [t0, u0, tE]
+            # Fit [t0, u0, tE]
             # =================================================
 
             x0 = np.array(
@@ -1076,7 +1076,7 @@ def run_grid_and_save_npz_kepler(
             ] = best
 
             # =================================================
-            # Reconstrucción PSPL
+            # PSPL reconstruction
             # =================================================
 
             best_full = np.concatenate(
@@ -1120,7 +1120,7 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
-            # Residual utilizado para RMS/MAXABS/TDEV
+            # Residual used for RMS/MAXABS/TDEV
             # =================================================
 
             if rms_on_magnification:
@@ -1210,7 +1210,7 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
-            # Máximo absoluto
+            # Maximum absolute residual
             # =================================================
 
             MAXABS[j_P] = float(
@@ -1224,7 +1224,7 @@ def run_grid_and_save_npz_kepler(
             # D = mismatch BSPL--PSPL normalizado
             #
             # IMPORTANTE:
-            # se calcula SIEMPRE en magnificación:
+            # is ALWAYS computed in magnification space:
             #
             #             ∫(A_truth - A_fit)^2 dt
             # D^2 =      -------------------------
@@ -1255,7 +1255,7 @@ def run_grid_and_save_npz_kepler(
             ] = censored
 
             # =================================================
-            # Bias de parámetros
+            # Parameter biases
             # =================================================
 
             DT0[j_P] = (
@@ -1274,7 +1274,7 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
-            # Guardar curvas
+            # Save light curves
             # =================================================
 
             if store_curves:
@@ -1344,7 +1344,7 @@ def run_grid_and_save_npz_kepler(
         a_AU_of_P=A_AU,
 
         # ====================================================
-        # Métricas
+        # Metrics
         # ====================================================
 
         RMS=RMS,
@@ -1356,7 +1356,7 @@ def run_grid_and_save_npz_kepler(
 
         TDEV=TDEV,
 
-        # Alias explícito
+        # Explicit alias
         TFWHM=TDEV,
 
         TDEV_CENSORED=TDEV_CENSORED,
@@ -1445,7 +1445,7 @@ def run_grid_and_save_npz_kepler(
     )
 
     # ========================================================
-    # Guardar curvas completas
+    # Save complete light curves
     # ========================================================
 
     if store_curves:
@@ -1467,7 +1467,7 @@ def run_grid_and_save_npz_kepler(
         ] = F_fit_grid
 
     # ========================================================
-    # Guardado
+    # Save output
     # ========================================================
 
     np.savez_compressed(
@@ -1483,7 +1483,7 @@ def run_grid_and_save_npz_kepler(
 
 
 # ============================================================
-# EJEMPLO DE EJECUCIÓN
+# EXECUTION EXAMPLE
 # ============================================================
 
 if __name__ == "__main__":

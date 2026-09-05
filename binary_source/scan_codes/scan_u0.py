@@ -13,20 +13,20 @@ import numpy as np
 import os
 
 # ============================================================
-# Parámetros globales del experimento
+# Global experiment parameters
 # ============================================================
 
 t0_true = 50.0
-# Ángulos orbitales / xallarap
+# Orbital angles / xallarap
 phi_true = 0.0
 theta_true = 0.0
 lambda_xi_fixed = 0.5 * np.pi
-# Sistema físico
+# Physical system
 M1 = 2.0
 M2 = 1.0
 rEhat = 5.0
 qflux_value = 0.0
-# Barrido en período
+# Period scan
 N_u0, N_P = 100, 100
 P_grid = np.logspace(1, 5, N_P)
 # Barrido en u0
@@ -35,9 +35,9 @@ u0_grid = np.logspace(-2, 1, N_u0)
 
 def run_single_u0(task):
     """
-    Ejecuta el barrido en P para un único valor de u0.
+    Run the P scan for a single u0 value.
 
-    Cada proceso escribe un archivo NPZ diferente.
+    Each process writes a different NPZ file.
     """
     k, u0_true, tE_true, directory = task
 
@@ -46,7 +46,7 @@ def run_single_u0(task):
         f"scan_kepler_u0_{k:03d}.npz",
     )
 
-    # Evitar recalcular resultados existentes
+    # Avoid recomputing existing results
     if os.path.exists(out_name):
         return {
             "index": k,
@@ -93,7 +93,7 @@ def run_single_u0(task):
 def main():
     home_path = os.path.expanduser("~")
 
-    # Ajustar según la cantidad de núcleos y memoria disponible
+    # Adjust according to the available CPU cores and memory
     max_workers = min(12, os.cpu_count() or 1)
 
     for tE_true in [150]:
@@ -113,7 +113,7 @@ def main():
         ]
 
         print(
-            f"Iniciando scan para tE={tE_true} días "
+            f"Starting scan for tE={tE_true} days "
             f"con {max_workers} procesos."
         )
 
@@ -150,7 +150,7 @@ def main():
                     )
 
         print(
-            f"Scan en u0 terminado para tE={tE_true} días."
+            f"u0 scan completed for tE={tE_true} days."
         )
 
 

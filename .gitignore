@@ -165,3 +165,16 @@ __pycache__/
 *.snm
 *.vrb
 /latex/meeting_results_15min.*
+
+# ============================================================
+# Local legacy / exploratory material
+# ============================================================
+
+/legacy_local/
+
+# ============================================================
+# Manuscript sources live in Overleaf, not in this repository
+# ============================================================
+
+/latex/
+/main.tex

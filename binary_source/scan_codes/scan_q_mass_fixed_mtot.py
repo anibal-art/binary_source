@@ -15,7 +15,7 @@ import os
 
 
 # ============================================================
-# Parámetros globales del experimento
+# Global experiment parameters
 # ============================================================
 
 t0_true = 50.0
@@ -23,7 +23,7 @@ u0_true = 0.1
 
 
 # ============================================================
-# Ángulos orbitales / xallarap
+# Orbital angles / xallarap
 # ============================================================
 
 phi_true = 0.0
@@ -35,7 +35,7 @@ qflux_value = 0.0
 
 
 # ============================================================
-# Sistema físico
+# Physical system
 #
 # Mantenemos fija la masa total:
 #
@@ -57,7 +57,7 @@ rEhat = 5.0           # AU
 
 
 # ============================================================
-# Resolución de las grillas
+# Grid resolution
 # ============================================================
 
 N_q = 100
@@ -65,7 +65,7 @@ N_P = 100
 
 
 # ============================================================
-# Barrido en período
+# Period scan
 #
 # 10 d -> 100000 d
 # ============================================================
@@ -95,12 +95,12 @@ q_grid = np.logspace(
 # ============================================================
 # Worker
 #
-# Cada proceso:
+# Each process:
 #
-#   1. recibe un único q
-#   2. calcula M1 y M2 manteniendo Mtot fija
+#   1. receive a single q value
+#   2. compute M1 and M2 while keeping Mtot fixed
 #   3. ejecuta todo el barrido en P
-#   4. guarda un NPZ independiente
+#   4. save an independent NPZ file
 #
 # ============================================================
 
@@ -110,7 +110,7 @@ def run_single_q(task):
 
 
     # ========================================================
-    # Archivo de salida
+    # Output file
     # ========================================================
 
     out_name = os.path.join(
@@ -120,7 +120,7 @@ def run_single_q(task):
 
 
     # ========================================================
-    # Evitar recalcular resultados existentes
+    # Avoid recomputing existing results
     # ========================================================
 
     if os.path.exists(out_name):
@@ -162,12 +162,12 @@ def run_single_q(task):
 
 
     # ========================================================
-    # Fracción de la órbita relativa descrita por source 1
+    # Fraction of the relative orbit described by source 1
     #
     # a1 / a_rel = q / (1+q)
     #
-    # Para qflux=0, esta es particularmente relevante porque
-    # la señal está asociada a la trayectoria de la fuente
+    # For qflux=0, this is particularly relevant because
+    # the signal is associated with the source trajectory
     # luminosa.
     # ========================================================
 
@@ -184,8 +184,8 @@ def run_single_q(task):
     # ========================================================
     # Time grid
     #
-    # Mantengo exactamente la misma convención que en el
-    # barrido en u0 para que ambos experimentos sean
+    # Keep exactly the same convention as in the
+    # u0 scan so that both experiments are
     # directamente comparables.
     # ========================================================
 
@@ -207,7 +207,7 @@ def run_single_q(task):
         t=t,
 
         # ----------------------------------------------------
-        # Parámetros PSPL base
+        # Baseline PSPL parameters
         # ----------------------------------------------------
 
         t0_true=t0_true,
@@ -222,7 +222,7 @@ def run_single_q(task):
 
 
         # ----------------------------------------------------
-        # Geometría orbital
+        # Orbital geometry
         # ----------------------------------------------------
 
         phi_true=phi_true,
@@ -237,7 +237,7 @@ def run_single_q(task):
 
 
         # ----------------------------------------------------
-        # Sistema físico
+        # Physical system
         # ----------------------------------------------------
 
         M1_Msun=float(
@@ -252,14 +252,14 @@ def run_single_q(task):
 
 
         # ----------------------------------------------------
-        # Barrido en período
+        # Period scan
         # ----------------------------------------------------
 
         P_grid=P_grid,
 
 
         # ----------------------------------------------------
-        # Fotometría
+        # Photometry
         #
         # Mismos valores que en el scan de u0
         # ----------------------------------------------------
@@ -277,7 +277,7 @@ def run_single_q(task):
 
 
         # ----------------------------------------------------
-        # Configuración del experimento
+        # Experiment configuration
         # ----------------------------------------------------
 
         set_flux_from_truth_photometry=True,
@@ -311,14 +311,14 @@ def run_single_q(task):
 def main():
 
     # ========================================================
-    # Home automático
+    # Automatic home-directory detection
     # ========================================================
 
     home_path = os.path.expanduser("~")
 
 
     # ========================================================
-    # Número máximo de procesos
+    # Maximum number of processes
     #
     # Igual que en el scan de u0.
     # ========================================================
@@ -332,15 +332,15 @@ def main():
     # ========================================================
     # Barrido en tE
     #
-    # Por ahora un único tE.
-    # Después se puede extender directamente.
+    # For now, use a single tE value.
+    # This can be extended directly later.
     # ========================================================
 
     for tE_true in [150]:
 
 
         # ====================================================
-        # Directorio de salida
+        # Output directory
         # ====================================================
 
         directory = os.path.join(
@@ -382,7 +382,7 @@ def main():
 
 
         # ====================================================
-        # Información inicial
+        # Initial information
         # ====================================================
 
         print()
@@ -390,8 +390,8 @@ def main():
         print("=" * 80)
 
         print(
-            f"Iniciando scan en mass ratio para "
-            f"tE={tE_true} días"
+            f"Starting mass-ratio scan for "
+            f"tE={tE_true} days"
         )
 
         print("=" * 80)
@@ -442,7 +442,7 @@ def main():
 
 
         # ====================================================
-        # Ejecutar en paralelo sobre q
+        # Run in parallel over q
         # ====================================================
 
         with ProcessPoolExecutor(
@@ -499,7 +499,7 @@ def main():
 
 
                     # =========================================
-                    # Resultado terminado
+                    # Completed result
                     # =========================================
 
                     if result[
@@ -525,7 +525,7 @@ def main():
 
 
                     # =========================================
-                    # Archivo ya existente
+                    # Existing file
                     # =========================================
 
                     else:
@@ -566,11 +566,11 @@ def main():
 
         print(
             f"Scan en mass ratio terminado "
-            f"para tE={tE_true} días."
+            f"for tE={tE_true} days."
         )
 
         print(
-            f"Resultados:"
+            f"Results:"
         )
 
         print(

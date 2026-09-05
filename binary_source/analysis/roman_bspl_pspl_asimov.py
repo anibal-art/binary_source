@@ -36,9 +36,9 @@ from functions_aux import (
 
 
 # ============================================================
-# Configuración física por defecto
+# Default physical configuration
 #
-# Debe coincidir con el experimento intrínseco principal.
+# Must match the main intrinsic experiment.
 # ============================================================
 
 M1_MSUN = 2.0
@@ -63,8 +63,8 @@ FIT_WINDOW_TE = 3.5
 # ============================================================
 # Roman seasons
 #
-# Misma prescripción usada en la maquinaria Roman actual.
-# sampling está en horas en simulate_a_telescope.
+# Same prescription used by the current Roman machinery.
+# sampling is expressed in hours in simulate_a_telescope.
 # ============================================================
 
 NOMINAL_SEASONS = [
@@ -82,7 +82,7 @@ OFF_SEASONS = [
     ("2029-08-16T00:00:00", "2029-10-27T00:00:00"),
 ]
 
-# Igual que en el código Roman actual
+# Same as in the current Roman code
 ROMAN_NOMINAL_SAMPLING_HOURS = 121.0 / 600.0
 ROMAN_OFF_SAMPLING_HOURS = 24.0 * 3.0
 
@@ -107,7 +107,7 @@ def scalar(x):
 
     if arr.size != 1:
         raise ValueError(
-            f"Esperaba un escalar y recibí shape={arr.shape}"
+            f"Expected a scalar but received shape={arr.shape}"
         )
 
     return float(arr.reshape(-1)[0])
@@ -149,10 +149,10 @@ def simulate_roman_season(
     max_epochs=None,
 ):
     """
-    Devuelve únicamente los tiempos de una temporada Roman.
+    Return only the observing times for one Roman season.
 
-    Usamos simulate_a_telescope de pyLIMA para reproducir
-    la misma maquinaria temporal que el pipeline Roman.
+    We use pyLIMA's simulate_a_telescope to reproduce
+    the same time-sampling machinery as the Roman pipeline.
     """
 
     tstart = Time(
@@ -205,22 +205,22 @@ def build_roman_times(
     include_off_seasons=True,
 ):
     """
-    Construye toda la cadencia Roman y coloca t0 en el centro
-    de una temporada nominal.
+    Build the complete Roman cadence and place t0 at the center
+    of a nominal observing season.
 
     No trasladamos los JDs: mantenemos tiempos absolutos.
-    Esto facilitará incorporar parallax más adelante.
+    This will make it easier to incorporate parallax later.
 
     Parameters
     ----------
     anchor_season_index : int
-        Temporada nominal cuyo centro define t0.
+        Nominal season whose midpoint defines t0.
 
         Default = 2:
         2028-02-11 -- 2028-04-24
 
     fit_window_te : float
-        Conserva observaciones dentro de
+        Keep observations within
         |t-t0| <= fit_window_te * tE.
     """
 
@@ -297,8 +297,8 @@ def build_roman_times(
 
     if len(t) == 0:
         raise RuntimeError(
-            "La ventana seleccionada no contiene "
-            "observaciones Roman."
+            "The selected window contains no "
+            "Roman observations."
         )
 
     return t, float(t0_true)
@@ -352,7 +352,7 @@ def sigma_f146_safe(magnitude):
 
 
 # ============================================================
-# Evento pyLIMA genérico
+# Generic pyLIMA event
 # ============================================================
 
 def build_event_from_magnitudes(
@@ -362,12 +362,12 @@ def build_event_from_magnitudes(
     name="Roman",
 ):
     """
-    Construye el Event usado por el ajuste.
+    Build the Event used for the fit.
 
-    Parallax está desactivado en este primer experimento.
-    Por lo tanto la localización física del Telescope no entra
-    en la trayectoria. Usamos location='Space' para conservar
-    la semántica Roman.
+    Parallax is disabled in this first experiment.
+    Therefore, the physical Telescope location does not enter
+    the trajectory. We use location='Space' to preserve
+    the Roman semantics.
     """
 
     t = np.asarray(
@@ -392,7 +392,7 @@ def build_event_from_magnitudes(
     ):
         raise ValueError(
             "t, magnitude y err_mag "
-            "deben tener la misma longitud."
+            "must have the same length."
         )
 
     ev = event.Event()
@@ -437,16 +437,16 @@ def build_event_from_magnitudes(
 
 
 # ============================================================
-# Evento usado únicamente para calcular A_BSPL
+# Event used only to compute A_BSPL
 # ============================================================
 
 def build_truth_event(
     t,
 ):
     """
-    Evento auxiliar para calcular la magnificación.
+    Auxiliary event used to compute the magnification.
 
-    Los valores fotométricos aquí son placeholders.
+    The photometric values here are placeholders.
     """
 
     t = np.asarray(
@@ -491,11 +491,11 @@ def bspl_truth_magnification(
     inclination=INCLINATION_TRUE,
 ):
     """
-    Misma parametrización física usada en los scans intrínsecos.
+    Same physical parameterization used in the intrinsic scans.
 
     xi_rel = a_rel / rEhat
 
-    y pyLIMA distribuye el movimiento entre las dos fuentes
+    and pyLIMA distributes the orbital motion between the two sources
     mediante q_mass.
     """
 
@@ -503,7 +503,7 @@ def bspl_truth_magnification(
 
     if P_days <= 0.0:
         raise ValueError(
-            "P_days debe ser positivo."
+            "P_days must be positive."
         )
 
     a_rel_AU = float(
@@ -554,7 +554,7 @@ def bspl_truth_magnification(
 
     model_bspl.define_model_parameters()
 
-    # Sólo necesarios para construir pyLIMA_parameters.
+    # Only required to construct pyLIMA_parameters.
     # No intervienen en model_magnification.
     fsource_dummy = 1.0
     ftotal_dummy = 1.0
@@ -595,8 +595,8 @@ def bspl_truth_magnification(
         A_bspl
     )
 
-    # pyLIMA devuelve A1 + qf A2.
-    # Queremos la magnificación respecto del flujo
+    # pyLIMA returns A1 + qf A2.
+    # We want the magnification relative to the total unlensed flux
     # total no magnificado.
     A_bspl = (
         A_bspl
@@ -626,7 +626,7 @@ def bspl_truth_magnification(
 
 
 # ============================================================
-# Construcción del dataset Asimov
+# Asimov dataset construction
 # ============================================================
 
 def make_roman_asimov_event(
@@ -635,9 +635,9 @@ def make_roman_asimov_event(
     source_mag,
 ):
     """
-    Datos observados = valor esperado bajo BSPL.
+    Observed data = expected value under the BSPL model.
 
-    No hay realización aleatoria de ruido.
+    No random noise realization is added.
 
     m(t) = m_base - 2.5 log10(A_BSPL).
     """
@@ -696,16 +696,16 @@ def fit_pspl_roman(
     tE_guess,
 ):
     """
-    Ajusta un PSPL estándar con TRF.
+    Fit a standard PSPL model with TRF.
 
-    Los parámetros físicos libres son:
+    The free physical parameters are:
         t0, u0, tE
 
-    pyLIMA determina simultáneamente los parámetros
-    fotométricos asociados al telescopio.
+    pyLIMA simultaneously determines the parameters
+    photometric parameters associated with the telescope.
 
-    Eso es deliberado: queremos el mejor PSPL que
-    realmente se obtendría con los datos Roman.
+    This is deliberate: we want the best PSPL model that
+    would actually be obtained from the Roman data.
     """
 
     model_pspl = (
@@ -780,7 +780,7 @@ def fit_pspl_roman(
 
     if "best_model" not in results:
         raise RuntimeError(
-            "pyLIMA no devolvió best_model. "
+            "pyLIMA did not return best_model. "
             f"Keys: {list(results.keys())}"
         )
 
@@ -791,7 +791,7 @@ def fit_pspl_roman(
 
     if len(best_model) < 3:
         raise RuntimeError(
-            "best_model tiene menos de tres parámetros."
+            "best_model has fewer than three parameters."
         )
 
     best_t0 = float(
@@ -821,7 +821,7 @@ def fit_pspl_roman(
             pass
 
     # --------------------------------------------------------
-    # Recalcular chi2 explícitamente como validación
+    # Recompute chi2 explicitly as a validation check
     # --------------------------------------------------------
 
     chi2_recomputed = np.nan
@@ -877,7 +877,7 @@ def fit_pspl_roman(
         )
 
     except Exception:
-        # No bloqueamos el análisis:
+        # Do not stop the analysis:
         # fit_results["chi2"] sigue siendo la referencia.
         pass
 
@@ -897,7 +897,7 @@ def fit_pspl_roman(
 
     else:
         raise RuntimeError(
-            "No pude obtener chi2 del ajuste."
+            "Could not obtain chi2 from the fit."
         )
 
     return {
@@ -922,12 +922,12 @@ def event_snr(
     A_truth,
 ):
     """
-    SNR del exceso de flujo microlenteado respecto del baseline:
+    SNR of the microlensing flux excess relative to baseline:
 
         SNR_event^2 =
             sum [(F_i - F_base)/sigma_i]^2.
 
-    Sirve para comparar luego con:
+    This is useful for comparison with:
 
         sqrt(Delta chi2) ~ D * SNR_event.
     """
@@ -992,7 +992,7 @@ def event_snr(
 
 
 # ============================================================
-# Un caso
+# One case
 # ============================================================
 
 def run_case(
@@ -1657,7 +1657,7 @@ def run_grid(
     """
     Ejecuta la grilla Roman.
 
-    El resultado tiene shape:
+    The result has shape:
 
         (Nmag, Nu0, NP)
     """
@@ -2000,7 +2000,7 @@ def run_grid(
             )
 
         # ----------------------------------------------------
-        # Checkpoint después de cada magnitud
+        # Checkpoint after each magnitude
         # ----------------------------------------------------
 
         save_grid_npz(
@@ -2521,12 +2521,12 @@ def main():
 
     if args.u0_min <= 0:
         raise ValueError(
-            "u0-min debe ser > 0."
+            "u0-min must be > 0."
         )
 
     if args.P_min <= 0:
         raise ValueError(
-            "P-min debe ser > 0."
+            "P-min must be > 0."
         )
 
     D_intrinsic = None

@@ -30,7 +30,7 @@ if str(BINARY_SOURCE_DIR) not in sys.path:
     sys.path.insert(0, str(BINARY_SOURCE_DIR))
 
 from functions_aux import (
-    sigma_W149_func,
+    sigma_F146_func,
     a_from_P_kepler_days,
 )
 
@@ -85,6 +85,10 @@ OFF_SEASONS = [
 # Igual que en el código Roman actual
 ROMAN_NOMINAL_SAMPLING_HOURS = 121.0 / 600.0
 ROMAN_OFF_SAMPLING_HOURS = 24.0 * 3.0
+
+# Current GBTDS F146 prescription:
+# approximately 8390 high-cadence epochs per season.
+ROMAN_NOMINAL_EPOCHS = 8390
 
 
 # ============================================================
@@ -142,6 +146,7 @@ def simulate_roman_season(
     start,
     end,
     sampling_hours,
+    max_epochs=None,
 ):
     """
     Devuelve únicamente los tiempos de una temporada Roman.
@@ -161,19 +166,36 @@ def simulate_roman_season(
     ).jd
 
     roman = simulator.simulate_a_telescope(
-        name="W149",
+        name="F146",
         time_start=tstart,
         time_end=tend,
         sampling=sampling_hours,
         location="Space",
-        camera_filter="W149",
+        camera_filter="F146",
         uniform_sampling=True,
         astrometry=False,
     )
 
-    return as_array(
+    times = as_array(
         roman.lightcurve["time"]
     )
+
+    # The old visibility-window prescription generates slightly
+    # more F146 measurements than the current GBTDS allocation.
+    # For high-cadence seasons, retain the central max_epochs
+    # observations so that the season remains centered on the
+    # same visibility window.
+    if (
+        max_epochs is not None
+        and len(times) > max_epochs
+    ):
+        excess = len(times) - max_epochs
+        i0 = excess // 2
+        times = times[
+            i0:i0 + max_epochs
+        ]
+
+    return times
 
 
 def build_roman_times(
@@ -217,6 +239,7 @@ def build_roman_times(
             start=start,
             end=end,
             sampling_hours=ROMAN_NOMINAL_SAMPLING_HOURS,
+            max_epochs=ROMAN_NOMINAL_EPOCHS,
         )
 
         times.append(tt)
@@ -282,20 +305,19 @@ def build_roman_times(
 
 
 # ============================================================
-# W149 photometric precision
+# F146 photometric precision
 # ============================================================
 
-def sigma_w149_safe(magnitude):
+def sigma_f146_safe(magnitude):
     """
-    Usa sigma_W149_func existente.
+    Single-epoch F146 precision used by the Roman forecast.
 
-    La tabla original es válida para 12 <= W149 <= 27.
+    The underlying sigma_F146_func is normalized to the
+    current GBTDS requirement S/N~100 at F146_AB=21.2.
 
-    Para fuentes magnificadas más brillantes que W149=12
-    mantenemos el piso de la tabla, sigma=0.001 mag.
-
-    Para puntos más débiles que W149=27 se lanza error,
-    porque estaríamos extrapolando fuera de la prescripción.
+    We restrict the faint end to F146<=27 to avoid using the
+    simplified prescription arbitrarily far into the
+    noise-dominated regime.
     """
 
     magnitude = np.asarray(
@@ -307,22 +329,20 @@ def sigma_w149_safe(magnitude):
         ~np.isfinite(magnitude)
     ):
         raise ValueError(
-            "Magnitudes no finitas."
+            "Non-finite F146 magnitudes."
         )
 
-    if np.any(magnitude > 27.0):
+    if np.any(
+        magnitude > 27.0
+    ):
         raise ValueError(
-            "La curva contiene W149 > 27. "
-            "sigma_W149_func no debe extrapolarse."
+            "The light curve contains F146 > 27. "
+            "The adopted F146 precision model is not "
+            "used beyond this range."
         )
 
-    mag_eval = np.maximum(
-        magnitude,
-        12.0,
-    )
-
-    sigma = sigma_W149_func(
-        mag_eval
+    sigma = sigma_F146_func(
+        magnitude
     )
 
     return np.asarray(
@@ -394,7 +414,7 @@ def build_event_from_magnitudes(
 
     tel = telescopes.Telescope(
         name=name,
-        camera_filter="W149",
+        camera_filter="F146",
         lightcurve=lc,
         lightcurve_names=[
             "time",
@@ -638,7 +658,7 @@ def make_roman_asimov_event(
     )
 
     err_mag = (
-        sigma_w149_safe(
+        sigma_f146_safe(
             mag_truth
         )
     )
@@ -1239,7 +1259,7 @@ def run_smoke_test(
     )
 
     print(
-        f"W149 baseline = {source_mag:.2f}"
+        f"F146 baseline = {source_mag:.2f}"
     )
 
     print()
@@ -1802,7 +1822,7 @@ def run_grid(
 
             print()
             print(
-                f"[W149={source_mag:.2f}] "
+                f"[F146={source_mag:.2f}] "
                 f"u0 {iu+1}/{len(u0_grid)} = "
                 f"{u0_true:.6g}"
             )
@@ -1965,7 +1985,7 @@ def run_grid(
                     print()
                     print(
                         f"[FAILED {counter}/{n_total}] "
-                        f"W149={source_mag:g}, "
+                        f"F146={source_mag:g}, "
                         f"u0={u0_true:g}, "
                         f"P/tE={P_days/tE_true:g}"
                     )
@@ -2106,7 +2126,7 @@ def save_grid_npz(
             dtype=float,
         ),
 
-        w149_magnitudes=np.asarray(
+        f146_magnitudes=np.asarray(
             magnitudes,
             dtype=float,
         ),
@@ -2220,7 +2240,7 @@ def save_grid_npz(
         ),
 
         photometric_model=np.array(
-            "sigma_W149_func"
+            "sigma_F146_func"
         ),
 
         interpretation=np.array(
@@ -2287,7 +2307,7 @@ def build_parser():
         type=float,
         default=21.0,
         help=(
-            "W149 baseline magnitude used "
+            "F146 baseline magnitude used "
             "in smoke mode."
         ),
     )
@@ -2302,7 +2322,7 @@ def build_parser():
             23.0,
         ],
         help=(
-            "W149 baseline magnitudes "
+            "F146 baseline magnitudes "
             "for grid mode."
         ),
     )

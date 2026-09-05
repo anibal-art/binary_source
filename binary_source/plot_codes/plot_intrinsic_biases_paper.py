@@ -294,8 +294,10 @@ if q_directory is None:
 # ============================================================
 
 output_directory = os.path.join(
-    results_root,
-    "bias_paper_figures",
+    home,
+    "binary_source",
+    "figures",
+    "current",
 )
 
 os.makedirs(
@@ -343,73 +345,75 @@ def get_file_index(filename, parameter):
 # ============================================================
 # LOAD SCAN
 # ============================================================
+#
+# IMPORTANT:
+#
+# Do NOT assume the number or spacing of parameter nodes.
+#
+# The production grids have changed:
+#
+#   u0 scan : 200 nodes
+#   qM scan : 300 nodes
+#
+# The physical parameter is therefore recovered directly
+# from each NPZ file:
+#
+#   u0 = truth[1]
+#   qM = M2/M1 = truth[6]/truth[5]
+#
+# This makes the plotting independent of the production-grid
+# resolution and prevents file-index -> coordinate mismatches.
+# ============================================================
 
 def load_scan(
+
     directory,
     file_parameter,
-    parameter_grid,
-    tE_true,
+    parameter_grid=None,   # retained only for backward compatibility
+    tE_true=None,
+
 ):
 
-    pattern = os.path.join(
-        directory,
-        f"scan_kepler_{file_parameter}_*.npz",
-    )
+    if tE_true is None:
 
-    files = sorted(
-        glob.glob(pattern)
-    )
-
-    if len(files) == 0:
-        raise FileNotFoundError(pattern)
-
-
-    # --------------------------------------------------------
-    # Period grid
-    # --------------------------------------------------------
-
-    with np.load(
-        files[0],
-        allow_pickle=False,
-    ) as d:
-
-        P_grid = d["P_grid"].astype(float)
-
-
-    shape = (
-        len(parameter_grid),
-        len(P_grid),
-    )
-
-
-    DT0 = np.full(shape, np.nan)
-    DU0 = np.full(shape, np.nan)
-    DTE = np.full(shape, np.nan)
-
-    D = np.full(shape, np.nan)
-    RMS = np.full(shape, np.nan)
-
-    SUCCESS = np.zeros(
-        shape,
-        dtype=bool,
-    )
-
-
-    # --------------------------------------------------------
-    # Load all files
-    # --------------------------------------------------------
-
-    for filename in files:
-
-        k = get_file_index(
-            filename,
-            file_parameter,
+        raise ValueError(
+            "tE_true must be provided."
         )
 
-        if not (
-            0 <= k < len(parameter_grid)
-        ):
-            continue
+
+    pattern = os.path.join(
+
+        directory,
+
+        f"scan_kepler_{file_parameter}_*.npz",
+
+    )
+
+
+    files = sorted(
+        glob.glob(
+            pattern
+        )
+    )
+
+
+    if len(files) == 0:
+
+        raise FileNotFoundError(
+            pattern
+        )
+
+
+    rows = []
+
+    P_grid_ref = None
+
+
+    # ========================================================
+    # FILE LOOP
+    # ========================================================
+
+    for filename in files:
 
 
         with np.load(
@@ -419,13 +423,19 @@ def load_scan(
 
 
             required = [
+
+                "truth",
                 "P_grid",
+
                 "DT0",
                 "DU0",
                 "DTE",
+
                 "D",
                 "RMS",
+
                 "SUCCESS",
+
             ]
 
 
@@ -434,104 +444,443 @@ def load_scan(
                 if key not in d.files:
 
                     raise KeyError(
+
                         f"\nMissing key '{key}' in\n"
                         f"{filename}\n\n"
-                        f"Available keys:\n{d.files}"
+                        f"Available keys:\n"
+                        f"{d.files}"
                     )
 
 
-            P_this = d[
-                "P_grid"
-            ].astype(float)
+            truth = np.asarray(
+                d["truth"],
+                dtype=float,
+            )
 
 
-            if not np.allclose(
-                P_this,
-                P_grid,
-            ):
+            if truth.size < 7:
 
-                raise ValueError(
-                    f"P_grid differs in:\n{filename}"
+                raise RuntimeError(
+
+                    f"truth array too short in:\n"
+                    f"{filename}"
                 )
 
 
-            dt0 = d[
-                "DT0"
-            ].astype(float)
+            # ------------------------------------------------
+            # Verify tE
+            # ------------------------------------------------
 
-            du0 = d[
-                "DU0"
-            ].astype(float)
-
-            dte = d[
-                "DTE"
-            ].astype(float)
-
-            dmetric = d[
-                "D"
-            ].astype(float)
-
-            rms = d[
-                "RMS"
-            ].astype(float)
-
-            success = d[
-                "SUCCESS"
-            ].astype(bool)
+            file_tE = float(
+                truth[2]
+            )
 
 
-        # ----------------------------------------------------
-        # Masks
-        # ----------------------------------------------------
+            if not np.isclose(
+
+                file_tE,
+
+                float(tE_true),
+
+                rtol=0.0,
+
+                atol=1e-10,
+
+            ):
+
+                raise RuntimeError(
+
+                    f"Unexpected tE in:\n"
+                    f"{filename}\n"
+                    f"file tE = {file_tE}\n"
+                    f"expected = {tE_true}"
+                )
+
+
+            # ------------------------------------------------
+            # Recover the ACTUAL scanned parameter
+            # ------------------------------------------------
+
+            if file_parameter == "u0":
+
+                parameter_value = float(
+                    truth[1]
+                )
+
+
+            elif file_parameter == "q":
+
+                M1 = float(
+                    truth[5]
+                )
+
+                M2 = float(
+                    truth[6]
+                )
+
+
+                if M1 <= 0:
+
+                    raise RuntimeError(
+
+                        f"Invalid M1={M1} in:\n"
+                        f"{filename}"
+                    )
+
+
+                parameter_value = (
+                    M2 / M1
+                )
+
+
+                # Optional consistency check against the
+                # explicitly stored q_mass_true scalar.
+                if "q_mass_true" in d.files:
+
+                    q_stored = float(
+                        np.asarray(
+                            d["q_mass_true"]
+                        ).reshape(-1)[0]
+                    )
+
+
+                    if not np.isclose(
+
+                        parameter_value,
+
+                        q_stored,
+
+                        rtol=1e-10,
+
+                        atol=1e-14,
+
+                    ):
+
+                        raise RuntimeError(
+
+                            f"qM inconsistency in:\n"
+                            f"{filename}\n"
+                            f"M2/M1 = {parameter_value}\n"
+                            f"stored = {q_stored}"
+                        )
+
+
+            else:
+
+                raise ValueError(
+
+                    f"Unknown file_parameter="
+                    f"{file_parameter!r}"
+                )
+
+
+            # ------------------------------------------------
+            # Period grid
+            # ------------------------------------------------
+
+            P_this = np.asarray(
+                d["P_grid"],
+                dtype=float,
+            )
+
+
+            if P_grid_ref is None:
+
+                P_grid_ref = (
+                    P_this.copy()
+                )
+
+
+            elif not np.allclose(
+
+                P_this,
+
+                P_grid_ref,
+
+            ):
+
+                raise ValueError(
+
+                    f"P_grid differs in:\n"
+                    f"{filename}"
+                )
+
+
+            # ------------------------------------------------
+            # Numerical products
+            # ------------------------------------------------
+
+            dt0 = np.asarray(
+                d["DT0"],
+                dtype=float,
+            )
+
+            du0 = np.asarray(
+                d["DU0"],
+                dtype=float,
+            )
+
+            dte = np.asarray(
+                d["DTE"],
+                dtype=float,
+            )
+
+            dmetric = np.asarray(
+                d["D"],
+                dtype=float,
+            )
+
+            rms = np.asarray(
+                d["RMS"],
+                dtype=float,
+            )
+
+            success = np.asarray(
+                d["SUCCESS"],
+                dtype=bool,
+            )
+
+
+        # ====================================================
+        # MASK INVALID VALUES
+        # ====================================================
 
         valid_bias = (
+
             success
+
             & np.isfinite(dt0)
+
             & np.isfinite(du0)
+
             & np.isfinite(dte)
+
         )
+
 
         valid_D = (
+
             success
+
             & np.isfinite(dmetric)
+
             & (dmetric > 0)
+
         )
+
 
         valid_RMS = (
+
             success
+
             & np.isfinite(rms)
+
             & (rms > 0)
+
         )
 
 
-        # ----------------------------------------------------
-        # Store
-        # ----------------------------------------------------
+        dt0_clean = np.full_like(
+            dt0,
+            np.nan,
+            dtype=float,
+        )
 
-        DT0[k, valid_bias] = dt0[valid_bias]
-        DU0[k, valid_bias] = du0[valid_bias]
-        DTE[k, valid_bias] = dte[valid_bias]
+        du0_clean = np.full_like(
+            du0,
+            np.nan,
+            dtype=float,
+        )
 
-        D[k, valid_D] = dmetric[valid_D]
+        dte_clean = np.full_like(
+            dte,
+            np.nan,
+            dtype=float,
+        )
 
-        RMS[k, valid_RMS] = rms[valid_RMS]
+        D_clean = np.full_like(
+            dmetric,
+            np.nan,
+            dtype=float,
+        )
 
-        SUCCESS[k, :] = success
+        RMS_clean = np.full_like(
+            rms,
+            np.nan,
+            dtype=float,
+        )
+
+
+        dt0_clean[
+            valid_bias
+        ] = dt0[
+            valid_bias
+        ]
+
+        du0_clean[
+            valid_bias
+        ] = du0[
+            valid_bias
+        ]
+
+        dte_clean[
+            valid_bias
+        ] = dte[
+            valid_bias
+        ]
+
+        D_clean[
+            valid_D
+        ] = dmetric[
+            valid_D
+        ]
+
+        RMS_clean[
+            valid_RMS
+        ] = rms[
+            valid_RMS
+        ]
+
+
+        rows.append(
+
+            (
+                parameter_value,
+                dt0_clean,
+                du0_clean,
+                dte_clean,
+                D_clean,
+                RMS_clean,
+                success,
+            )
+
+        )
+
+
+    if len(rows) == 0:
+
+        raise RuntimeError(
+
+            f"No valid scan rows in:\n"
+            f"{directory}"
+        )
+
+
+    # ========================================================
+    # SORT BY THE ACTUAL PHYSICAL PARAMETER
+    # ========================================================
+
+    rows.sort(
+        key=lambda row: row[0]
+    )
+
+
+    parameter = np.asarray(
+
+        [
+            row[0]
+            for row in rows
+        ],
+
+        dtype=float,
+
+    )
+
+
+    DT0 = np.vstack(
+        [
+            row[1]
+            for row in rows
+        ]
+    )
+
+
+    DU0 = np.vstack(
+        [
+            row[2]
+            for row in rows
+        ]
+    )
+
+
+    DTE = np.vstack(
+        [
+            row[3]
+            for row in rows
+        ]
+    )
+
+
+    D = np.vstack(
+        [
+            row[4]
+            for row in rows
+        ]
+    )
+
+
+    RMS = np.vstack(
+        [
+            row[5]
+            for row in rows
+        ]
+    )
+
+
+    SUCCESS = np.vstack(
+        [
+            row[6]
+            for row in rows
+        ]
+    )
+
+
+    # ========================================================
+    # DIAGNOSTICS
+    # ========================================================
+
+    print()
+
+    print(
+        f"Loaded {file_parameter} scan:"
+    )
+
+    print(
+        f"  files       = {len(files)}"
+    )
+
+    print(
+        f"  rows        = {len(parameter)}"
+    )
+
+    print(
+        f"  parameter   = "
+        f"{parameter.min():.8e} "
+        f"... "
+        f"{parameter.max():.8e}"
+    )
+
+    print(
+        f"  P nodes     = {len(P_grid_ref)}"
+    )
+
+    print(
+        f"  shape       = {D.shape}"
+    )
 
 
     return {
 
         "parameter":
-            np.asarray(
-                parameter_grid,
-                dtype=float,
-            ),
+            parameter,
 
         "P_grid":
-            P_grid,
+            P_grid_ref,
 
         "P_over_tE":
-            P_grid / tE_true,
+            P_grid_ref
+            /
+            float(tE_true),
 
         "DT0":
             DT0,
@@ -793,7 +1142,7 @@ def add_D_contours(
 
             fontsize=7.0,
 
-            inline=True,
+            inline=False,
 
             inline_spacing=5,
 
@@ -926,6 +1275,79 @@ P_q_edges = log_edges(
 # appropriate for a two-column paper figure.
 # ============================================================
 
+
+# ============================================================
+# BEGIN INDEPENDENT BIAS NORMS
+#
+# At tE=30 d the amplitudes of Delta tE/tE in the u0 and
+# qM experiments differ substantially.  Keep the physical
+# quantity in both panels, but determine a robust symmetric
+# color range independently for each one.
+# ============================================================
+
+def make_bias_norm(
+    Z,
+    percentile=ROBUST_PERCENTILE,
+):
+
+    values = np.abs(
+        Z[
+            np.isfinite(Z)
+        ]
+    )
+
+    if values.size == 0:
+        raise RuntimeError(
+            "No finite bias values."
+        )
+
+    vmax = float(
+        np.nanpercentile(
+            values,
+            percentile,
+        )
+    )
+
+    if (
+        not np.isfinite(vmax)
+        or
+        vmax <= 0.0
+    ):
+        vmax = 1.0e-12
+
+    return (
+        mcolors.TwoSlopeNorm(
+            vmin=-vmax,
+            vcenter=0.0,
+            vmax=vmax,
+        ),
+        vmax,
+    )
+
+
+norm_DTE_u0, vmax_DTE_u0 = make_bias_norm(
+    u0_DTE_norm
+)
+
+norm_DTE_q, vmax_DTE_q = make_bias_norm(
+    q_DTE_norm
+)
+
+
+print()
+print("=" * 80)
+print("INDEPENDENT BIAS COLOR SCALES")
+print(
+    f"u0 panel : +/- {vmax_DTE_u0:.8e}"
+)
+print(
+    f"qM panel : +/- {vmax_DTE_q:.8e}"
+)
+print("=" * 80)
+
+# END INDEPENDENT BIAS NORMS
+
+
 fig1, axes = plt.subplots(
 
     1,
@@ -966,7 +1388,7 @@ cmap = plt.get_cmap(
 ax = axes[0]
 
 
-pcm = ax.pcolormesh(
+pcm_u0 = ax.pcolormesh(
 
     u0_edges,
     P_u0_edges,
@@ -977,7 +1399,7 @@ pcm = ax.pcolormesh(
 
     cmap=cmap,
 
-    norm=norm_DTE,
+    norm=norm_DTE_u0,
 
     shading="auto",
 
@@ -1041,7 +1463,7 @@ ax.text(
 ax = axes[1]
 
 
-ax.pcolormesh(
+pcm_q = ax.pcolormesh(
 
     q_edges,
     P_q_edges,
@@ -1052,7 +1474,7 @@ ax.pcolormesh(
 
     cmap=cmap,
 
-    norm=norm_DTE,
+    norm=norm_DTE_q,
 
     shading="auto",
 
@@ -1111,63 +1533,79 @@ pos_left = axes[0].get_position()
 pos_right = axes[1].get_position()
 
 
-cax = fig1.add_axes([
-
-    pos_left.x0,
-
-    0.835,
-
-    pos_right.x1
-    -
-    pos_left.x0,
-
-    0.028,
-
-])
-
-
-cbar = fig1.colorbar(
-
-    pcm,
-
-    cax=cax,
-
-    orientation="horizontal",
-
-    extend="both",
-
-)
-
-
-cbar.ax.xaxis.set_ticks_position(
-    "top"
-)
-
-cbar.ax.xaxis.set_label_position(
-    "top"
-)
-
-
-cbar.ax.tick_params(
-    direction="in",
-    labelsize=8,
-    pad=1.5,
-)
-
-
-cbar.set_label(
-
-    r"$\Delta t_E/t_E$",
-
-    fontsize=10,
-
-    labelpad=3,
-
-)
-
-
 # ============================================================
-# SAVE FIGURE 1
+# PANEL-SPECIFIC TOP COLORBARS
+# ============================================================
+
+for this_ax, this_pcm in [
+
+    (
+        axes[0],
+        pcm_u0,
+    ),
+
+    (
+        axes[1],
+        pcm_q,
+    ),
+
+]:
+
+    pos_this = this_ax.get_position()
+
+    cax_this = fig1.add_axes([
+
+        pos_this.x0,
+
+        0.855,
+
+        pos_this.width,
+
+        0.025,
+
+    ])
+
+    cbar_this = fig1.colorbar(
+
+        this_pcm,
+
+        cax=cax_this,
+
+        orientation="horizontal",
+
+        extend="both",
+
+    )
+
+    cbar_this.ax.xaxis.set_ticks_position(
+        "top"
+    )
+
+    cbar_this.ax.xaxis.set_label_position(
+        "top"
+    )
+
+    cbar_this.ax.tick_params(
+
+        direction="in",
+
+        labelsize=8,
+
+        pad=2,
+
+    )
+
+    cbar_this.set_label(
+
+        r"$\Delta t_E/t_E$",
+
+        fontsize=10,
+
+        labelpad=3,
+
+    )
+
+
 # ============================================================
 
 figure1_png = os.path.join(

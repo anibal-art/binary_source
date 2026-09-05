@@ -193,9 +193,13 @@ multi_tE_root = os.path.join(
 
 output_directory = os.path.join(
 
-    results_root,
+    home,
 
-    "paper_figures",
+    "binary_source",
+
+    "figures",
+
+    "current",
 
 )
 

@@ -65,6 +65,140 @@ def sigma_W149_func(W149):
     return sigma
 
 
+
+# ============================================================
+# Roman F146 photometric precision
+# ============================================================
+#
+# Current GBTDS prescription:
+#
+#   primary bandpass       : F146
+#   exposure time          : ~66 s
+#   reference requirement  : S/N ~ 100 at F146_AB = 21.2
+#
+# We use a simple source+effective-background noise model.
+# The effective background is calibrated so that the model
+# reproduces S/N=100 at F146=21.2.
+#
+# This is intentionally a survey-level precision prescription,
+# not a full detector/crowding simulation.
+# ============================================================
+
+F146_ZP_AB = 27.648
+F146_EXPOSURE_S = 66.0
+
+F146_REFERENCE_MAG = 21.2
+F146_REFERENCE_SNR = 100.0
+
+F146_BRIGHT_FLOOR_MAG = 1.0e-3
+
+
+def sigma_F146_func(F146):
+    """
+    Approximate single-epoch Roman/F146 photometric precision.
+
+    Parameters
+    ----------
+    F146 : array_like
+        F146 AB magnitude.
+
+    Returns
+    -------
+    sigma_mag : ndarray
+        1-sigma magnitude uncertainty per F146 epoch.
+
+    Notes
+    -----
+    The model is normalized to S/N = 100 at F146_AB = 21.2
+    for the current GBTDS F146 exposure prescription.
+
+    We model
+
+        variance = N_source + B_eff,
+
+    where B_eff is calibrated at the reference magnitude.
+    A 1 mmag bright-source floor is retained.
+    """
+
+    F146 = np.asarray(
+        F146,
+        dtype=float,
+    )
+
+    if np.any(~np.isfinite(F146)):
+        raise ValueError(
+            "Non-finite F146 magnitude."
+        )
+
+    # Source electrons in one exposure.
+    n_source = (
+        10.0
+        ** (
+            -0.4
+            * (
+                F146
+                - F146_ZP_AB
+            )
+        )
+        * F146_EXPOSURE_S
+    )
+
+    # Reference source electrons.
+    n_ref = (
+        10.0
+        ** (
+            -0.4
+            * (
+                F146_REFERENCE_MAG
+                - F146_ZP_AB
+            )
+        )
+        * F146_EXPOSURE_S
+    )
+
+    # Effective additional variance required to obtain
+    # S/N = 100 at F146 = 21.2.
+    b_eff = (
+        (
+            n_ref
+            / F146_REFERENCE_SNR
+        ) ** 2
+        - n_ref
+    )
+
+    b_eff = max(
+        float(b_eff),
+        0.0,
+    )
+
+    sigma_e = np.sqrt(
+        n_source
+        + b_eff
+    )
+
+    snr = (
+        n_source
+        / sigma_e
+    )
+
+    sigma_mag = (
+        2.5
+        / np.log(10.0)
+        / snr
+    )
+
+    sigma_mag = np.maximum(
+        sigma_mag,
+        F146_BRIGHT_FLOOR_MAG,
+    )
+
+    return np.asarray(
+        sigma_mag,
+        dtype=float,
+    )
+
+
+
 def mag_to_flux(mag, zp=27.615):
     return 10**(-0.4 * (mag - zp))
 

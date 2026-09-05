@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 from matplotlib.colors import Normalize
 
 
@@ -12,12 +13,12 @@ from matplotlib.colors import Normalize
 # ============================================================
 
 INPUT = Path(
-    "results/roman_asimov/combined_intrinsic_grid/"
-    "roman_intrinsic_grid_W149_19_21_23.npz"
+    "results/roman_asimov_f146_tE30/"
+    "roman_intrinsic_grid_f146_tE30.npz"
 )
 
 OUTDIR = Path(
-    "figures/roman_asimov"
+    "figures/current"
 )
 
 OUTDIR.mkdir(
@@ -25,8 +26,8 @@ OUTDIR.mkdir(
     exist_ok=True,
 )
 
-OUT_PDF = OUTDIR / "roman_intrinsic_comparison.pdf"
-OUT_PNG = OUTDIR / "roman_intrinsic_comparison.png"
+OUT_PDF = OUTDIR / "roman_intrinsic_comparison_f146.pdf"
+OUT_PNG = OUTDIR / "roman_intrinsic_comparison_f146.png"
 
 
 # ============================================================
@@ -63,7 +64,7 @@ d = np.load(
 )
 
 mags = np.asarray(
-    d["w149_magnitudes"],
+    d["f146_magnitudes"],
     dtype=float,
 )
 
@@ -242,28 +243,63 @@ for im, (ax, mag) in enumerate(
     # Intrinsic D contours
     # --------------------------------------------------------
 
+    # --------------------------------------------------------
+    # White underlay for intrinsic D contours
+    #
+    # Drawing the same contours twice produces a robust halo:
+    # a thick white line underneath and a thinner black line
+    # on top. This keeps D visible across the full viridis map.
+    # --------------------------------------------------------
+
+    ax.contour(
+        X,
+        Y,
+        D,
+        levels=D_LEVELS,
+        colors="white",
+        linewidths=3.4,
+        linestyles=[
+            "--",
+            "-",
+        ],
+        zorder=4,
+    )
+
     cs_D = ax.contour(
         X,
         Y,
         D,
         levels=D_LEVELS,
         colors="black",
-        linewidths=1.25,
+        linewidths=1.35,
         linestyles=[
             "--",
             "-",
         ],
+        zorder=5,
     )
 
-    ax.clabel(
+    labels_D = ax.clabel(
         cs_D,
-        inline=True,
+        inline=False,
         fontsize=9,
         fmt={
             1.0e-3: r"$D=10^{-3}$",
             1.0e-2: r"$D=10^{-2}$",
         },
     )
+
+    # White halo around the contour labels.
+    for txt in labels_D:
+        txt.set_path_effects(
+            [
+                pe.Stroke(
+                    linewidth=3.0,
+                    foreground="white",
+                ),
+                pe.Normal(),
+            ]
+        )
 
     # --------------------------------------------------------
     # Roman model-separation contour
@@ -278,15 +314,28 @@ for im, (ax, mag) in enumerate(
         linewidths=2.0,
     )
 
-    ax.clabel(
+    labels_chi = ax.clabel(
         cs_chi,
-        inline=True,
+        inline=False,
         fontsize=9,
         fmt={
             CHI2_LEVEL:
                 r"$\Delta\chi^2=100$"
         },
     )
+
+    # Dark halo improves the white-label contrast on the
+    # brightest parts of the colormap.
+    for txt in labels_chi:
+        txt.set_path_effects(
+            [
+                pe.Stroke(
+                    linewidth=2.5,
+                    foreground="black",
+                ),
+                pe.Normal(),
+            ]
+        )
 
     # --------------------------------------------------------
     # Axes
@@ -306,7 +355,7 @@ for im, (ax, mag) in enumerate(
     )
 
     ax.set_title(
-        rf"$W149={mag:.0f}$"
+        rf"$F146={mag:.0f}$"
     )
 
     ax.set_xlabel(
@@ -327,19 +376,44 @@ axes[0].set_ylabel(
 
 
 # ============================================================
+# Layout
+# ============================================================
+
+fig.subplots_adjust(
+    left=0.075,
+    right=0.885,
+    bottom=0.18,
+    top=0.90,
+    wspace=0.08,
+)
+
+
+# ============================================================
 # Shared colorbar
 # ============================================================
 
+cax = fig.add_axes(
+    [
+        0.905,
+        0.18,
+        0.015,
+        0.72,
+    ]
+)
+
 cbar = fig.colorbar(
     mesh,
-    ax=axes,
+    cax=cax,
     orientation="vertical",
-    fraction=0.025,
-    pad=0.025,
 )
 
 cbar.set_label(
     r"$\log_{10}\Delta\chi^2_{\rm Roman}$"
+)
+
+cbar.ax.tick_params(
+    which="both",
+    direction="in",
 )
 
 
@@ -348,7 +422,7 @@ cbar.set_label(
 # ============================================================
 
 fig.text(
-    0.5,
+    0.48,
     0.015,
     (
         r"Black contours: intrinsic $D_{\rm BSPL-PSPL}$; "
@@ -357,15 +431,6 @@ fig.text(
     ha="center",
     va="bottom",
     fontsize=10,
-)
-
-
-fig.subplots_adjust(
-    left=0.075,
-    right=0.91,
-    bottom=0.18,
-    top=0.90,
-    wspace=0.08,
 )
 
 

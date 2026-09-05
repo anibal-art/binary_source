@@ -275,7 +275,7 @@ def output_directory(
 
     directory = (
         FIGURES_ROOT
-        / f"draft_{dataset_commit}"
+        / "current"
     )
 
     directory.mkdir(

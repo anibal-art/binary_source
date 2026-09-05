@@ -75,3 +75,93 @@ binary_source/pspl_trilegal_blending_output/simdr2_cache_*.csv
 
 # Legacy TRILEGAL/GENULENS chunks
 /chunks_TRILEGAL_GENULENS/
+
+
+# ============================================================
+# Local datasets / numerical products
+# ============================================================
+
+/data/
+/results/
+
+# Numerical outputs
+*.npz
+*.npy
+*.parquet
+*.csv
+
+
+# ============================================================
+# Generated paper figures
+# ============================================================
+
+/figures/
+*.png
+*.pdf
+*.gif
+*.mp4
+
+
+# ============================================================
+# LaTeX build products
+# ============================================================
+
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+
+# ============================================================
+# Temporary / backup source files
+# ============================================================
+
+*.before_*
+*.bak
+*.bak_*
+*.backup
+*~
+*.orig
+
+
+# ============================================================
+# Scratch notebooks / accidental local files
+# ============================================================
+
+/Untitled*.ipynb
+/argparse
+/df[D_short]
+/json
+/sys
+/tore \
+
+
+# ============================================================
+# Archives generated locally
+# ============================================================
+
+*.zip
+*.tar
+*.tar.gz
+
+
+# ============================================================
+# Python / Jupyter caches
+# ============================================================
+
+__pycache__/
+**/__pycache__/
+*.pyc
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Beamer build products
+*.nav
+*.snm
+*.vrb
+/latex/meeting_results_15min.*

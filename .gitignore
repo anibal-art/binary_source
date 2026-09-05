@@ -178,3 +178,6 @@ __pycache__/
 
 /latex/
 /main.tex
+
+# Full paper reproduction logs
+/reproduction_logs/

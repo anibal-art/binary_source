@@ -53,49 +53,13 @@ from scipy.ndimage import distance_transform_edt
 
 # ============================================================
 # PAPER STYLE
-# ============================================================
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from paper_style import (apply_paper_style, fig_width, heatmap, panel_label,
+                         save_figure, d_norm, halo, D_CMAP, D_LABEL,
+                         FS_ANNOT, LW_MAIN, LW_THIN)
 
-plt.rcParams.update({
-
-    "font.family": "serif",
-    "font.serif": ["STIXGeneral"],
-    "mathtext.fontset": "stix",
-
-    "font.size": 10,
-
-    "axes.labelsize": 12,
-    "axes.titlesize": 11,
-
-    "xtick.labelsize": 10,
-    "ytick.labelsize": 10,
-
-    "legend.fontsize": 9,
-
-    "axes.linewidth": 0.9,
-
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-
-    "xtick.top": True,
-    "ytick.right": True,
-
-    "xtick.major.size": 5,
-    "ytick.major.size": 5,
-
-    "xtick.minor.size": 3,
-    "ytick.minor.size": 3,
-
-    "xtick.major.width": 0.8,
-    "ytick.major.width": 0.8,
-
-    "xtick.minor.width": 0.6,
-    "ytick.minor.width": 0.6,
-
-    "savefig.dpi": 600,
-
-    "pdf.fonttype": 42,
-    "ps.fonttype": 42,
-})
+apply_paper_style()
 
 
 # ============================================================
@@ -1711,828 +1675,258 @@ def format_log_axes(ax):
 
 
 # ============================================================
+# PLOTTING (restyled; data processing above is unchanged)
 # ============================================================
 #
+# Outputs (figures/current/):
+#   D_heatmap_tE30_complete_contour.{pdf,png}      Fig. 2a
+#   D_heatmap_tE30_complete_contour_alt.{pdf,png}  Fig. 2a + reference scales
+#   D_contours_many_tE_complete.{pdf,png}          Fig. 2b
+#
+# Both panels are drawn at the printed subfigure width
+# (0.48 \linewidth = 2.95 in) with identical axes geometry.
+# ============================================================
+
+import json
+
+verify_directory = os.path.join(home, "binary_source", "figures", "_verify")
+os.makedirs(verify_directory, exist_ok=True)
+import matplotlib.ticker as mticker
+
+PANEL_W = fig_width(0.48)
+PANEL_H = 2.75
+AX_RECT = [0.175, 0.135, 0.785, 0.665]
+CAX_RECT = [0.175, 0.875, 0.785, 0.028]
+
+# Fiducial physical family of the scan (stored in the npz 'truth' vector
+# and checked below): M1 = 2, M2 = 1 Msun, rEhat = 5 AU.
+M_TOT_MSUN = 3.0
+Q_MASS = 0.5
+REHAT_AU = 5.0
+YEAR_D = 365.25
+
+
+def new_panel():
+    fig = plt.figure(figsize=(PANEL_W, PANEL_H))
+    ax = fig.add_axes(AX_RECT)
+    cax = fig.add_axes(CAX_RECT)
+    return fig, ax, cax
+
+
+def finish_axes(ax, ylim):
+    format_log_axes(ax)
+    ax.set_xlim(1e-2, 1e1)
+    ax.set_ylim(*ylim)
+    ax.yaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    ax.yaxis.set_minor_locator(
+        LogLocator(base=10, subs=np.arange(2, 10), numticks=12))
+    ax.yaxis.set_minor_formatter(mticker.NullFormatter())
+    ax.set_xlabel(r"$u_0$")
+    ax.set_ylabel(r"$P/t_E$")
+
+
+def top_colorbar(fig, cax, mappable, label):
+    cbar = fig.colorbar(mappable, cax=cax, orientation="horizontal")
+    cbar.ax.xaxis.set_ticks_position("top")
+    cbar.ax.xaxis.set_label_position("top")
+    cbar.ax.tick_params(which="both", direction="in", pad=1.5)
+    cbar.set_label(label, labelpad=3)
+    return cbar
+
+
+def label_on_curve(ax, x, y, x_at, text, color, dy_pts=0.0,
+                   above=True):
+    """Place a text label along a log-log curve at abscissa x_at."""
+    good = np.isfinite(x) & np.isfinite(y)
+    x, y = x[good], y[good]
+    i = int(np.argmin(np.abs(np.log10(x) - np.log10(x_at))))
+    j = min(i + 8, len(x) - 1)
+    k = max(i - 8, 0)
+    p1 = ax.transData.transform((x[k], y[k]))
+    p2 = ax.transData.transform((x[j], y[j]))
+    angle = np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
+    offset = mtransforms.offset_copy(
+        ax.transData, fig=ax.figure, x=0.0,
+        y=(dy_pts if above else -dy_pts), units="points")
+    return ax.text(x[i], y[i], text, color=color, fontsize=FS_ANNOT,
+                   rotation=angle, rotation_mode="anchor",
+                   ha="center", va="bottom" if above else "top",
+                   transform=offset, zorder=30, path_effects=halo(1.8))
+
+
+import matplotlib.transforms as mtransforms
+
+# ============================================================
 # LOAD REFERENCE
-#
-# ============================================================
 # ============================================================
 
-reference = load_D_scan(
-
-    tE_reference
-
-)
-
+reference = load_D_scan(tE_reference)
 
 print()
-
+print("=" * 80)
+print(f"REFERENCE tE = {tE_reference:g} d")
+print(reference["directory"])
 print("=" * 80)
 
-print(
+u0 = reference["u0"]
+P_over_tE = reference["P_over_tE"]
+D_map = reference["D"]
 
-    f"REFERENCE tE = {tE_reference:g} d"
+contour_reference = reconstruct_D_contour(u0, P_over_tE, D_map, level=D_REF)
 
+u0_edges = log_edges(u0)
+P_edges = log_edges(P_over_tE)
+ylim_a = (P_edges[0], P_edges[-1])
+
+# Verify the physical family against the stored truth vector.
+_ref_files = sorted(glob.glob(os.path.join(reference["directory"],
+                                           "scan_kepler_u0_*.npz")))
+with np.load(_ref_files[0]) as _d:
+    _a_stored = _d["a_AU_of_P"].astype(float)
+    _xi_stored = _d["xiE_of_P"].astype(float)
+    _P_stored = _d["P_grid"].astype(float)
+_a_kepler = (M_TOT_MSUN * (_P_stored / YEAR_D) ** 2) ** (1.0 / 3.0)
+assert np.allclose(_a_stored, _a_kepler, rtol=1e-12, atol=0.0)
+assert np.allclose(_xi_stored, _a_stored / REHAT_AU, rtol=1e-12, atol=0.0)
+
+
+def draw_panel_a(alt=False):
+    fig, ax, cax = new_panel()
+
+    pcm = heatmap(ax, u0_edges, P_edges, np.ma.masked_invalid(D_map).T,
+                  norm=d_norm(D_VMIN, D_VMAX), cmap=D_CMAP)
+
+    plot_reconstructed_contour(ax, contour_reference, color="crimson",
+                               linewidth=LW_MAIN)
+
+    finish_axes(ax, ylim_a)
+    cbar = top_colorbar(fig, cax, pcm, D_LABEL)
+    cbar.ax.xaxis.set_major_locator(LogLocator(base=10, numticks=7))
+
+    # Label both branches of D = 1e-2
+    cu = contour_reference["u0"]
+    label_on_curve(ax, cu, contour_reference["upper"], 0.03,
+                   r"$10^{-2}$", "crimson", dy_pts=1.5, above=True)
+    label_on_curve(ax, cu, contour_reference["lower"], 4.0,
+                   r"$10^{-2}$", "crimson", dy_pts=1.5, above=False)
+
+    panel_label(ax, "a", color="white")
+
+    overlays = {}
+    if alt:
+        u = np.logspace(-2, 1, 400)
+        # (1) xi_E / u0 = 1, xi_E = q/(1+q) a_rel / rEhat (Eqs. 2-5)
+        a_needed = u * REHAT_AU * (1.0 + Q_MASS) / Q_MASS
+        P_xi = YEAR_D * np.sqrt(a_needed ** 3 / M_TOT_MSUN) / tE_reference
+        # (2) P = u0 tE
+        P_cross = u.copy()
+        # (3) P = 1 yr
+        P_year = YEAR_D / tE_reference
+
+        kw = dict(color="white", lw=LW_THIN, zorder=25)
+        ax.plot(u, P_xi, ls=(0, (4, 2)), **kw)
+        ax.plot(u, P_cross, ls=(0, (1, 1.5)), **kw)
+        ax.axhline(P_year, ls=(0, (6, 2, 1, 2)), **kw)
+
+        label_on_curve(ax, u, P_xi, 0.25, r"$\xi_E=u_0$", "white",
+                       dy_pts=1.0, above=True).set_path_effects([])
+        label_on_curve(ax, u, P_cross, 1.6, r"$P=u_0t_E$", "white",
+                       dy_pts=1.0, above=True).set_path_effects([])
+        ax.text(1.1e-2, P_year * 1.15, r"$P=1$ yr", color="white",
+                fontsize=FS_ANNOT, ha="left", va="bottom", zorder=30)
+        overlays = {
+            "xiE_over_u0_eq_1": {"u0": u.tolist(), "P_over_tE": P_xi.tolist()},
+            "P_eq_u0_tE": {"u0": u.tolist(), "P_over_tE": P_cross.tolist()},
+            "P_eq_1yr_P_over_tE": P_year,
+        }
+
+    stem = os.path.join(
+        output_directory,
+        f"D_heatmap_tE{int(tE_reference)}_complete_contour"
+        + ("_alt" if alt else ""))
+    out = save_figure(fig, stem)
+    plt.close(fig)
+    return out, overlays
+
+
+out_a, _ = draw_panel_a(alt=False)
+out_a_alt, overlays_alt = draw_panel_a(alt=True)
+print("FIGURE 2a:", *out_a)
+print("FIGURE 2a alt:", *out_a_alt)
+
+# Values actually plotted (for before/after verification)
+np.savez(
+    os.path.join(verify_directory,
+                 f"D_heatmap_tE{int(tE_reference)}_plotted_values.npz"),
+    u0=u0, P_over_tE=P_over_tE, D=D_map,
+    contour_u0=contour_reference["u0"],
+    contour_upper=contour_reference["upper"],
+    contour_lower=contour_reference["lower"],
 )
-
-print(
-
-    reference["directory"]
-
-)
-
-print("=" * 80)
-
-
-# ============================================================
-# ============================================================
-#
-# FIGURE 1
-#
-# D HEATMAP + COMPLETE RED D=1e-2 CONTOUR
-#
-# ============================================================
-# ============================================================
-
-u0 = reference[
-
-    "u0"
-
-]
-
-
-P_over_tE = reference[
-
-    "P_over_tE"
-
-]
-
-
-D_map = reference[
-
-    "D"
-
-]
-
+with open(os.path.join(verify_directory,
+                       f"D_heatmap_tE{int(tE_reference)}_alt_overlays.json"),
+          "w") as fh:
+    json.dump({
+        "definition": {
+            "xiE_over_u0_eq_1": "xi_E = q_M/(1+q_M) * a_rel/rEhat, "
+                                "a_rel = (Mtot P_yr^2)^(1/3) AU, "
+                                "Mtot=3, q_M=0.5, rEhat=5 AU, yr=365.25 d",
+            "P_eq_u0_tE": "P/tE = u0",
+            "P_eq_1yr": "P/tE = 365.25/tE",
+        },
+        **overlays_alt,
+    }, fh)
 
 # ============================================================
-# Reconstruct contour
-# ============================================================
-
-contour_reference = reconstruct_D_contour(
-
-    u0,
-
-    P_over_tE,
-
-    D_map,
-
-    level=D_REF,
-
-)
-
-
-# ============================================================
-# Heatmap edges
-# ============================================================
-
-u0_edges = log_edges(
-
-    u0
-
-)
-
-
-P_edges = log_edges(
-
-    P_over_tE
-
-)
-
-
-# ============================================================
-# Figure
-# ============================================================
-
-fig1, ax = plt.subplots(
-
-    figsize=(
-
-        4.6,
-
-        4.0,
-
-    )
-
-)
-
-
-fig1.subplots_adjust(
-
-    left=0.16,
-
-    right=0.96,
-
-    bottom=0.14,
-
-    top=0.78,
-
-)
-
-
-# ============================================================
-# Original simulated heatmap
-# ============================================================
-
-D_norm = mcolors.LogNorm(
-
-    vmin=D_VMIN,
-
-    vmax=D_VMAX,
-
-)
-
-
-pcm = ax.pcolormesh(
-
-    u0_edges,
-
-    P_edges,
-
-    np.ma.masked_invalid(
-
-        D_map
-
-    ).T,
-
-    norm=D_norm,
-
-    cmap="viridis",
-
-    shading="auto",
-
-    rasterized=True,
-
-)
-
-
-# ============================================================
-# ONLY RED D=1e-2 CONTOUR
-# ============================================================
-
-plot_reconstructed_contour(
-
-    ax,
-
-    contour_reference,
-
-    color="crimson",
-
-    linewidth=1.7,
-
-)
-
-
-# ============================================================
-# Contour label
-#
-# We put text separately so clabel does not remove part
-# of the red line.
-# ============================================================
-
-ax.text(
-
-    0.018,
-
-    15,
-
-    r"$D=10^{-2}$",
-
-    color="crimson",
-
-    fontsize=9,
-
-    rotation=22,
-
-    ha="center",
-
-    va="center",
-
-    path_effects=[
-
-        pe.Stroke(
-
-            linewidth=2.4,
-
-            foreground="white",
-
-        ),
-
-        pe.Normal(),
-
-    ],
-
-)
-
-
-# ============================================================
-# FORMAT
-# ============================================================
-
-format_log_axes(
-
-    ax
-
-)
-
-
-ax.set_xlabel(
-
-    r"$u_0$"
-
-)
-
-
-ax.set_ylabel(
-
-    r"$P/t_E$"
-
-)
-
-
-# ax.text(
-
-#     0.05,
-
-#     0.95,
-
-#     "(a)",
-
-#     transform=ax.transAxes,
-
-#     ha="left",
-
-#     va="top",
-
-#     fontsize=11,
-
-# )
-
-
-ax.text(
-
-    0.96,
-
-    0.9,
-
-    rf"$t_E={tE_reference:g}\,\mathrm{{d}}$",
-
-    transform=ax.transAxes,
-
-    ha="right",
-
-    va="bottom",
-
-    fontsize=9,
-
-)
-
-
-# ============================================================
-# TOP COLORBAR
-# ============================================================
-
-pos = ax.get_position()
-
-
-cax = fig1.add_axes([
-
-    pos.x0,
-
-    0.84,
-
-    pos.width,
-
-    0.027,
-
-])
-
-
-cbar = fig1.colorbar(
-
-    pcm,
-
-    cax=cax,
-
-    orientation="horizontal",
-
-)
-
-
-cbar.ax.xaxis.set_ticks_position(
-
-    "top"
-
-)
-
-
-cbar.ax.xaxis.set_label_position(
-
-    "top"
-
-)
-
-
-cbar.ax.tick_params(
-
-    direction="in",
-
-    labelsize=9,
-
-    pad=2,
-
-)
-
-
-cbar.set_label(
-
-    r"$D_{\rm BSPL-PSPL}$",
-
-    fontsize=11,
-
-    labelpad=4,
-
-)
-
-
-# ============================================================
-# SAVE FIGURE 1
-# ============================================================
-
-figure1_png = os.path.join(
-
-    output_directory,
-
-    f"D_heatmap_tE{int(tE_reference)}_complete_contour.png",
-
-)
-
-
-figure1_pdf = os.path.join(
-
-    output_directory,
-
-    f"D_heatmap_tE{int(tE_reference)}_complete_contour.pdf",
-
-)
-
-
-fig1.savefig(
-
-    figure1_png,
-
-    dpi=600,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-fig1.savefig(
-
-    figure1_pdf,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-print()
-
-print("=" * 80)
-
-print("FIGURE 1 SAVED")
-
-print(
-
-    figure1_png
-
-)
-
-print(
-
-    figure1_pdf
-
-)
-
-print("=" * 80)
-
-
-plt.show()
-
-
-# ============================================================
-# ============================================================
-#
-# FIGURE 2
-#
-# COMPLETE D=1e-2 CONTOURS FOR MANY tE
-#
-# ============================================================
-# ============================================================
-
-
-# ============================================================
-# Load scans
+# FIGURE 2b: D = 1e-2 CONTOURS FOR MANY tE
 # ============================================================
 
 all_scans = {}
-
-
 for tE in tE_values:
-
-
     try:
-
-
-        scan = load_D_scan(
-
-            tE
-
-        )
-
-
-        all_scans[
-
-            float(tE)
-
-        ] = scan
-
-
-        print(
-
-            f"Loaded tE={tE:g} d -> "
-            f"{scan['D'].shape}"
-
-        )
-
-
+        scan = load_D_scan(tE)
+        all_scans[float(tE)] = scan
+        print(f"Loaded tE={tE:g} d -> {scan['D'].shape}")
     except Exception as error:
-
-
-        print(
-
-            f"[SKIP] tE={tE:g}: "
-            f"{error}"
-
-        )
-
+        print(f"[SKIP] tE={tE:g}: {error}")
 
 if len(all_scans) == 0:
+    raise RuntimeError("No scans available.")
 
-    raise RuntimeError(
+tE_loaded = np.array(sorted(all_scans.keys()), dtype=float)
+tE_norm = mcolors.LogNorm(vmin=tE_loaded.min(), vmax=tE_loaded.max())
+# plasma truncated before its pale-yellow end so every line stays visible
+tE_cmap = mcolors.LinearSegmentedColormap.from_list(
+    "plasma_trunc", plt.get_cmap("plasma")(np.linspace(0.0, 0.88, 256)))
 
-        "No scans available."
+fig2, ax, cax = new_panel()
 
-    )
-
-
-# ============================================================
-# Color normalization
-# ============================================================
-
-tE_loaded = np.array(
-
-    sorted(
-
-        all_scans.keys()
-
-    ),
-
-    dtype=float,
-
-)
-
-
-tE_norm = mcolors.LogNorm(
-
-    vmin=tE_loaded.min(),
-
-    vmax=tE_loaded.max(),
-
-)
-
-
-tE_cmap = plt.get_cmap(
-
-    "plasma"
-
-)
-
-
-# ============================================================
-# Figure 2
-# ============================================================
-
-fig2, ax = plt.subplots(
-
-    figsize=(
-
-        4.6,
-
-        4.0,
-
-    )
-
-)
-
-
-fig2.subplots_adjust(
-
-    left=0.16,
-
-    right=0.96,
-
-    bottom=0.14,
-
-    top=0.78,
-
-)
-
-
-# ============================================================
-# Reconstruct each contour
-# ============================================================
-
+plotted_b = {}
+P_min_all, P_max_all = np.inf, 0.0
 for tE in tE_loaded:
-
-
-    scan = all_scans[
-
-        float(tE)
-
-    ]
-
-
-    contour = reconstruct_D_contour(
-
-        scan[
-
-            "u0"
-
-        ],
-
-        scan[
-
-            "P_over_tE"
-
-        ],
-
-        scan[
-
-            "D"
-
-        ],
-
-        level=D_REF,
-
-    )
-
-
-    color = tE_cmap(
-
-        tE_norm(
-
-            tE
-
-        )
-
-    )
-
-
-    plot_reconstructed_contour(
-
-        ax,
-
-        contour,
-
-        color=color,
-
-        linewidth=1.4,
-
-    )
-
-
-# ============================================================
-# FORMAT
-# ============================================================
-
-format_log_axes(
-
-    ax
-
-)
-
-
-ax.set_xlabel(
-
-    r"$u_0$"
-
-)
-
-
-ax.set_ylabel(
-
-    r"$P/t_E$"
-
-)
-
-
-ax.text(
-
-    0.05,
-
-    0.95,
-
-    "(b)",
-
-    transform=ax.transAxes,
-
-    ha="left",
-
-    va="top",
-
-    fontsize=11,
-
-)
-
-
-ax.text(
-
-    0.06,
-
-    0.06,
-
-    r"$D_{\rm BSPL-PSPL}=10^{-2}$",
-
-    transform=ax.transAxes,
-
-    ha="left",
-
-    va="bottom",
-
-    fontsize=9,
-
-)
-
-
-# ============================================================
-# TOP tE COLORBAR
-# ============================================================
-
-pos = ax.get_position()
-
-
-cax = fig2.add_axes([
-
-    pos.x0,
-
-    0.84,
-
-    pos.width,
-
-    0.027,
-
-])
-
-
-sm = cm.ScalarMappable(
-
-    norm=tE_norm,
-
-    cmap=tE_cmap,
-
-)
-
-
+    scan = all_scans[float(tE)]
+    contour = reconstruct_D_contour(scan["u0"], scan["P_over_tE"], scan["D"],
+                                    level=D_REF)
+    plot_reconstructed_contour(ax, contour, color=tE_cmap(tE_norm(tE)),
+                               linewidth=1.0)
+    plotted_b[f"tE{int(tE)}_u0"] = contour["u0"]
+    plotted_b[f"tE{int(tE)}_upper"] = contour["upper"]
+    plotted_b[f"tE{int(tE)}_lower"] = contour["lower"]
+    e = log_edges(scan["P_over_tE"])
+    P_min_all, P_max_all = min(P_min_all, e[0]), max(P_max_all, e[-1])
+
+finish_axes(ax, (6e-3, 2e2))
+ax.text(0.04, 0.05, r"$D_{\rm BSPL-PSPL}=10^{-2}$", transform=ax.transAxes,
+        ha="left", va="bottom", fontsize=FS_ANNOT)
+panel_label(ax, "b")
+
+sm = cm.ScalarMappable(norm=tE_norm, cmap=tE_cmap)
 sm.set_array([])
+top_colorbar(fig2, cax, sm, r"$t_E$ [d]")
 
-
-cbar = fig2.colorbar(
-
-    sm,
-
-    cax=cax,
-
-    orientation="horizontal",
-
-)
-
-
-cbar.ax.xaxis.set_ticks_position(
-
-    "top"
-
-)
-
-
-cbar.ax.xaxis.set_label_position(
-
-    "top"
-
-)
-
-
-cbar.ax.tick_params(
-
-    direction="in",
-
-    labelsize=9,
-
-    pad=2,
-
-)
-
-
-cbar.set_label(
-
-    r"$t_E\,[\mathrm{d}]$",
-
-    fontsize=11,
-
-    labelpad=4,
-
-)
-
-
-# ============================================================
-# SAVE FIGURE 2
-# ============================================================
-
-figure2_png = os.path.join(
-
-    output_directory,
-
-    "D_contours_many_tE_complete.png",
-
-)
-
-
-figure2_pdf = os.path.join(
-
-    output_directory,
-
-    "D_contours_many_tE_complete.pdf",
-
-)
-
-
-fig2.savefig(
-
-    figure2_png,
-
-    dpi=600,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-fig2.savefig(
-
-    figure2_pdf,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-print()
-
-print("=" * 80)
-
-print("FIGURE 2 SAVED")
-
-print(
-
-    figure2_png
-
-)
-
-print(
-
-    figure2_pdf
-
-)
-
-print("=" * 80)
-
-
+out_b = save_figure(fig2, os.path.join(output_directory,
+                                       "D_contours_many_tE_complete"))
+plt.close(fig2)
+np.savez(os.path.join(verify_directory,
+                      "D_contours_many_tE_plotted_values.npz"), **plotted_b)
+print("FIGURE 2b:", *out_b)

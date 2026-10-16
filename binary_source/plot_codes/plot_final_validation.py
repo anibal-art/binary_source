@@ -9,29 +9,31 @@ results/validation_final_window_blending/roman_true_blending.csv
 
 Outputs
 -------
-figures/appendix/window_sensitivity.pdf
-figures/appendix/window_sensitivity.png
-
-figures/appendix/roman_true_blending_sensitivity.pdf
-figures/appendix/roman_true_blending_sensitivity.png
+figures/appendix/window_sensitivity.{pdf,png}            (Fig. 11)
+figures/appendix/window_sensitivity_alt.{pdf,png}        (single-panel alternative)
+figures/appendix/roman_true_blending_sensitivity.{pdf,png}  (Fig. 12)
 
 The figures summarize:
 
 1. Sensitivity of D_BSPL-PSPL to the adopted event-centered
    integration window.
-
 2. Sensitivity of the Roman Asimov model separation to true
    positive blending.
+
+Plotting only: the CSV values are drawn unchanged (apart from the
+fixed display scalings 1e5 and 100 noted in the axis labels).
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 
 
 # ============================================================
@@ -40,721 +42,220 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[2]
 
-DEFAULT_RESULTS_DIR = (
-    ROOT
-    / "results"
-    / "validation_final_window_blending"
+DEFAULT_RESULTS_DIR = ROOT / "results" / "validation_final_window_blending"
+DEFAULT_OUTPUT_DIR = ROOT / "figures" / "appendix"
+VERIFY_DIR = ROOT / "figures" / "_verify"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from paper_style import (  # noqa: E402
+    apply_paper_style,
+    fig_width,
+    panel_label,
+    save_figure,
+    C_BLACK, C_BLUE, C_VERMILION, C_GREEN, C_PURPLE, C_ORANGE, C_SKY,
+    LW_THIN,
 )
 
-DEFAULT_OUTPUT_DIR = (
-    ROOT
-    / "figures"
-    / "appendix"
-)
-
 
 # ============================================================
-# Paper style
+# Configuration styles (one colour + marker per configuration)
 # ============================================================
 
-def apply_style():
-    """
-    Prefer the repository paper style if available.
-    Fall back to an equivalent compact publication style.
-    """
+WINDOW_CASES = [
+    "one_short",
+    "one_intermediate",
+    "one_small_u0",
+    "two_cancel",
+    "two_off_cancel",
+    "one_long",
+    "one_hidden_long",
+]
 
-    try:
-        from binary_source.plot_codes.paper_style import apply_paper_style
+WINDOW_STYLE = {
+    "one_short": dict(color=C_BLACK, marker="o"),
+    "one_intermediate": dict(color=C_BLUE, marker="s"),
+    "one_small_u0": dict(color=C_GREEN, marker="^"),
+    "two_cancel": dict(color=C_VERMILION, marker="D"),
+    "two_off_cancel": dict(color=C_PURPLE, marker="v"),
+    "one_long": dict(color=C_ORANGE, marker="P"),
+    "one_hidden_long": dict(color=C_SKY, marker="X"),
+}
 
-        apply_paper_style()
-        return
+BLEND_CASES = ["A_hidden", "B_near_100", "C_near_500", "D_clear"]
 
-    except Exception:
-        pass
-
-    plt.rcParams.update(
-        {
-            "font.family": "serif",
-            "font.serif": [
-                "STIXGeneral",
-                "Times New Roman",
-                "DejaVu Serif",
-            ],
-            "mathtext.fontset": "stix",
-
-            "font.size": 11,
-
-            "axes.labelsize": 12,
-            "axes.titlesize": 12,
-
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-
-            "legend.fontsize": 9,
-
-            "axes.linewidth": 1.0,
-
-            "xtick.direction": "in",
-            "ytick.direction": "in",
-
-            "xtick.top": True,
-            "ytick.right": True,
-
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-
-            "savefig.facecolor": "white",
-            "savefig.bbox": "tight",
-        }
-    )
-
-
-# ============================================================
-# Labels
-# ============================================================
-
-WINDOW_LABELS = {
-    "one_short": "short period",
-    "one_intermediate": "intermediate period",
-    "one_long": "long period",
-    "one_hidden_long": "hidden long period",
-    "one_small_u0": r"small $u_0$",
-    "two_cancel": r"$q_f=q_M$",
-    "two_off_cancel": r"$q_f=0.1$",
+BLEND_STYLE = {
+    "A_hidden": dict(color=C_BLACK, marker="o"),
+    "B_near_100": dict(color=C_BLUE, marker="s"),
+    "C_near_500": dict(color=C_VERMILION, marker="^"),
+    "D_clear": dict(color=C_GREEN, marker="D"),
 }
 
 
-BLEND_LABELS = {
-    "A_hidden": "A: hidden",
-    "B_near_100": r"B: near $\Delta\chi^2=100$",
-    "C_near_500": r"C: near $\Delta\chi^2=500$",
-    "D_clear": "D: clear",
-}
+def fmt_num(x, sig=2):
+    """Compact value for labels: 1 (u0) or 2 (P/tE) significant figures."""
+    return f"{float(f'{float(x):.{sig}g}'):g}"
+
+
+def physical_label(row, show_qf=False):
+    """'(u0, P/tE)' label from the stored configuration parameters."""
+    lab = rf"$({fmt_num(row['u0_true'], 1)},\ {fmt_num(row['P_over_tE'], 2)})$"
+    if show_qf:
+        qf = float(row["qflux"])
+        qm = float(row["q_mass"])
+        if qf > 0 and np.isclose(qf, qm):
+            lab += r", $q_f=q_M$"
+        elif qf > 0:
+            lab += rf", $q_f={qf:g}$"
+    return lab
 
 
 # ============================================================
 # Utilities
 # ============================================================
 
-def require_columns(
-    df: pd.DataFrame,
-    required,
-    filename: Path,
-):
-    missing = [
-        col
-        for col in required
-        if col not in df.columns
-    ]
-
+def require_columns(df: pd.DataFrame, required, filename: Path):
+    missing = [col for col in required if col not in df.columns]
     if missing:
-        raise RuntimeError(
-            f"{filename} is missing columns: {missing}"
-        )
+        raise RuntimeError(f"{filename} is missing columns: {missing}")
 
 
-def save_figure(
-    fig,
-    pdf_path: Path,
-    png_path: Path,
-):
-    pdf_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+def window_axis(ax):
+    ax.set_xticks([2.5, 3.5, 5.0])
+    ax.xaxis.set_major_formatter(mticker.FormatStrFormatter("$%.1f$"))
+    ax.xaxis.set_minor_locator(mticker.NullLocator())
+    ax.set_xlim(2.3, 5.2)
+    ax.set_xlabel(r"half-window [$t_E$]")
 
-    fig.savefig(
-        pdf_path,
-        bbox_inches="tight",
-    )
 
-    fig.savefig(
-        png_path,
-        dpi=600,
-        bbox_inches="tight",
-    )
+# ============================================================
+# Figure 11: integration-window sensitivity
+# ============================================================
 
+def plot_window_sensitivity(csv_path: Path, output_dir: Path):
+    df = pd.read_csv(csv_path)
+    require_columns(df, ["case", "window_tE", "D", "D_over_3p5", "fractional_D_change",
+                         "u0_true", "P_over_tE", "q_mass", "qflux"], csv_path)
+
+    labels = {c: physical_label(df[df["case"] == c].iloc[0], show_qf=True)
+              for c in WINDOW_CASES}
+
+    broad_cases = ["one_short", "one_intermediate", "one_small_u0",
+                   "two_cancel", "two_off_cancel"]
+    long_cases = ["one_long", "one_hidden_long"]
+
+    apply_paper_style()
+
+    # ---------------- manuscript version: two panels, same quantities
+    fig = plt.figure(figsize=(fig_width(0.78), 3.0))
+    ax1 = fig.add_axes([0.12, 0.395, 0.35, 0.585])
+    ax2 = fig.add_axes([0.625, 0.395, 0.35, 0.585])
+
+    for ax, cases, scale in ((ax1, broad_cases, 1.0e5), (ax2, long_cases, 100.0)):
+        ax.axhline(0.0, color="0.6", lw=LW_THIN, ls=":", zorder=0)
+        for case in cases:
+            sub = df[df["case"] == case].sort_values("window_tE")
+            ax.plot(sub["window_tE"].to_numpy(float),
+                    scale * sub["fractional_D_change"].to_numpy(float),
+                    ms=3.5, label=labels[case], **WINDOW_STYLE[case])
+        window_axis(ax)
+
+    ax1.set_ylabel(r"$10^5\,[D(W)/D(3.5\,t_E)-1]$")
+    ax2.set_ylabel(r"$[D(W)/D(3.5\,t_E)-1]$ (\%)")
+    ax1.yaxis.set_major_locator(mticker.MultipleLocator(2))
+    ax2.yaxis.set_major_locator(mticker.MultipleLocator(0.5))
+    ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("$%.1f$"))
+    ax1.set_ylim(-9.0, 4.0)
+    ax2.set_ylim(-2.2, 1.0)
+    panel_label(ax1, "a")
+    panel_label(ax2, "b")
+
+    handles = [h for ax in (ax1, ax2) for h in ax.get_legend_handles_labels()[0]]
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.0),
+               ncol=3, title=r"$(u_0,\ P/t_E)$", handlelength=1.6,
+               columnspacing=1.0)
+
+    save_figure(fig, output_dir / "window_sensitivity")
     plt.close(fig)
 
-    print("Saved:")
-    print(" ", pdf_path)
-    print(" ", png_path)
+    # ---------------- alternative: one panel, |D(W)/D(3.5 tE) - 1|, log y
+    fig = plt.figure(figsize=(fig_width(0.78), 2.45))
+    ax = fig.add_axes([0.13, 0.17, 0.48, 0.79])
+    plotted_alt = {}
+    for case in WINDOW_CASES:
+        sub = df[(df["case"] == case) & (df["window_tE"] != 3.5)].sort_values("window_tE")
+        y = np.abs(sub["fractional_D_change"].to_numpy(float))
+        x = sub["window_tE"].to_numpy(float)
+        ax.plot(x, y, ms=3.5, label=labels[case], **WINDOW_STYLE[case])
+        plotted_alt[case] = y
+    ax.set_yscale("log")
+    ax.set_ylim(5e-8, 0.1)
+    ax.yaxis.set_major_locator(mticker.LogLocator(base=10, numticks=12))
+    ax.yaxis.set_minor_formatter(mticker.NullFormatter())
+    ax.axvline(3.5, color="0.6", lw=LW_THIN, ls=":", zorder=0)
+    window_axis(ax)
+    ax.set_ylabel(r"$|D(W)/D(3.5\,t_E)-1|$")
+    ax.legend(loc="center left", bbox_to_anchor=(1.03, 0.5),
+              title=r"$(u_0,\ P/t_E)$", handlelength=1.6)
+    save_figure(fig, output_dir / "window_sensitivity_alt")
+    plt.close(fig)
+
+    VERIFY_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_csv(VERIFY_DIR / "window_sensitivity_plotted_values.csv", index=False, float_format="%.17g")
+    print("Saved window_sensitivity(.pdf/.png) and window_sensitivity_alt")
 
 
 # ============================================================
-# Figure 1: integration-window sensitivity
+# Figure 12: Roman true-blending sensitivity
 # ============================================================
 
-def plot_window_sensitivity(
-    csv_path: Path,
-    output_dir: Path,
-):
-    """
-    Two-panel design.
-
-    Left:
-        broad configurations whose window dependence is tiny.
-        We multiply fractional changes by 1e5 so the structure
-        remains visible.
-
-    Right:
-        slowly varying long-period configurations, displayed
-        directly in percent.
-
-    This avoids compressing the broad configurations against
-    the percent-level long-period sensitivity.
-    """
-
-    df = pd.read_csv(
-        csv_path
-    )
-
-    require_columns(
-        df,
-        [
-            "case",
-            "window_tE",
-            "D",
-            "D_over_3p5",
-            "fractional_D_change",
-        ],
-        csv_path,
-    )
-
-
-    broad_cases = [
-        "one_short",
-        "one_intermediate",
-        "one_small_u0",
-        "two_cancel",
-        "two_off_cancel",
-    ]
-
-    long_cases = [
-        "one_long",
-        "one_hidden_long",
-    ]
-
-
-    apply_style()
-
-
-    fig, (
-        ax1,
-        ax2,
-    ) = plt.subplots(
-        1,
-        2,
-        figsize=(
-            10.0,
-            4.2,
-        ),
-    )
-
-
-    # ========================================================
-    # Panel A: broad configurations
-    # ========================================================
-
-    for case in broad_cases:
-
-        sub = (
-            df[
-                df["case"]
-                == case
-            ]
-            .sort_values(
-                "window_tE"
-            )
-        )
-
-        x = sub[
-            "window_tE"
-        ].to_numpy(
-            dtype=float
-        )
-
-        y = (
-            1.0e5
-            * sub[
-                "fractional_D_change"
-            ].to_numpy(
-                dtype=float
-            )
-        )
-
-
-        ax1.plot(
-            x,
-            y,
-            marker="o",
-            linewidth=1.4,
-            markersize=5,
-            label=WINDOW_LABELS[
-                case
-            ],
-        )
-
-
-    ax1.axhline(
-        0.0,
-        linewidth=1.0,
-        linestyle="--",
-    )
-
-    ax1.axvline(
-        3.5,
-        linewidth=1.0,
-        linestyle=":",
-    )
-
-
-    ax1.set_xticks(
-        [
-            2.5,
-            3.5,
-            5.0,
-        ]
-    )
-
-    ax1.set_xlabel(
-        r"integration half-window [$t_E$]"
-    )
-
-    ax1.set_ylabel(
-        r"$10^5\,[D(W)/D(3.5t_E)-1]$"
-    )
-
-    ax1.set_title(
-        "Broad configurations"
-    )
-
-    ax1.grid(
-        True,
-        alpha=0.20,
-    )
-
-    ax1.legend(
-        frameon=False,
-        loc="best",
-    )
-
-
-    # ========================================================
-    # Panel B: long-period configurations
-    # ========================================================
-
-    for case in long_cases:
-
-        sub = (
-            df[
-                df["case"]
-                == case
-            ]
-            .sort_values(
-                "window_tE"
-            )
-        )
-
-        x = sub[
-            "window_tE"
-        ].to_numpy(
-            dtype=float
-        )
-
-        y = (
-            100.0
-            * sub[
-                "fractional_D_change"
-            ].to_numpy(
-                dtype=float
-            )
-        )
-
-
-        ax2.plot(
-            x,
-            y,
-            marker="o",
-            linewidth=1.5,
-            markersize=5,
-            label=WINDOW_LABELS[
-                case
-            ],
-        )
-
-
-    ax2.axhline(
-        0.0,
-        linewidth=1.0,
-        linestyle="--",
-    )
-
-    ax2.axvline(
-        3.5,
-        linewidth=1.0,
-        linestyle=":",
-    )
-
-
-    ax2.set_xticks(
-        [
-            2.5,
-            3.5,
-            5.0,
-        ]
-    )
-
-    ax2.set_xlabel(
-        r"integration half-window [$t_E$]"
-    )
-
-    ax2.set_ylabel(
-        r"$100\,[D(W)/D(3.5t_E)-1]$ [\%]"
-    )
-
-    ax2.set_title(
-        "Long-period configurations"
-    )
-
-    ax2.grid(
-        True,
-        alpha=0.20,
-    )
-
-    ax2.legend(
-        frameon=False,
-        loc="best",
-    )
-
-
-    # ========================================================
-    # Panel labels
-    # ========================================================
-
-    ax1.text(
-        -0.13,
-        1.03,
-        "A",
-        transform=ax1.transAxes,
-        fontsize=14,
-        fontweight="bold",
-        va="bottom",
-    )
-
-    ax2.text(
-        -0.13,
-        1.03,
-        "B",
-        transform=ax2.transAxes,
-        fontsize=14,
-        fontweight="bold",
-        va="bottom",
-    )
-
-
-    fig.subplots_adjust(
-        left=0.09,
-        right=0.98,
-        bottom=0.15,
-        top=0.90,
-        wspace=0.28,
-    )
-
-
-    pdf_path = (
-        output_dir
-        / "window_sensitivity.pdf"
-    )
-
-    png_path = (
-        output_dir
-        / "window_sensitivity.png"
-    )
-
-
-    save_figure(
-        fig=fig,
-        pdf_path=pdf_path,
-        png_path=png_path,
-    )
-
-
-# ============================================================
-# Figure 2: Roman true-blending sensitivity
-# ============================================================
-
-def plot_true_blending(
-    csv_path: Path,
-    output_dir: Path,
-):
-    """
-    Two panels:
-
-    A. Absolute Roman model-separation response,
-       Delta chi2 / Delta chi2_0.
-
-    B. Survey-normalized mismatch response,
-       D_Roman,w / D_Roman,w,0.
-
-    The second panel is useful because D_Roman,w does not have
-    to decrease monotonically even when Delta chi2 does.
-    """
-
-    df = pd.read_csv(
-        csv_path
-    )
-
-    require_columns(
-        df,
-        [
-            "case",
-            "fb_over_fs_true",
-            "delta_chi2",
-            "delta_chi2_over_unblended",
-            "D_roman_w",
-            "Droman_over_unblended",
-        ],
-        csv_path,
-    )
-
-
-    case_order = [
-        "A_hidden",
-        "B_near_100",
-        "C_near_500",
-        "D_clear",
-    ]
-
-
-    apply_style()
-
-
-    fig, (
-        ax1,
-        ax2,
-    ) = plt.subplots(
-        1,
-        2,
-        figsize=(
-            10.0,
-            4.2,
-        ),
-    )
-
-
-    # ========================================================
-    # Panel A: Delta chi2
-    # ========================================================
-
-    for case in case_order:
-
-        sub = (
-            df[
-                df["case"]
-                == case
-            ]
-            .sort_values(
-                "fb_over_fs_true"
-            )
-        )
-
-        x = sub[
-            "fb_over_fs_true"
-        ].to_numpy(
-            dtype=float
-        )
-
-        y = sub[
-            "delta_chi2_over_unblended"
-        ].to_numpy(
-            dtype=float
-        )
-
-
-        ax1.plot(
-            x,
-            y,
-            marker="o",
-            linewidth=1.5,
-            markersize=5,
-            label=BLEND_LABELS[
-                case
-            ],
-        )
-
-
-    ax1.axhline(
-        1.0,
-        linewidth=1.0,
-        linestyle="--",
-    )
-
-
-    ax1.set_xticks(
-        [
-            0.0,
-            0.1,
-            0.3,
-            1.0,
-            3.0,
-        ]
-    )
-
-    ax1.set_xlabel(
-        r"true blend ratio $F_b/F_s$"
-    )
-
-    ax1.set_ylabel(
-        r"$\Delta\chi^2_{\rm Roman}/"
-        r"\Delta\chi^2_{\rm Roman}(F_b=0)$"
-    )
-
-    ax1.set_title(
-        "Absolute model separation"
-    )
-
-    ax1.grid(
-        True,
-        alpha=0.20,
-    )
-
-    ax1.legend(
-        frameon=False,
-        loc="best",
-    )
-
-
-    # ========================================================
-    # Panel B: normalized Roman mismatch
-    # ========================================================
-
-    for case in case_order:
-
-        sub = (
-            df[
-                df["case"]
-                == case
-            ]
-            .sort_values(
-                "fb_over_fs_true"
-            )
-        )
-
-        x = sub[
-            "fb_over_fs_true"
-        ].to_numpy(
-            dtype=float
-        )
-
-        y = sub[
-            "Droman_over_unblended"
-        ].to_numpy(
-            dtype=float
-        )
-
-
-        ax2.plot(
-            x,
-            y,
-            marker="o",
-            linewidth=1.5,
-            markersize=5,
-            label=BLEND_LABELS[
-                case
-            ],
-        )
-
-
-    ax2.axhline(
-        1.0,
-        linewidth=1.0,
-        linestyle="--",
-    )
-
-
-    ax2.set_xticks(
-        [
-            0.0,
-            0.1,
-            0.3,
-            1.0,
-            3.0,
-        ]
-    )
-
-    ax2.set_xlabel(
-        r"true blend ratio $F_b/F_s$"
-    )
-
-    ax2.set_ylabel(
-        r"$D_{\rm Roman,w}/"
-        r"D_{\rm Roman,w}(F_b=0)$"
-    )
-
-    ax2.set_title(
-        "Survey-normalized mismatch"
-    )
-
-    ax2.grid(
-        True,
-        alpha=0.20,
-    )
-
-
-    # No second legend: same case ordering as left panel.
-
-
-    # ========================================================
-    # Panel labels
-    # ========================================================
-
-    ax1.text(
-        -0.13,
-        1.03,
-        "A",
-        transform=ax1.transAxes,
-        fontsize=14,
-        fontweight="bold",
-        va="bottom",
-    )
-
-    ax2.text(
-        -0.13,
-        1.03,
-        "B",
-        transform=ax2.transAxes,
-        fontsize=14,
-        fontweight="bold",
-        va="bottom",
-    )
-
-
-    fig.subplots_adjust(
-        left=0.10,
-        right=0.98,
-        bottom=0.15,
-        top=0.90,
-        wspace=0.30,
-    )
-
-
-    pdf_path = (
-        output_dir
-        / "roman_true_blending_sensitivity.pdf"
-    )
-
-    png_path = (
-        output_dir
-        / "roman_true_blending_sensitivity.png"
-    )
-
-
-    save_figure(
-        fig=fig,
-        pdf_path=pdf_path,
-        png_path=png_path,
-    )
+def plot_true_blending(csv_path: Path, output_dir: Path):
+    df = pd.read_csv(csv_path)
+    require_columns(df, ["case", "fb_over_fs_true", "delta_chi2",
+                         "delta_chi2_over_unblended", "D_roman_w",
+                         "Droman_over_unblended", "u0_true", "P_over_tE"], csv_path)
+
+    labels = {c: physical_label(df[df["case"] == c].iloc[0]) for c in BLEND_CASES}
+
+    apply_paper_style()
+    fig = plt.figure(figsize=(fig_width(0.88), 2.45))
+    ax1 = fig.add_axes([0.105, 0.17, 0.375, 0.80])
+    ax2 = fig.add_axes([0.605, 0.17, 0.375, 0.80])
+
+    for ax, col in ((ax1, "delta_chi2_over_unblended"), (ax2, "Droman_over_unblended")):
+        ax.axhline(1.0, color="0.6", lw=LW_THIN, ls=":", zorder=0)
+        for case in BLEND_CASES:
+            sub = df[df["case"] == case].sort_values("fb_over_fs_true")
+            ax.plot(sub["fb_over_fs_true"].to_numpy(float), sub[col].to_numpy(float),
+                    ms=3.5, label=labels[case], **BLEND_STYLE[case])
+        # symlog keeps F_b/F_s = 0 on the axis while separating 0, 0.1 and 0.3
+        ax.set_xscale("symlog", linthresh=0.1, linscale=0.6)
+        ax.set_xlim(-0.02, 3.6)
+        ax.set_xticks([0.0, 0.1, 0.3, 1.0, 3.0])
+        ax.xaxis.set_major_formatter(mticker.FixedFormatter(
+            ["$0$", "$0.1$", "$0.3$", "$1$", "$3$"]))
+        ax.xaxis.set_minor_locator(mticker.NullLocator())
+        ax.set_xlabel(r"$F_b/F_s$")
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("$%.2g$"))
+
+    ax1.set_ylim(0.4, 1.08)
+    ax1.yaxis.set_major_locator(mticker.MultipleLocator(0.1))
+    ax1.yaxis.set_major_formatter(mticker.FormatStrFormatter("$%.1f$"))
+    ax2.set_ylim(0.88, 1.008)
+    ax2.yaxis.set_major_locator(mticker.MultipleLocator(0.02))
+    ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("$%.2f$"))
+    ax1.set_ylabel(r"$\Delta\chi^2_{\rm Roman}/\Delta\chi^2_{\rm Roman}(F_b=0)$")
+    ax2.set_ylabel(r"$D_{\rm Roman,w}/D_{\rm Roman,w}(F_b=0)$")
+    panel_label(ax1, "a", y=0.08).set_va("bottom")
+    panel_label(ax2, "b", y=0.08).set_va("bottom")
+    ax1.legend(loc="lower left", bbox_to_anchor=(0.0, 0.14),
+               title=r"$(u_0,\ P/t_E)$", handlelength=1.6)
+
+    save_figure(fig, output_dir / "roman_true_blending_sensitivity")
+    plt.close(fig)
+
+    VERIFY_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_csv(VERIFY_DIR / "roman_true_blending_plotted_values.csv", index=False, float_format="%.17g")
+    print("Saved roman_true_blending_sensitivity(.pdf/.png)")
 
 
 # ============================================================
@@ -762,128 +263,27 @@ def plot_true_blending(
 # ============================================================
 
 def main():
-
     parser = argparse.ArgumentParser()
-
-
-    parser.add_argument(
-        "--results-dir",
-        type=Path,
-        default=DEFAULT_RESULTS_DIR,
-    )
-
-
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-    )
-
-
-    parser.add_argument(
-        "--figure",
-        choices=[
-            "window",
-            "blending",
-            "all",
-        ],
-        default="all",
-    )
-
-
+    parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--figure", choices=["window", "blending", "all"], default="all")
     args = parser.parse_args()
 
+    results_dir = args.results_dir if args.results_dir.is_absolute() else ROOT / args.results_dir
+    output_dir = args.output_dir if args.output_dir.is_absolute() else ROOT / args.output_dir
 
-    results_dir = (
-        args.results_dir
-        if args.results_dir.is_absolute()
-        else ROOT
-        / args.results_dir
-    )
+    window_csv = results_dir / "window_sensitivity.csv"
+    blending_csv = results_dir / "roman_true_blending.csv"
 
-
-    output_dir = (
-        args.output_dir
-        if args.output_dir.is_absolute()
-        else ROOT
-        / args.output_dir
-    )
-
-
-    print("=" * 80)
-    print("FINAL VALIDATION FIGURES")
-    print("=" * 80)
-
-    print(
-        "results:",
-        results_dir,
-    )
-
-    print(
-        "output :",
-        output_dir,
-    )
-
-
-    window_csv = (
-        results_dir
-        / "window_sensitivity.csv"
-    )
-
-    blending_csv = (
-        results_dir
-        / "roman_true_blending.csv"
-    )
-
-
-    if args.figure in (
-        "window",
-        "all",
-    ):
-
+    if args.figure in ("window", "all"):
         if not window_csv.exists():
+            raise FileNotFoundError(window_csv)
+        plot_window_sensitivity(window_csv, output_dir)
 
-            raise FileNotFoundError(
-                window_csv
-            )
-
-        print()
-        print(
-            "Making window-sensitivity figure..."
-        )
-
-        plot_window_sensitivity(
-            csv_path=window_csv,
-            output_dir=output_dir,
-        )
-
-
-    if args.figure in (
-        "blending",
-        "all",
-    ):
-
+    if args.figure in ("blending", "all"):
         if not blending_csv.exists():
-
-            raise FileNotFoundError(
-                blending_csv
-            )
-
-        print()
-        print(
-            "Making true-blending figure..."
-        )
-
-        plot_true_blending(
-            csv_path=blending_csv,
-            output_dir=output_dir,
-        )
-
-
-    print()
-    print("=" * 80)
-    print("DONE")
-    print("=" * 80)
+            raise FileNotFoundError(blending_csv)
+        plot_true_blending(blending_csv, output_dir)
 
 
 if __name__ == "__main__":

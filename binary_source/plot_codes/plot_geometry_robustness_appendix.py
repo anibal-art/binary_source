@@ -43,50 +43,15 @@ SLOPES_FILE = (
 
 
 # ============================================================
-# Paper style
+# Paper style (shared)
 # ============================================================
 
-plt.rcParams.update(
-    {
-        "font.family": "serif",
-        "font.serif": [
-            "STIXGeneral",
-            "Times New Roman",
-            "DejaVu Serif",
-        ],
-        "mathtext.fontset": "stix",
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from paper_style import (apply_paper_style, fig_width, panel_label, save_figure,
+                         C_BLUE, C_VERMILION, LW_MAIN, LW_THIN)
+import matplotlib.ticker as mticker
 
-        "font.size": 12,
-
-        "axes.labelsize": 14,
-        "axes.titlesize": 14,
-
-        "xtick.labelsize": 12,
-        "ytick.labelsize": 12,
-
-        "legend.fontsize": 10,
-
-        "axes.linewidth": 1.0,
-
-        "xtick.direction": "in",
-        "ytick.direction": "in",
-
-        "xtick.top": True,
-        "ytick.right": True,
-
-        "xtick.major.size": 5,
-        "ytick.major.size": 5,
-
-        "xtick.minor.size": 3,
-        "ytick.minor.size": 3,
-
-        "figure.facecolor": "white",
-        "axes.facecolor": "white",
-
-        "savefig.facecolor": "white",
-        "savefig.bbox": "tight",
-    }
-)
 
 
 # ============================================================
@@ -300,469 +265,90 @@ cancel_delta = (
 
 
 # ============================================================
-# Figure
+# Figure (printed width \textwidth = 6.14 in)
 # ============================================================
 
-fig, (
-    ax1,
-    ax2,
-) = plt.subplots(
-    1,
-    2,
-    figsize=(
-        10.8,
-        4.6,
-    ),
-)
-
-
-# ============================================================
-# Panel A
-# ============================================================
-
-x = np.arange(
-    3,
-    dtype=float,
-)
-
-
-rng = np.random.default_rng(
-    12345
-)
-
-
-# ------------------------------------------------------------
-# All geometries
-# ------------------------------------------------------------
-
-for j, case in enumerate(
-    cases
-):
-
-    values = pivot[
-        case
-    ].to_numpy(
-        dtype=float
-    )
-
-    jitter = rng.uniform(
-        -0.09,
-        0.09,
-        size=len(
-            values
-        ),
-    )
-
-    ax1.scatter(
-        x[j]
-        + jitter,
-        values,
-        s=18,
-        facecolors="none",
-        edgecolors="0.55",
-        linewidths=0.7,
-        alpha=0.65,
-        zorder=2,
-    )
-
-
-# ------------------------------------------------------------
-# p16-p84 + median
-# ------------------------------------------------------------
-
-yerr = np.vstack(
-    [
-        medians
-        - p16,
-
-        p84
-        - medians,
-    ]
-)
-
-
-ax1.errorbar(
-    x,
-    medians,
-    yerr=yerr,
-    fmt="o",
-    markersize=7,
-    capsize=4,
-    linewidth=1.8,
-    color="tab:red",
-    label=r"median and $p_{16}$--$p_{84}$",
-    zorder=5,
-)
-
-
-ax1.plot(
-    x,
-    medians,
-    "-",
-    linewidth=1.8,
-    color="tab:red",
-    zorder=4,
-)
-
-
-# ------------------------------------------------------------
-# Fiducial geometry
-# ------------------------------------------------------------
-
-fid_values = np.array(
-    [
-        pivot.loc[
-            fiducial_id,
-            case,
-        ]
-        for case in cases
-    ],
-    dtype=float,
-)
-
-
-ax1.scatter(
-    x,
-    fid_values,
-    marker="*",
-    s=110,
-    color="black",
-    label="fiducial geometry",
-    zorder=6,
-)
-
-
-# ------------------------------------------------------------
-# Styling
-# ------------------------------------------------------------
-
-ax1.set_yscale(
-    "log"
-)
-
-ax1.set_xticks(
-    x
-)
-
-ax1.set_xticklabels(
-    case_labels
-)
-
-ax1.set_ylabel(
-    r"$D_{\rm BSPL-PSPL}$"
-)
-
-ax1.set_xlabel(
-    "orbital-period regime"
-)
-
-ax1.set_title(
-    "Broad period structure"
-)
-
-ax1.grid(
-    axis="y",
-    which="both",
-    alpha=0.18,
-)
-
-ax1.set_axisbelow(
-    True
-)
-
-
-ax1.legend(
-    loc="upper right",
-    frameon=False,
-)
-
-
-# ------------------------------------------------------------
-# Small unobtrusive annotation
-# ------------------------------------------------------------
-
-ax1.text(
-    0.04,
-    0.06,
-    (
-        rf"$N={n_total}$ geometries"
-        "\n"
-        rf"$D_{{\rm int}}>D_{{\rm short}},D_{{\rm long}}$: "
-        rf"{n_ok}/{n_total}"
-    ),
-    transform=ax1.transAxes,
-    ha="left",
-    va="bottom",
-    fontsize=10,
-)
-
-
-# ============================================================
-# Panel B
-# ============================================================
-
-x_dark = 0.0
-x_cancel = 1.0
-
-
-rng = np.random.default_rng(
-    67890
-)
-
-
-jitter_dark = rng.uniform(
-    -0.10,
-    0.10,
-    size=len(
-        dark_delta
-    ),
-)
-
-
-jitter_cancel = rng.uniform(
-    -0.10,
-    0.10,
-    size=len(
-        cancel_delta
-    ),
-)
-
-
-# ------------------------------------------------------------
-# Individual geometries
-# ------------------------------------------------------------
-
-ax2.scatter(
-    x_dark
-    + jitter_dark,
-    dark_delta,
-    s=22,
-    alpha=0.65,
-    color="tab:blue",
-    edgecolors="none",
-    label="individual geometries",
-    zorder=2,
-)
-
-
-ax2.scatter(
-    x_cancel
-    + jitter_cancel,
-    cancel_delta,
-    s=22,
-    alpha=0.65,
-    color="tab:orange",
-    edgecolors="none",
-    zorder=2,
-)
-
-
-# ------------------------------------------------------------
-# Medians + p16-p84
-# ------------------------------------------------------------
-
-for xpos, values, color in [
-    (
-        x_dark,
-        dark_delta,
-        "tab:blue",
-    ),
-    (
-        x_cancel,
-        cancel_delta,
-        "tab:orange",
-    ),
-]:
-
-    med = np.median(
-        values
-    )
-
-    lo = np.percentile(
-        values,
-        16,
-    )
-
-    hi = np.percentile(
-        values,
-        84,
-    )
-
-    ax2.errorbar(
-        xpos,
-        med,
-        yerr=[
-            [
-                med
-                - lo
-            ],
-            [
-                hi
-                - med
-            ],
-        ],
-        fmt="D",
-        markersize=7,
-        capsize=5,
-        linewidth=2.0,
-        color=color,
-        markeredgecolor="black",
-        markeredgewidth=0.5,
-        zorder=5,
-    )
-
-
-# ------------------------------------------------------------
-# Expected value
-# ------------------------------------------------------------
-
-ax2.axhline(
-    0.0,
-    color="black",
-    linewidth=1.0,
-    linestyle="--",
-    zorder=1,
-)
-
-
-# ------------------------------------------------------------
-# Styling
-# ------------------------------------------------------------
-
-ax2.set_xticks(
-    [
-        x_dark,
-        x_cancel,
-    ]
-)
-
-
-ax2.set_xticklabels(
-    [
-        r"dark companion" "\n" r"($q_f=0$)",
-        r"photocenter cancellation" "\n" r"($q_f=q_M$)",
-    ]
-)
-
-
-ax2.set_ylabel(
-    r"$10^3\,(\gamma-\gamma_{\rm expected})$"
-)
-
-
-ax2.set_title(
-    "Small-separation scaling"
-)
-
-
-ax2.grid(
-    axis="y",
-    alpha=0.18,
-)
-
-
-ax2.set_axisbelow(
-    True
-)
-
-
-# ------------------------------------------------------------
-# Useful limits
-# ------------------------------------------------------------
-
-all_delta = np.concatenate(
-    [
-        dark_delta,
-        cancel_delta,
-    ]
-)
-
-
-limit = (
-    1.15
-    * np.max(
-        np.abs(
-            all_delta
-        )
-    )
-)
-
-
-ax2.set_ylim(
-    -limit,
-    limit,
-)
-
-
-# ============================================================
-# Panel labels
-# ============================================================
-
-ax1.text(
-    -0.12,
-    1.03,
-    "A",
-    transform=ax1.transAxes,
-    fontsize=15,
-    fontweight="bold",
-    va="bottom",
-)
-
-
-ax2.text(
-    -0.12,
-    1.03,
-    "B",
-    transform=ax2.transAxes,
-    fontsize=15,
-    fontweight="bold",
-    va="bottom",
-)
-
-
-# ============================================================
-# Layout
-# ============================================================
-
-fig.subplots_adjust(
-    left=0.09,
-    right=0.99,
-    bottom=0.18,
-    top=0.88,
-    wspace=0.30,
-)
-
-
-# ============================================================
-# Save
-# ============================================================
-
-pdf_path = (
-    OUTDIR
-    / "geometry_robustness_appendix.pdf"
-)
-
-png_path = (
-    OUTDIR
-    / "geometry_robustness_appendix.png"
-)
-
-
-fig.savefig(
-    pdf_path
-)
-
-
-fig.savefig(
-    png_path,
-    dpi=600,
-)
-
-
-plt.close(
-    fig
-)
-
+apply_paper_style()
+
+fig = plt.figure(figsize=(fig_width(1.0), 2.65))
+ax1 = fig.add_axes([0.085, 0.165, 0.39, 0.815])
+ax2 = fig.add_axes([0.585, 0.165, 0.405, 0.815])
+
+# Physical period of each regime (stored configuration parameters)
+P_over_tE_case = [float(broad.loc[broad["case"] == c, "P_over_tE"].iloc[0]) for c in cases]
+
+# ---------------- Panel (a): strip plot + median and 16-84% interval
+x = np.arange(3, dtype=float)
+rng = np.random.default_rng(12345)          # same jitter seed as before
+
+for j, case in enumerate(cases):
+    values = pivot[case].to_numpy(dtype=float)
+    jitter = rng.uniform(-0.09, 0.09, size=len(values))
+    ax1.scatter(x[j] + jitter, values, s=9, facecolors="none", edgecolors="0.55",
+                linewidths=0.5, zorder=2)
+
+yerr = np.vstack([medians - p16, p84 - medians])
+ax1.errorbar(x + 0.22, medians, yerr=yerr, fmt="o", ms=4, capsize=2.5,
+             lw=LW_MAIN, color="black", zorder=5,
+             label=r"median, 16--84\%")
+
+fid_values = np.array([pivot.loc[fiducial_id, case] for case in cases], dtype=float)
+ax1.scatter(x - 0.22, fid_values, marker="*", s=40, color=C_VERMILION,
+            edgecolors="none", label="fiducial geometry", zorder=6)
+
+ax1.set_yscale("log")
+ax1.set_xlim(-0.5, 2.5)
+ax1.set_ylim(3e-6, 0.5)
+ax1.set_xticks(x)
+ax1.set_xticklabels([rf"${fmt:.2g}$".replace("e", "") for fmt in P_over_tE_case])
+ax1.xaxis.set_minor_locator(mticker.NullLocator())
+ax1.yaxis.set_major_locator(mticker.LogLocator(base=10, numticks=10))
+ax1.yaxis.set_minor_formatter(mticker.NullFormatter())
+ax1.set_xlabel(r"$P/t_E$")
+ax1.set_ylabel(r"$D_{\rm BSPL-PSPL}$")
+ax1.legend(loc="lower left")
+panel_label(ax1, "a")
+
+# ---------------- Panel (b): slope deviations
+x_dark, x_cancel = 0.0, 1.0
+rng = np.random.default_rng(67890)          # same jitter seed as before
+jitter_dark = rng.uniform(-0.10, 0.10, size=len(dark_delta))
+jitter_cancel = rng.uniform(-0.10, 0.10, size=len(cancel_delta))
+
+ax2.axhline(0.0, color="0.55", lw=LW_THIN, ls=":", zorder=1)
+ax2.scatter(x_dark + jitter_dark, dark_delta, s=9, facecolors="none",
+            edgecolors=C_BLUE, linewidths=0.5, zorder=2)
+ax2.scatter(x_cancel + jitter_cancel, cancel_delta, s=9, facecolors="none",
+            edgecolors=C_VERMILION, linewidths=0.5, zorder=2)
+for xpos, values in ((x_dark, dark_delta), (x_cancel, cancel_delta)):
+    med = np.median(values)
+    lo, hi = np.percentile(values, 16), np.percentile(values, 84)
+    ax2.errorbar(xpos + 0.22, med, yerr=[[med - lo], [hi - med]], fmt="D", ms=3.5,
+                 capsize=2.5, lw=LW_MAIN, color="black", zorder=5)
+
+ax2.set_xlim(-0.5, 1.5)
+ax2.set_xticks([x_dark, x_cancel])
+ax2.set_xticklabels([r"$q_f=0$", r"$q_f=q_M$"])
+ax2.xaxis.set_minor_locator(mticker.NullLocator())
+ax2.set_ylabel(r"$10^3\,(\gamma-\gamma_{\rm expected})$")
+all_delta = np.concatenate([dark_delta, cancel_delta])
+limit = 1.15 * np.max(np.abs(all_delta))
+ax2.set_ylim(-limit, limit * 1.25)
+ax2.yaxis.set_major_locator(mticker.MultipleLocator(1.0))
+ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("$%.0f$"))
+panel_label(ax2, "b")
+
+save_figure(fig, OUTDIR / "geometry_robustness_appendix")
+plt.close(fig)
+
+VERIFY = OUTDIR.parent / "_verify"
+VERIFY.mkdir(parents=True, exist_ok=True)
+np.savez(VERIFY / "geometry_robustness_appendix_plotted_values.npz",
+         D_short=pivot["one_short"].to_numpy(float),
+         D_intermediate=pivot["one_intermediate"].to_numpy(float),
+         D_long=pivot["one_long"].to_numpy(float),
+         medians=medians, p16=p16, p84=p84, fid_values=fid_values,
+         dark_delta=dark_delta, cancel_delta=cancel_delta)
 
 # ============================================================
 # Console summary
@@ -772,66 +358,10 @@ print()
 print("=" * 80)
 print("GEOMETRY ROBUSTNESS FIGURE")
 print("=" * 80)
-
-print(
-    f"Fiducial geometry: "
-    f"{fiducial_id}"
-)
-
-print()
-
-print(
-    f"Intermediate > short,long: "
-    f"{n_ok}/{n_total} "
-    f"({100*n_ok/n_total:.1f}%)"
-)
-
-print()
-
-print(
-    "Dark slope:"
-)
-
-print(
-    f"  median = "
-    f"{np.median(dark['slope']):.6f}"
-)
-
-print(
-    f"  range  = "
-    f"[{dark['slope'].min():.6f}, "
-    f"{dark['slope'].max():.6f}]"
-)
-
-print()
-
-print(
-    "Cancellation slope:"
-)
-
-print(
-    f"  median = "
-    f"{np.median(cancel['slope']):.6f}"
-)
-
-print(
-    f"  range  = "
-    f"[{cancel['slope'].min():.6f}, "
-    f"{cancel['slope'].max():.6f}]"
-)
-
-print()
-
-print(
-    "Saved:"
-)
-
-print(
-    " ",
-    pdf_path
-)
-
-print(
-    " ",
-    png_path
-)
+print(f"Fiducial geometry: {fiducial_id}")
+print(f"Intermediate > short,long: {n_ok}/{n_total} ({100*n_ok/n_total:.1f}%)")
+print(f"Dark slope: median = {np.median(dark['slope']):.6f} "
+      f"range = [{dark['slope'].min():.6f}, {dark['slope'].max():.6f}]")
+print(f"Cancellation slope: median = {np.median(cancel['slope']):.6f} "
+      f"range = [{cancel['slope'].min():.6f}, {cancel['slope'].max():.6f}]")
+print("Saved:", OUTDIR / "geometry_robustness_appendix.pdf")

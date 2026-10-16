@@ -66,7 +66,31 @@ if str(PLOT_DIR) not in sys.path:
         str(PLOT_DIR),
     )
 
-from paper_style import apply_paper_style
+from paper_style import (
+    apply_paper_style,
+    fig_width,
+    heatmap,
+    panel_label,
+    pow10_label,
+    halo,
+    d_norm,
+    save_figure as style_save_figure,
+    D_CMAP,
+    D_VMIN,
+    D_VMAX,
+    D_LABEL,
+    BIAS_CMAP,
+    FS_ANNOT,
+    FS_LEGEND,
+    LW_MAIN,
+    LW_THIN,
+    LS_CANCEL,
+    M1_STYLE,
+)
+from matplotlib.ticker import LogLocator
+
+VERIFY_ROOT = REPO_ROOT / "figures" / "_verify"
+VERIFY_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 # ============================================================
@@ -292,61 +316,22 @@ def save_figure(
     stem,
     metadata,
 ):
+    """Save <stem>.pdf/.png at the designed (printed) size + JSON sidecar."""
 
-    png = (
-        output_dir
-        / f"{stem}.png"
-    )
+    png = output_dir / f"{stem}.png"
+    pdf = output_dir / f"{stem}.pdf"
+    sidecar = output_dir / f"{stem}.json"
 
-    pdf = (
-        output_dir
-        / f"{stem}.pdf"
-    )
+    style_save_figure(fig, output_dir / stem)
+    plt.close(fig)
 
-    sidecar = (
-        output_dir
-        / f"{stem}.json"
-    )
+    sidecar.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
-    fig.savefig(
-        png,
-        dpi=600,
-    )
+    print(f"PNG : {png}")
+    print(f"PDF : {pdf}")
+    print(f"META : {sidecar}")
 
-    fig.savefig(
-        pdf,
-    )
-
-    plt.close(
-        fig
-    )
-
-    sidecar.write_text(
-        json.dumps(
-            metadata,
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n"
-    )
-
-    print(
-        f"PNG  : {png}"
-    )
-
-    print(
-        f"PDF  : {pdf}"
-    )
-
-    print(
-        f"META : {sidecar}"
-    )
-
-    return {
-        "png": str(png),
-        "pdf": str(pdf),
-        "metadata": str(sidecar),
-    }
+    return {"png": str(png), "pdf": str(pdf), "metadata": str(sidecar)}
 
 
 def lognorm_limits(
@@ -354,96 +339,38 @@ def lognorm_limits(
     lower_percentile=1.0,
     upper_percentile=99.5,
 ):
-
-    values = np.asarray(
-        values,
-        dtype=float,
-    )
-
-    valid = values[
-        np.isfinite(values)
-        & (values > 0.0)
-    ]
-
+    """Kept for reference: the restyled figures use the paper-wide D range."""
+    values = np.asarray(values, dtype=float)
+    valid = values[np.isfinite(values) & (values > 0.0)]
     if len(valid) == 0:
-
-        raise ValueError(
-            "No positive finite values for LogNorm."
-        )
-
-    low = np.percentile(
-        valid,
-        lower_percentile,
-    )
-
-    high = np.percentile(
-        valid,
-        upper_percentile,
-    )
-
+        raise ValueError("No positive finite values for LogNorm.")
+    low = np.percentile(valid, lower_percentile)
+    high = np.percentile(valid, upper_percentile)
     if low <= 0.0:
         low = np.min(valid)
-
     if high <= low:
         high = np.max(valid)
-
-    # Round to useful powers of ten.
-    vmin = 10.0 ** np.floor(
-        np.log10(low)
-    )
-
-    vmax = 10.0 ** np.ceil(
-        np.log10(high)
-    )
-
+    vmin = 10.0 ** np.floor(np.log10(low))
+    vmax = 10.0 ** np.ceil(np.log10(high))
     if vmax <= vmin:
         vmax = 10.0 * vmin
-
-    return (
-        float(vmin),
-        float(vmax),
-    )
+    return float(vmin), float(vmax)
 
 
 def symmetric_limit(
     values,
     percentile=99.0,
 ):
-
-    values = np.asarray(
-        values,
-        dtype=float,
-    )
-
-    valid = np.abs(
-        values[
-            np.isfinite(values)
-        ]
-    )
-
+    values = np.asarray(values, dtype=float)
+    valid = np.abs(values[np.isfinite(values)])
     if len(valid) == 0:
         return 1.0
-
-    vmax = np.percentile(
-        valid,
-        percentile,
-    )
-
-    if (
-        not np.isfinite(vmax)
-        or vmax <= 0.0
-    ):
-        vmax = np.max(
-            valid
-        )
-
+    vmax = np.percentile(valid, percentile)
+    if not np.isfinite(vmax) or vmax <= 0.0:
+        vmax = np.max(valid)
     if vmax <= 0.0:
         vmax = 1.0
-
-    return float(
-        vmax
-    )
-
+    return float(vmax)
 
 
 def configure_log_map_axis(
@@ -451,479 +378,206 @@ def configure_log_map_axis(
     qM,
     qf_positive,
     *,
+    show_xlabel=True,
     show_ylabel=True,
     label_diagonal=False,
+    diag_color="white",
+    hide_last_xlabel=False,
 ):
+    """Log-log (q_M, q_f) axes with the q_f = q_M cancellation locus (dashed)."""
 
-    import matplotlib.patheffects as pe
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(qM.min(), qM.max())
+    ax.set_ylim(qf_positive.min(), qf_positive.max())
+    ax.xaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    ax.yaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    ax.set_xlabel(r"$q_M$" if show_xlabel else "")
+    ax.set_ylabel(r"$q_f$" if show_ylabel else "")
+    if not show_ylabel:
+        ax.tick_params(labelleft=False)
+    if not show_xlabel:
+        ax.tick_params(labelbottom=False)
 
+    q_diag_min = max(qM.min(), qf_positive.min())
+    q_diag_max = min(qM.max(), qf_positive.max())
+    diagonal = np.logspace(np.log10(q_diag_min), np.log10(q_diag_max), 400)
+    ax.plot(diagonal, diagonal, color=diag_color, ls=LS_CANCEL, lw=LW_MAIN,
+            zorder=7)
 
-    ax.set_xscale(
-        "log"
-    )
-
-    ax.set_yscale(
-        "log"
-    )
-
-
-    ax.set_xlim(
-        qM.min(),
-        qM.max(),
-    )
-
-    ax.set_ylim(
-        qf_positive.min(),
-        qf_positive.max(),
-    )
-
-
-    ax.set_xlabel(
-        r"$q_M$"
-    )
-
-
-    if show_ylabel:
-
-        ax.set_ylabel(
-            r"$q_f$"
-        )
-
-    else:
-
-        ax.set_ylabel(
-            ""
-        )
-
-
-    # ========================================================
-    # First-order photocenter-cancellation locus:
-    #
-    #                    q_f = q_M
-    #
-    # White dashed line + dark outline gives high contrast over
-    # the full logarithmic color scale.
-    # ========================================================
-
-    q_diag_min = max(
-        qM.min(),
-        qf_positive.min(),
-    )
-
-    q_diag_max = min(
-        qM.max(),
-        qf_positive.max(),
-    )
-
-
-    diagonal = np.logspace(
-        np.log10(
-            q_diag_min
-        ),
-        np.log10(
-            q_diag_max
-        ),
-        400,
-    )
-
-
-    line, = ax.plot(
-        diagonal,
-        diagonal,
-        color="white",
-        linestyle="--",
-        linewidth=1.35,
-        zorder=7,
-    )
-
-
-    line.set_path_effects(
-        [
-            pe.Stroke(
-                linewidth=2.4,
-                foreground="black",
-                alpha=0.55,
-            ),
-            pe.Normal(),
-        ]
-    )
-
+    if hide_last_xlabel:
+        # avoid the "10^0" label colliding with the next panel's "10^-4"
+        from matplotlib.ticker import FuncFormatter
+        xmax = qM.max()
+        ax.xaxis.set_major_formatter(FuncFormatter(
+            lambda v, _p: "" if np.isclose(v, xmax)
+            else rf"$10^{{{int(round(np.log10(v)))}}}$"))
 
     if label_diagonal:
-
-        # Put the label in log-space so its location is stable
-        # when the map extent changes.
-
-        log_min = np.log10(
-            q_diag_min
-        )
-
-        log_max = np.log10(
-            q_diag_max
-        )
+        q_label = 10.0 ** (np.log10(q_diag_min)
+                           + 0.20 * (np.log10(q_diag_max) - np.log10(q_diag_min)))
+        ax.text(q_label, q_label * 1.25, r"$q_f=q_M$", color="white",
+                fontsize=FS_ANNOT, rotation=45, rotation_mode="anchor",
+                ha="left", va="bottom", zorder=8)
 
 
-        q_label = 10.0 ** (
-            log_min
-            + 0.66
-            * (
-                log_max
-                - log_min
-            )
-        )
+def label_contours(ax, cs, x_axes_frac, color="white", y_axes_frac=0.18):
+    """Inline labels for every contour segment, placed near a fixed x position.
+
+    Each segment receives one label at the point closest (in axes coordinates)
+    to x = x_axes_frac on that segment; labels of nested L-shaped contours in
+    the (q_M, q_f) maps therefore sit on their horizontal arms.
+    """
+    to_axes = ax.transData + ax.transAxes.inverted()
+    manual = []
+    for i, _lv in enumerate(cs.levels):
+        for seg in cs.allsegs[i]:
+            if len(seg) < 8:
+                continue
+            xy = to_axes.transform(seg)
+            inside = (xy[:, 0] > 0.06) & (xy[:, 0] < 0.94) & \
+                     (xy[:, 1] > 0.06) & (xy[:, 1] < 0.90)
+            if not np.any(inside):
+                continue
+            idx = np.where(inside)[0]
+            # one label on the horizontal arm (closest to x = x_axes_frac)
+            # and one on the vertical arm (closest to y = y_axes_frac) when
+            # the L-shaped contour has two well-separated arms
+            j_h = idx[np.argmin(np.abs(xy[idx, 0] - x_axes_frac))]
+            j_v = idx[np.argmin(np.abs(xy[idx, 1] - y_axes_frac))]
+            h_ok = abs(xy[j_h, 0] - x_axes_frac) < 0.1
+            v_ok = abs(xy[j_v, 1] - y_axes_frac) < 0.1
+            if h_ok:
+                manual.append(tuple(seg[j_h]))
+            if v_ok and (not h_ok or np.hypot(*(xy[j_h] - xy[j_v])) > 0.25):
+                manual.append(tuple(seg[j_v]))
+    texts = ax.clabel(cs, fmt={lv: pow10_label(lv) for lv in cs.levels},
+                      fontsize=FS_ANNOT, inline=True, inline_spacing=2,
+                      manual=manual, colors=color)
+    return texts
 
 
-        txt = ax.text(
-            q_label,
-            q_label * 1.30,
-            r"$q_f=q_M$",
-            color="white",
-            fontsize=10,
-            rotation=45,
-            rotation_mode="anchor",
-            ha="center",
-            va="bottom",
-            zorder=8,
-        )
-
-
-        txt.set_path_effects(
-            [
-                pe.Stroke(
-                    linewidth=2.5,
-                    foreground="black",
-                    alpha=0.85,
-                ),
-                pe.Normal(),
-            ]
-        )
+def load_parsec_tracks():
+    """F146 flux-ratio tracks written by isochrone_phot_cancel.py."""
+    path = FIGURES_ROOT / "current" / "physical_qM_qf_PARSECF146.json"
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text())
+    return {float(k): (np.asarray(v["qM"]), np.asarray(v["qf"]))
+            for k, v in data["tracks"].items()}
 
 
 # ============================================================
-# Figure 1:
-# qM-qf D maps
+# Figure 5: qM-qf D maps
 # ============================================================
-
 
 def plot_qmass_qflux(
     filename,
     output_dir,
+    alt=False,
 ):
-
-    import matplotlib.patheffects as pe
-
-
     print()
     print("=" * 80)
-    print("FIGURE: qM-qf D map")
+    print("FIGURE: qM-qf D map" + (" (alt)" if alt else ""))
     print("=" * 80)
 
+    with np.load(filename, allow_pickle=False) as d:
+        qM = np.asarray(d["qM_grid"], dtype=float)
+        qf = np.asarray(d["qf_grid"], dtype=float)
+        P_over_tE = np.asarray(d["P_over_tE_grid"], dtype=float)
+        D = np.asarray(d["D"], dtype=float)
+        success = np.asarray(d["SUCCESS"], dtype=bool)
+        dataset_commit = str(d["code_commit"].item())
 
-    # ========================================================
-    # Load numerical summary
-    # ========================================================
+    if not np.all(success):
+        print("WARNING: qM-qf dataset contains failed fits.")
 
-    with np.load(
-        filename,
-        allow_pickle=False,
-    ) as d:
+    # qf=0 exists in the grid but cannot be shown on a logarithmic axis.
+    positive_qf = qf > 0.0
+    qf_plot = qf[positive_qf]
+    D_plot = D[:, positive_qf, :]
 
+    vmin, vmax = D_VMIN, D_VMAX
+    contour_levels = np.array([1e-3, 1e-2, 1e-1], dtype=float)
 
-        qM = np.asarray(
-            d["qM_grid"],
-            dtype=float,
-        )
-
-
-        qf = np.asarray(
-            d["qf_grid"],
-            dtype=float,
-        )
-
-
-        P_over_tE = np.asarray(
-            d["P_over_tE_grid"],
-            dtype=float,
-        )
-
-
-        D = np.asarray(
-            d["D"],
-            dtype=float,
-        )
-
-
-        success = np.asarray(
-            d["SUCCESS"],
-            dtype=bool,
-        )
-
-
-        dataset_commit = str(
-            d["code_commit"].item()
-        )
-
-
-    if not np.all(
-        success
-    ):
-
-        print(
-            "WARNING: qM-qf dataset contains failed fits."
-        )
-
-
-    # ========================================================
-    # qf=0 exists in the numerical grid but cannot be shown
-    # on a logarithmic qf axis.
-    # ========================================================
-
-    positive_qf = (
-        qf > 0.0
-    )
-
-
-    qf_plot = qf[
-        positive_qf
-    ]
-
-
-    D_plot = D[
-        :,
-        positive_qf,
-        :,
-    ]
-
-
-    # ========================================================
-    # One common color normalization for every P/tE.
-    # ========================================================
-
-    vmin, vmax = lognorm_limits(
-        D_plot
-    )
-
-
-    # ========================================================
-    # Quantitative contours.
-    #
-    # Only levels contained inside each panel are plotted.
-    # ========================================================
-
-    contour_levels = np.array(
-        [
-            1e-3,
-            1e-2,
-            1e-1,
-        ],
-        dtype=float,
-    )
-
+    tracks = load_parsec_tracks() if alt else None
+    if alt and tracks is None:
+        raise FileNotFoundError("Run isochrone_phot_cancel.py first (PARSEC tracks).")
 
     apply_paper_style()
-
-
-    n_period = len(
-        P_over_tE
-    )
-
-
-    fig, axes = plt.subplots(
-        1,
-        n_period,
-        figsize=(
-            4.35 * n_period,
-            4.4,
-        ),
-        sharex=True,
-        sharey=True,
-        constrained_layout=True,
-    )
-
-
-    axes = np.atleast_1d(
-        axes
-    )
-
+    n_period = len(P_over_tE)
+    fig = plt.figure(figsize=(fig_width(1.0), 2.45 if not alt else 2.75))
+    left, right_cb, cb_w, gap = 0.075, 0.885, 0.018, 0.02
+    w = (right_cb - 0.025 - left - (n_period - 1) * gap) / n_period
+    bottom = 0.15 if not alt else 0.135
+    top = 0.89 if not alt else 0.79
+    axes = [fig.add_axes([left + k * (w + gap), bottom, w, top - bottom])
+            for k in range(n_period)]
+    cax = fig.add_axes([right_cb, bottom, cb_w, top - bottom])
 
     mappable = None
+    plotted = {}
+    for i_P, ax in enumerate(axes):
+        Z = D_plot[:, :, i_P].T
+        mappable = heatmap(ax, qM, qf_plot, Z, cmap=D_CMAP,
+                           norm=d_norm(vmin, vmax))
+        configure_log_map_axis(ax, qM, qf_plot, show_ylabel=(i_P == 0),
+                               label_diagonal=(i_P == 0),
+                               hide_last_xlabel=(i_P < n_period - 1))
 
+        finite_Z = Z[np.isfinite(Z) & (Z > 0.0)]
+        levels_here = contour_levels[(contour_levels >= finite_Z.min())
+                                     & (contour_levels <= finite_Z.max())]
+        if len(levels_here) > 0:
+            cs = ax.contour(qM, qf_plot, Z, levels=levels_here, colors="white",
+                            linewidths=LW_THIN, zorder=5)
+            label_contours(ax, cs, x_axes_frac=0.30)
 
-    # ========================================================
-    # Panels
-    # ========================================================
+        if alt:
+            for M1, (tq, tf) in sorted(tracks.items()):
+                st = M1_STYLE[M1]
+                ax.plot(tq, tf, color=st["color"], lw=LW_MAIN, ls="-",
+                        marker=st["marker"], markevery=0.2, ms=3.0,
+                        mec="white", mew=0.5, zorder=9,
+                        path_effects=halo(2.0, "white"))
 
-    for i_P, ax in enumerate(
-        axes
-    ):
+        ax.set_title(rf"$P/t_E={P_over_tE[i_P]:g}$")
+        panel_label(ax, "abc"[i_P], color="white", x=0.05, y=0.95)
+        plotted[f"D_P{i_P}"] = Z
 
+    cbar = fig.colorbar(mappable, cax=cax)
+    cbar.set_label(D_LABEL)
+    cbar.ax.tick_params(which="both", direction="in")
 
-        Z = (
-            D_plot[
-                :,
-                :,
-                i_P,
-            ].T
-        )
+    if alt:
+        handles = [plt.Line2D([], [], color=M1_STYLE[m]["color"],
+                              marker=M1_STYLE[m]["marker"], ms=3.0, lw=LW_MAIN,
+                              label=rf"$M_1={m:g}\,M_\odot$")
+                   for m in sorted(tracks)]
+        fig.legend(handles=handles, loc="upper center", ncol=len(handles),
+                   bbox_to_anchor=(0.48, 1.0), frameon=False,
+                   title=r"PARSEC F146 main-sequence tracks", title_fontsize=FS_LEGEND)
 
-
-        # ----------------------------------------------------
-        # Main D map
-        # ----------------------------------------------------
-
-        mappable = ax.pcolormesh(
-            qM,
-            qf_plot,
-            Z,
-            shading="auto",
-            cmap="viridis",
-            norm=LogNorm(
-                vmin=vmin,
-                vmax=vmax,
-            ),
-            rasterized=True,
-        )
-
-
-        # ----------------------------------------------------
-        # Quantitative D contours
-        # ----------------------------------------------------
-
-        finite_Z = Z[
-            np.isfinite(Z)
-            & (Z > 0.0)
-        ]
-
-
-        if finite_Z.size > 0:
-
-
-            zmin = np.min(
-                finite_Z
-            )
-
-            zmax = np.max(
-                finite_Z
-            )
-
-
-            levels_here = contour_levels[
-                (contour_levels >= zmin)
-                & (contour_levels <= zmax)
-            ]
-
-
-            if len(
-                levels_here
-            ) > 0:
-
-
-                contours = ax.contour(
-                    qM,
-                    qf_plot,
-                    Z,
-                    levels=levels_here,
-                    colors="white",
-                    linewidths=0.85,
-                    alpha=0.80,
-                    zorder=5,
-                )
-
-
-
-        # ----------------------------------------------------
-        # Axes and qf=qM diagonal
-        # ----------------------------------------------------
-
-        configure_log_map_axis(
-            ax,
-            qM,
-            qf_plot,
-            show_ylabel=(
-                i_P == 0
-            ),
-            label_diagonal=(
-                i_P == 0
-            ),
-        )
-
-
-        ax.set_title(
-            rf"$P/t_E={P_over_tE[i_P]:g}$"
-        )
-
-
-        ax.text(
-            0.05,
-            0.94,
-            f"({chr(97 + i_P)})",
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            fontweight="bold",
-            zorder=10,
-        )
-
-
-    # ========================================================
-    # Shared colorbar
-    # ========================================================
-
-    cbar = fig.colorbar(
-        mappable,
-        ax=axes.tolist(),
-        pad=0.02,
-    )
-
-
-    cbar.set_label(
-        r"$D_{\rm BSPL-PSPL}$"
-    )
-
-
-    # ========================================================
-    # Metadata
-    # ========================================================
+    np.savez(VERIFY_ROOT / ("qmass_qflux_D_map" + ("_alt" if alt else "")
+                            + "_plotted_values.npz"),
+             qM=qM, qf=qf_plot, P_over_tE=P_over_tE, **plotted)
 
     metadata = {
-
-        "figure":
-            "qmass_qflux_D_map",
-
-        "source":
-            str(filename),
-
-        "dataset_commit":
-            dataset_commit,
-
-        "qf_zero_displayed":
-            False,
-
-        "qf_zero_reason":
-            "logarithmic qf axis",
-
-        "photocenter_cancellation_line":
-            "qf=qM",
-
-        "contour_levels_D":
-            contour_levels.tolist(),
-
-        "D_vmin":
-            vmin,
-
-        "D_vmax":
-            vmax,
+        "figure": "qmass_qflux_D_map" + ("_alt" if alt else ""),
+        "source": str(filename),
+        "dataset_commit": dataset_commit,
+        "qf_zero_displayed": False,
+        "qf_zero_reason": "logarithmic qf axis",
+        "photocenter_cancellation_line": "qf=qM",
+        "contour_levels_D": contour_levels.tolist(),
+        "D_vmin": vmin,
+        "D_vmax": vmax,
     }
+    if alt:
+        metadata["parsec_tracks"] = "figures/current/physical_qM_qf_PARSECF146.json"
 
-
-    return save_figure(
-        fig,
-        output_dir,
-        "qmass_qflux_D_map",
-        metadata,
-    )
-
-
+    return save_figure(fig, output_dir,
+                       "qmass_qflux_D_map" + ("_alt" if alt else ""), metadata)
 # ============================================================
 # Figure 2:
 # mass-luminosity tracks
@@ -1156,363 +810,148 @@ def plot_mass_luminosity(
 # D and fitted-parameter biases in qM-qf space
 # ============================================================
 
+
+def _percent_formatter():
+    from matplotlib.ticker import FuncFormatter
+
+    def fmt(v, _pos=None):
+        s = f"{round(100.0 * v, 6):g}"
+        return "$0$" if s in ("-0", "0") else f"${s}$"
+
+    return FuncFormatter(fmt)
+
+
 def plot_qmass_qflux_biases(
     filename,
     output_dir,
     target_P_over_tE=1.0,
+    alt=False,
 ):
-
     print()
     print("=" * 80)
-    print("FIGURE: qM-qf biases")
+    print("FIGURE: qM-qf biases" + (" (alt)" if alt else ""))
     print("=" * 80)
 
+    with np.load(filename, allow_pickle=False) as d:
+        qM = np.asarray(d["qM_grid"], dtype=float)
+        qf = np.asarray(d["qf_grid"], dtype=float)
+        P_over_tE = np.asarray(d["P_over_tE_grid"], dtype=float)
+        D = np.asarray(d["D"], dtype=float)
+        DT0 = np.asarray(d["DT0"], dtype=float)
+        DU0 = np.asarray(d["DU0"], dtype=float)
+        DTE = np.asarray(d["DTE"], dtype=float)
+        u0_true = float(d["u0_true"].item())
+        tE_true = float(d["tE_true"].item())
+        dataset_commit = str(d["code_commit"].item())
 
-    with np.load(
-        filename,
-        allow_pickle=False,
-    ) as d:
+    i_P = int(np.argmin(np.abs(P_over_tE - target_P_over_tE)))
+    selected_P = float(P_over_tE[i_P])
 
+    positive_qf = qf > 0.0
+    qf_plot = qf[positive_qf]
 
-        qM = np.asarray(
-            d["qM_grid"],
-            dtype=float,
-        )
+    D_map = D[:, positive_qf, i_P].T
+    dt0_map = DT0[:, positive_qf, i_P].T / tE_true
+    du0_map = DU0[:, positive_qf, i_P].T / u0_true
+    dte_map = DTE[:, positive_qf, i_P].T / tE_true
 
-
-        qf = np.asarray(
-            d["qf_grid"],
-            dtype=float,
-        )
-
-
-        P_over_tE = np.asarray(
-            d["P_over_tE_grid"],
-            dtype=float,
-        )
-
-
-        D = np.asarray(
-            d["D"],
-            dtype=float,
-        )
-
-
-        DT0 = np.asarray(
-            d["DT0"],
-            dtype=float,
-        )
-
-
-        DU0 = np.asarray(
-            d["DU0"],
-            dtype=float,
-        )
-
-
-        DTE = np.asarray(
-            d["DTE"],
-            dtype=float,
-        )
-
-
-        u0_true = float(
-            d["u0_true"].item()
-        )
-
-
-        tE_true = float(
-            d["tE_true"].item()
-        )
-
-
-        dataset_commit = str(
-            d["code_commit"].item()
-        )
-
-
-    i_P = int(
-        np.argmin(
-            np.abs(
-                P_over_tE
-                - target_P_over_tE
-            )
-        )
-    )
-
-
-    selected_P = float(
-        P_over_tE[
-            i_P
-        ]
-    )
-
-
-    positive_qf = (
-        qf > 0.0
-    )
-
-    qf_plot = qf[
-        positive_qf
-    ]
-
-
-    D_map = (
-        D[
-            :,
-            positive_qf,
-            i_P,
-        ].T
-    )
-
-
-    dt0_map = (
-        DT0[
-            :,
-            positive_qf,
-            i_P,
-        ].T
-        / tE_true
-    )
-
-
-    du0_map = (
-        DU0[
-            :,
-            positive_qf,
-            i_P,
-        ].T
-        / u0_true
-    )
-
-
-    dte_map = (
-        DTE[
-            :,
-            positive_qf,
-            i_P,
-        ].T
-        / tE_true
-    )
-
-
-    D_vmin, D_vmax = (
-        lognorm_limits(
-            D_map
-        )
-    )
-
-
-    bias_maps = [
-        dt0_map,
-        du0_map,
-        dte_map,
-    ]
-
-
-    bias_limits = [
-        symmetric_limit(
-            values
-        )
-        for values
-        in bias_maps
-    ]
-
+    bias_maps = [dt0_map, du0_map, dte_map]
+    bias_limits = [symmetric_limit(values) for values in bias_maps]
+    bias_labels = [r"$\Delta t_0/t_E$ (\%)", r"$\Delta u_0/u_0$ (\%)",
+                   r"$\Delta t_E/t_E$ (\%)"]
 
     apply_paper_style()
+    pfmt = _percent_formatter()
 
+    def bias_colorbar(fig, cax, pcm, label, limit, orientation):
+        cb = fig.colorbar(pcm, cax=cax, orientation=orientation, extend="both")
+        n_max = 4 if orientation == "vertical" else 2
+        for step in (0.001, 0.002, 0.0025, 0.005, 0.01, 0.02, 0.025, 0.05, 0.1):
+            n = int(np.floor(limit / step + 1e-9))
+            if n <= n_max:
+                break
+        cb.set_ticks(np.arange(-n, n + 1) * step)
+        axis = cb.ax.yaxis if orientation == "vertical" else cb.ax.xaxis
+        axis.set_major_formatter(pfmt)
+        axis.set_minor_locator(plt.NullLocator())
+        cb.set_label(label)
+        cb.ax.tick_params(which="both", direction="in")
+        return cb
 
-    fig, axes = plt.subplots(
-        2,
-        2,
-        figsize=(
-            10.0,
-            8.6,
-        ),
-        sharex=True,
-        sharey=True,
-        constrained_layout=True,
-    )
+    if not alt:
+        # 2x2, same panels and content as the manuscript version
+        fig = plt.figure(figsize=(fig_width(1.0), 5.0))
+        pw, ph = 0.335, 0.405
+        xs = [0.085, 0.565]
+        ys = [0.555, 0.09]
+        cbw, cbpad = 0.017, 0.012
+        axes = [fig.add_axes([xs[c], ys[r], pw, ph])
+                for r in range(2) for c in range(2)]
+        caxes = [fig.add_axes([xs[c] + pw + cbpad, ys[r], cbw, ph])
+                 for r in range(2) for c in range(2)]
 
+        pcm = heatmap(axes[0], qM, qf_plot, D_map, cmap=D_CMAP,
+                      norm=d_norm(D_VMIN, D_VMAX))
+        configure_log_map_axis(axes[0], qM, qf_plot, show_xlabel=False)
+        cb = fig.colorbar(pcm, cax=caxes[0])
+        cb.set_label(D_LABEL)
+        cb.ax.tick_params(which="both", direction="in")
 
-    axes = axes.ravel()
+        for k, (ax, cax, values, limit, label) in enumerate(
+                zip(axes[1:], caxes[1:], bias_maps, bias_limits, bias_labels)):
+            pcm = heatmap(ax, qM, qf_plot, values, cmap=BIAS_CMAP,
+                          norm=TwoSlopeNorm(vmin=-limit, vcenter=0.0, vmax=limit))
+            configure_log_map_axis(ax, qM, qf_plot,
+                                   show_xlabel=(k >= 1),
+                                   show_ylabel=(k == 1),
+                                   diag_color="0.15")
+            bias_colorbar(fig, cax, pcm, label, limit, "vertical")
 
+        for i, ax in enumerate(axes):
+            panel_label(ax, "abcd"[i], color="white" if i == 0 else "k")
+    else:
+        # 1x3 bias panels; panel (a) of the manuscript version duplicates Fig. 5b
+        fig = plt.figure(figsize=(fig_width(1.0), 2.55))
+        left, gap = 0.075, 0.045
+        w = (0.985 - left - 2 * gap) / 3
+        bottom, top = 0.155, 0.74
+        axes = [fig.add_axes([left + k * (w + gap), bottom, w, top - bottom])
+                for k in range(3)]
+        caxes = [fig.add_axes([left + k * (w + gap), 0.80, w, 0.03])
+                 for k in range(3)]
+        for k, (ax, cax, values, limit, label) in enumerate(
+                zip(axes, caxes, bias_maps, bias_limits, bias_labels)):
+            pcm = heatmap(ax, qM, qf_plot, values, cmap=BIAS_CMAP,
+                          norm=TwoSlopeNorm(vmin=-limit, vcenter=0.0, vmax=limit))
+            configure_log_map_axis(ax, qM, qf_plot, show_ylabel=(k == 0),
+                                   diag_color="0.15",
+                                   hide_last_xlabel=(k < 2))
+            cb = bias_colorbar(fig, cax, pcm, label, limit, "horizontal")
+            cb.ax.xaxis.set_ticks_position("top")
+            cb.ax.xaxis.set_label_position("top")
+            panel_label(ax, "abc"[k])
 
-    # --------------------------------------------------------
-    # D
-    # --------------------------------------------------------
-
-    pcm = axes[0].pcolormesh(
-        qM,
-        qf_plot,
-        D_map,
-        shading="auto",
-        cmap="viridis",
-        norm=LogNorm(
-            vmin=D_vmin,
-            vmax=D_vmax,
-        ),
-    )
-
-
-    configure_log_map_axis(
-        axes[0],
-        qM,
-        qf_plot,
-    )
-
-
-    axes[0].set_title(
-        r"$D_{\rm BSPL-PSPL}$"
-    )
-
-
-    cb = fig.colorbar(
-        pcm,
-        ax=axes[0],
-        pad=0.02,
-    )
-
-    cb.set_label(
-        r"$D$"
-    )
-
-
-    # --------------------------------------------------------
-    # Bias panels
-    # --------------------------------------------------------
-
-    bias_specs = [
-
-        (
-            dt0_map,
-            bias_limits[0],
-            r"$\Delta t_0/t_E$",
-        ),
-
-        (
-            du0_map,
-            bias_limits[1],
-            r"$\Delta u_0/u_0$",
-        ),
-
-        (
-            dte_map,
-            bias_limits[2],
-            r"$\Delta t_E/t_E$",
-        ),
-    ]
-
-
-    for ax, (
-        values,
-        limit,
-        label,
-    ) in zip(
-        axes[1:],
-        bias_specs,
-    ):
-
-
-        pcm = ax.pcolormesh(
-            qM,
-            qf_plot,
-            values,
-            shading="auto",
-            cmap="RdBu_r",
-            norm=TwoSlopeNorm(
-                vmin=-limit,
-                vcenter=0.0,
-                vmax=limit,
-            ),
-        )
-
-
-        configure_log_map_axis(
-            ax,
-            qM,
-            qf_plot,
-        )
-
-
-        ax.set_title(
-            label
-        )
-
-
-        cb = fig.colorbar(
-            pcm,
-            ax=ax,
-            pad=0.02,
-        )
-
-        cb.set_label(
-            label
-        )
-
-
-    for i, ax in enumerate(
-        axes
-    ):
-
-        ax.text(
-            0.05,
-            0.94,
-            f"({chr(97 + i)})",
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-        )
-
-
-    fig.suptitle(
-        rf"$P/t_E={selected_P:g}$",
-        fontsize=16,
-    )
-
+    np.savez(VERIFY_ROOT / ("qmass_qflux_biases" + ("_alt" if alt else "")
+                            + "_plotted_values.npz"),
+             qM=qM, qf=qf_plot, D=D_map, dt0=dt0_map, du0=du0_map, dte=dte_map,
+             bias_limits=np.array(bias_limits), P_over_tE=selected_P)
 
     metadata = {
-
-        "figure":
-            "qmass_qflux_biases",
-
-        "source":
-            str(filename),
-
-        "dataset_commit":
-            dataset_commit,
-
-        "P_over_tE":
-            selected_P,
-
-        "u0_true":
-            u0_true,
-
-        "tE_true":
-            tE_true,
-
-        "normalizations": {
-            "DT0":
-                "DT0/tE_true",
-
-            "DU0":
-                "DU0/u0_true",
-
-            "DTE":
-                "DTE/tE_true",
-        },
-
-        "photocenter_cancellation_line":
-            "qf=qM",
+        "figure": "qmass_qflux_biases" + ("_alt" if alt else ""),
+        "source": str(filename),
+        "dataset_commit": dataset_commit,
+        "P_over_tE": selected_P,
+        "u0_true": u0_true,
+        "tE_true": tE_true,
+        "normalizations": {"DT0": "DT0/tE_true", "DU0": "DU0/u0_true",
+                           "DTE": "DTE/tE_true"},
+        "bias_color_limits_99pct": bias_limits,
+        "photocenter_cancellation_line": "qf=qM",
     }
 
+    return save_figure(fig, output_dir,
+                       "qmass_qflux_biases" + ("_alt" if alt else ""), metadata)
 
-    return save_figure(
-        fig,
-        output_dir,
-        "qmass_qflux_biases",
-        metadata,
-    )
 
 
 # ============================================================
@@ -1979,6 +1418,15 @@ def main():
                 ],
                 output_dir,
             )
+            generated[
+                "qmass_qflux_alt"
+            ] = plot_qmass_qflux(
+                available[
+                    "qmass_qflux"
+                ],
+                output_dir,
+                alt=True,
+            )
 
 
     # ========================================================
@@ -2049,6 +1497,15 @@ def main():
                     "qmass_qflux"
                 ],
                 output_dir,
+            )
+            generated[
+                "biases_alt"
+            ] = plot_qmass_qflux_biases(
+                available[
+                    "qmass_qflux"
+                ],
+                output_dir,
+                alt=True,
             )
 
 

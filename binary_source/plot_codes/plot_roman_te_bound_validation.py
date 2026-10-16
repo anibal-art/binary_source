@@ -12,13 +12,10 @@ Produces:
         roman_te_bound_validation.pdf
         roman_te_bound_validation.png
 
-The figure focuses on the single physical configuration that follows
-the upper tE bound when it is relaxed:
-
-    i = 132
-    j = 19
-    u0_true ~ 0.9771
-    P/tE_true ~ 1.2943
+The figure focuses on the final F146/tE=30 production configuration
+with the largest stored best-fit tE relative to the nominal upper
+bound.  This provides the most conservative available test of the
+sensitivity to relaxing the upper tE bound.
 """
 
 from pathlib import Path
@@ -114,31 +111,145 @@ def main():
 
 
     # --------------------------------------------------------
-    # Select the genuinely asymptotic physical cell
+    # Select the most conservative physical cell automatically.
+    #
+    # Among the configurations included in the current validation,
+    # choose the cell whose stored production fit has the largest
+    # best-fit tE at the nominal upper-factor = 20 setup.
     # --------------------------------------------------------
 
+    nominal = df[
+        np.isclose(
+            df["upper_factor"],
+            20.0,
+        )
+    ].copy()
+
+
+    if nominal.empty:
+
+        raise RuntimeError(
+            "No rows found for upper_factor=20."
+        )
+
+
+    cell_scores = (
+        nominal.groupby(
+            [
+                "i",
+                "j",
+            ]
+        )[
+            "stored_best_tE"
+        ]
+        .max()
+    )
+
+
+    i_plot, j_plot = (
+        cell_scores.idxmax()
+    )
+
+
+    i_plot = int(
+        i_plot
+    )
+
+    j_plot = int(
+        j_plot
+    )
+
+
     sub = df[
-        (df["i"] == 132)
-        & (df["j"] == 19)
+        (df["i"] == i_plot)
+        & (df["j"] == j_plot)
     ].copy()
 
 
     if sub.empty:
 
         raise RuntimeError(
-            "Could not find cell (132, 19)."
+            "Automatically selected Roman tE-bound cell "
+            f"({i_plot}, {j_plot}) was not found."
         )
 
 
     sub = sub.sort_values(
         [
-            "W149",
+            "F146",
             "upper_factor",
         ]
     )
 
 
-    tE_true = 150.0
+    # Infer the true event timescale from the stored physical
+    # coordinates rather than hard-coding it.
+    te_values = (
+        sub["P_days"]
+        / sub["P_over_tE"]
+    ).to_numpy(
+        dtype=float
+    )
+
+
+    te_values = te_values[
+        np.isfinite(
+            te_values
+        )
+    ]
+
+
+    if len(te_values) == 0:
+
+        raise RuntimeError(
+            "Could not infer tE_true from P_days/P_over_tE."
+        )
+
+
+    tE_true = float(
+        np.median(
+            te_values
+        )
+    )
+
+
+    if not np.allclose(
+        te_values,
+        tE_true,
+        rtol=1.0e-8,
+        atol=1.0e-8,
+    ):
+
+        raise RuntimeError(
+            "Inconsistent tE_true values inferred from "
+            "P_days/P_over_tE."
+        )
+
+
+    print(
+        "Selected conservative Roman tE-bound cell:"
+    )
+
+    print(
+        f"  (i, j)   = ({i_plot}, {j_plot})"
+    )
+
+    print(
+        f"  u0       = {sub['u0_true'].iloc[0]:.10g}"
+    )
+
+    print(
+        f"  P/tE     = {sub['P_over_tE'].iloc[0]:.10g}"
+    )
+
+    print(
+        f"  tE_true  = {tE_true:.10g} d"
+    )
+
+    print(
+        "  max stored best_tE = "
+        f"{cell_scores.loc[(i_plot, j_plot)]:.10g} d"
+    )
 
 
     # --------------------------------------------------------
@@ -169,11 +280,11 @@ def main():
 
 
     for mag in sorted(
-        sub["W149"].unique()
+        sub["F146"].unique()
     ):
 
         m = (
-            sub["W149"]
+            sub["F146"]
             == mag
         )
 
@@ -253,7 +364,7 @@ def main():
 
     magnitudes = sorted(
         sub[
-            "W149"
+            "F146"
         ].unique()
     )
 
@@ -292,7 +403,7 @@ def main():
         d = (
             sub[
                 sub[
-                    "W149"
+                    "F146"
                 ]
                 == mag
             ]
@@ -313,7 +424,7 @@ def main():
             linewidth=1.5,
             markersize=5,
             label=(
-                rf"W149={mag:.0f}"
+                rf"F146={mag:.0f}"
             ),
         )
 
@@ -396,7 +507,7 @@ def main():
         d = (
             sub[
                 sub[
-                    "W149"
+                    "F146"
                 ]
                 == mag
             ]
@@ -417,7 +528,7 @@ def main():
             linewidth=1.5,
             markersize=5,
             label=(
-                rf"W149={mag:.0f}"
+                rf"F146={mag:.0f}"
             ),
         )
 
@@ -476,7 +587,7 @@ def main():
         d = (
             sub[
                 sub[
-                    "W149"
+                    "F146"
                 ]
                 == mag
             ]
@@ -497,7 +608,7 @@ def main():
             linewidth=1.5,
             markersize=5,
             label=(
-                rf"W149={mag:.0f}"
+                rf"F146={mag:.0f}"
             ),
         )
 
@@ -641,7 +752,7 @@ def main():
         d = (
             sub[
                 sub[
-                    "W149"
+                    "F146"
                 ]
                 == mag
             ]
@@ -689,7 +800,7 @@ def main():
 
 
         print(
-            f"  W149={mag:.0f}: "
+            f"  F146={mag:.0f}: "
             f"Delta chi2 {dchi2_percent:+.5f}% ; "
             f"D_Roman,w {Droman_percent:+.5f}% ; "
             f"teff(final)={last['teff_fit']:.5f} d"

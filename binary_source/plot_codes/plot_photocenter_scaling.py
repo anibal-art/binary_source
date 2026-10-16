@@ -45,7 +45,11 @@ if str(PLOT_DIR) not in sys.path:
         str(PLOT_DIR),
     )
 
-from paper_style import apply_paper_style
+from paper_style import (apply_paper_style, fig_width, panel_label,
+                         save_figure, C_BLUE, C_VERMILION, C_GREEN,
+                         LS_DARK, LS_CANCEL, LW_THIN, FS_ANNOT)
+from matplotlib.ticker import (LogLocator, NullFormatter, MultipleLocator,
+                               FormatStrFormatter)
 
 
 # ============================================================
@@ -327,505 +331,125 @@ for i_family in range(
 # Output
 # ============================================================
 
-figure_dir = (
-    REPO_ROOT
-    / "figures"
-    / f"draft_{dataset_commit}"
-)
+figure_dir = REPO_ROOT / "figures" / f"draft_{dataset_commit}"
+figure_dir.mkdir(parents=True, exist_ok=True)
+verify_dir = REPO_ROOT / "figures" / "_verify"
+verify_dir.mkdir(parents=True, exist_ok=True)
 
-figure_dir.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
-
-# ============================================================
-# Plot style
-# ============================================================
+# The small-separation scaling exponent is called gamma in the paper
+# (alpha denotes an orbital-orientation angle).
+gamma = alpha
 
 apply_paper_style()
 
-
-fig, axes = plt.subplots(
-    1,
-    2,
-    figsize=(
-        11.5,
-        4.7,
-    ),
-    constrained_layout=True,
-)
+q_targets = [1e-2, 1e-1, 1.0]
+q_styles = [
+    dict(color=C_BLUE, marker="o"),
+    dict(color=C_VERMILION, marker="s"),
+    dict(color=C_GREEN, marker="^"),
+]
+MARK_EVERY = 0.12
 
 
-# ============================================================
-# Use color only for qM.
-# Use linestyle only for luminous-source family.
-# ============================================================
+def draw_scaling_panel(ax, label_panel=True):
+    # slope-fit range (shaded) used for panel (b) / Table 7
+    ax.axvspan(XI_FIT_MIN, XI_FIT_MAX, color="0.5", alpha=0.08, lw=0, zorder=0)
 
-color_cycle = (
-    plt.rcParams[
-        "axes.prop_cycle"
+    for target, st in zip(q_targets, q_styles):
+        iq = nearest_index(qM, target)
+        ax.plot(xi, D[i_dark, iq, :], color=st["color"], ls=LS_DARK,
+                marker=st["marker"], markevery=MARK_EVERY, ms=3.0, mfc="white")
+        ax.plot(xi, D[i_cancel, iq, :], color=st["color"], ls=LS_CANCEL,
+                marker=st["marker"], markevery=MARK_EVERY, ms=3.0)
+
+    # Reference slopes (visual guides only), placed in empty regions
+    x_lin = np.logspace(np.log10(4e-3), np.log10(3e-2), 40)
+    y_lin = 6e-3 * (x_lin / x_lin[0])
+    ax.plot(x_lin, y_lin, color="0.35", lw=LW_THIN)
+    ax.text(x_lin[-1] * 1.15, y_lin[-1], r"$\propto\xi_{\rm rel}$",
+            fontsize=FS_ANNOT, ha="left", va="center", color="0.25")
+    x_quad = np.logspace(np.log10(1.5e-2), np.log10(1.2e-1), 40)
+    y_quad = 3e-9 * (x_quad / x_quad[0]) ** 2
+    ax.plot(x_quad, y_quad, color="0.35", lw=LW_THIN)
+    ax.text(x_quad[-1] * 1.15, y_quad[-1], r"$\propto\xi_{\rm rel}^2$",
+            fontsize=FS_ANNOT, ha="left", va="center", color="0.25")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(xi.min(), xi.max())
+    ax.xaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    ax.yaxis.set_major_locator(LogLocator(base=10, numticks=8))
+    ax.yaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10), numticks=30))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+    ax.set_xlabel(r"$\xi_{\rm rel}/u_0$")
+    ax.set_ylabel(r"$D_{\rm BSPL-PSPL}$")
+
+    q_handles = [Line2D([0], [0], color=st["color"], ls="-", marker=st["marker"],
+                        ms=3.0, label=rf"${t:g}$")
+                 for t, st in zip(q_targets, q_styles)]
+    family_handles = [
+        Line2D([0], [0], color="0.15", ls=LS_DARK, label=r"$q_f=0$"),
+        Line2D([0], [0], color="0.15", ls=LS_CANCEL, label=r"$q_f=q_M$"),
     ]
-    .by_key()
-    .get(
-        "color",
-        [],
-    )
-)
-
-
-if len(color_cycle) < 3:
-
-    raise RuntimeError(
-        "Matplotlib color cycle must contain at least 3 colors."
-    )
-
-
-q_targets = [
-    1e-2,
-    1e-1,
-    1.0,
-]
-
-
-q_colors = (
-    color_cycle[:3]
-)
-
-
-# ============================================================
-# Panel A:
-# D vs xi_rel/u0
-# ============================================================
-
-ax = axes[0]
-
-
-# ------------------------------------------------------------
-# Mark the range used to measure alpha.
-# ------------------------------------------------------------
-
-ax.axvspan(
-    XI_FIT_MIN,
-    XI_FIT_MAX,
-    color="0.5",
-    alpha=0.07,
-    zorder=0,
-)
-
-
-ax.text(
-    np.sqrt(
-        XI_FIT_MIN
-        * XI_FIT_MAX
-    ),
-    0.975,
-    "slope-fit range",
-    transform=ax.get_xaxis_transform(),
-    ha="center",
-    va="top",
-    fontsize=10,
-)
-
-
-# ------------------------------------------------------------
-# Numerical curves
-# ------------------------------------------------------------
-
-for target, color in zip(
-    q_targets,
-    q_colors,
-):
-
-    iq = nearest_index(
-        qM,
-        target,
-    )
-
-
-    # Dark companion:
-    # first-order photocenter displacement survives.
-    ax.plot(
-        xi,
-        D[
-            i_dark,
-            iq,
-            :,
-        ],
-        color=color,
-        linestyle="-",
-        linewidth=2.0,
-    )
-
-
-    # qf=qM:
-    # first-order photocenter displacement cancels.
-    ax.plot(
-        xi,
-        D[
-            i_cancel,
-            iq,
-            :,
-        ],
-        color=color,
-        linestyle="--",
-        linewidth=2.0,
-    )
-
-
-# ------------------------------------------------------------
-# Reference slopes
-#
-# These are visual guides only.
-# ------------------------------------------------------------
-
-x_ref_linear = np.logspace(
-    -3.8,
-    -2.7,
-    40,
-)
-
-x0_linear = x_ref_linear[0]
-
-y_ref_linear = (
-    5e-6
-    * (
-        x_ref_linear
-        / x0_linear
-    )
-)
-
-
-ax.plot(
-    x_ref_linear,
-    y_ref_linear,
-    color="0.40",
-    linewidth=1.1,
-)
-
-
-ax.text(
-    x_ref_linear[-1] * 1.08,
-    y_ref_linear[-1],
-    r"slope $1$",
-    fontsize=9,
-    ha="left",
-    va="center",
-)
-
-
-x_ref_quad = np.logspace(
-    -3.8,
-    -2.7,
-    40,
-)
-
-x0_quad = x_ref_quad[0]
-
-y_ref_quad = (
-    3e-10
-    * (
-        x_ref_quad
-        / x0_quad
-    )**2
-)
-
-
-ax.plot(
-    x_ref_quad,
-    y_ref_quad,
-    color="0.40",
-    linewidth=1.1,
-)
-
-
-ax.text(
-    x_ref_quad[-1] * 1.08,
-    y_ref_quad[-1],
-    r"slope $2$",
-    fontsize=9,
-    ha="left",
-    va="center",
-)
-
-
-# ------------------------------------------------------------
-# Axes
-# ------------------------------------------------------------
-
-ax.set_xscale(
-    "log"
-)
-
-ax.set_yscale(
-    "log"
-)
-
-
-ax.set_xlabel(
-    r"$\xi_{\rm rel}/u_0$"
-)
-
-ax.set_ylabel(
-    r"$D_{\rm BSPL-PSPL}$"
-)
-
-
-# ------------------------------------------------------------
-# Separate legends:
-#
-# color     -> qM
-# linestyle -> qf family
-# ------------------------------------------------------------
-
-q_handles = [
-
-    Line2D(
-        [0],
-        [0],
-        color=color,
-        linestyle="-",
-        linewidth=2.2,
-        label=rf"${target:g}$",
-    )
-
-    for target, color
-    in zip(
-        q_targets,
-        q_colors,
-    )
-]
-
-
-family_handles = [
-
-    Line2D(
-        [0],
-        [0],
-        color="0.15",
-        linestyle="-",
-        linewidth=2.2,
-        label=r"$q_f=0$",
-    ),
-
-    Line2D(
-        [0],
-        [0],
-        color="0.15",
-        linestyle="--",
-        linewidth=2.2,
-        label=r"$q_f=q_M$",
-    ),
-]
-
-
-legend_q = ax.legend(
-    handles=q_handles,
-    title=r"$q_M$",
-    frameon=False,
-    loc="lower right",
-    fontsize=10,
-    title_fontsize=10,
-)
-
-
-ax.add_artist(
-    legend_q
-)
-
-
-ax.legend(
-    handles=family_handles,
-    title="Flux ratio",
-    frameon=False,
-    loc="upper right",
-    bbox_to_anchor=(0.98, 0.82),
-    fontsize=10,
-    title_fontsize=10,
-)
-
-
-ax.text(
-    0.04,
-    0.95,
-    "(a)",
-    transform=ax.transAxes,
-    ha="left",
-    va="top",
-    fontweight="bold",
-)
-
-
-# ============================================================
-# Panel B:
-# measured alpha(qM)
-# ============================================================
-
-ax = axes[1]
-
-
-family_colors = (
-    color_cycle[:2]
-)
-
-
-ax.plot(
-    qM,
-    alpha[
-        i_dark,
-        :,
-    ],
-    color=family_colors[0],
-    linewidth=2.2,
-    label=r"$q_f=0$",
-)
-
-
-ax.plot(
-    qM,
-    alpha[
-        i_cancel,
-        :,
-    ],
-    color=family_colors[1],
-    linewidth=2.2,
-    label=r"$q_f=q_M$",
-)
-
-
-# ------------------------------------------------------------
-# Expected perturbative orders
-# ------------------------------------------------------------
-
-ax.axhline(
-    1.0,
-    color="0.4",
-    linewidth=1.1,
-    linestyle="--",
-    zorder=0,
-)
-
-ax.axhline(
-    2.0,
-    color="0.4",
-    linewidth=1.1,
-    linestyle="--",
-    zorder=0,
-)
-
-
-ax.set_xscale(
-    "log"
-)
-
-
-ax.set_xlabel(
-    r"$q_M$"
-)
-
-ax.set_ylabel(
-    r"$\alpha$ in "
-    r"$D\propto(\xi_{\rm rel}/u_0)^\alpha$"
-)
-
-
-# The interesting information is concentrated around alpha=1 and 2.
-ax.set_ylim(
-    0.93,
-    2.07,
-)
-
-
-ax.legend(
-    frameon=False,
-    loc="center right",
-)
-
-
-ax.text(
-    0.04,
-    0.90,
-    "(b)",
-    transform=ax.transAxes,
-    ha="left",
-    va="top",
-    fontweight="bold",
-)
-
-
-# ============================================================
-# Save
-# ============================================================
-
-png = (
-    figure_dir
-    / "photocenter_scaling.png"
-)
-
-pdf = (
-    figure_dir
-    / "photocenter_scaling.pdf"
-)
-
-
-fig.savefig(
-    png,
-    dpi=600,
-)
-
-fig.savefig(
-    pdf,
-)
-
-
-plt.close(
-    fig
-)
-
-
-# ============================================================
-# Metadata
-# ============================================================
-
-metadata = (
-    figure_dir
-    / "photocenter_scaling.txt"
-)
-
-
-metadata.write_text(
-    "\n".join(
-        [
-            f"dataset={filename}",
-            f"dataset_commit={dataset_commit}",
-            "figure=photocenter_scaling",
-            f"xi_fit_min={XI_FIT_MIN}",
-            f"xi_fit_max={XI_FIT_MAX}",
-            f"D_floor={D_FLOOR}",
-            "dark_expected_alpha=1",
-            "photocenter_cancel_expected_alpha=2",
-            "",
-        ]
-    )
-)
-
-
-print(
-    "Input :",
-    filename,
-)
-
-print(
-    "PNG   :",
-    png,
-)
-
-print(
-    "PDF   :",
-    pdf,
-)
-
-print(
-    "Meta  :",
-    metadata,
-)
+    leg_q = ax.legend(handles=q_handles, title=r"$q_M$", loc="lower right")
+    ax.add_artist(leg_q)
+    ax.legend(handles=family_handles, loc="upper left",
+              bbox_to_anchor=(0.0, 0.89))
+    if label_panel:
+        panel_label(ax, "a")
+
+
+# ---------------- manuscript version: (a) D(xi), (b) gamma(q_M)
+fig = plt.figure(figsize=(fig_width(1.0), 2.7))
+ax_a = fig.add_axes([0.085, 0.15, 0.40, 0.83])
+ax_b = fig.add_axes([0.585, 0.15, 0.40, 0.83])
+
+draw_scaling_panel(ax_a)
+
+ax_b.axhline(1.0, color="0.55", lw=LW_THIN, ls=":", zorder=0)
+ax_b.axhline(2.0, color="0.55", lw=LW_THIN, ls=":", zorder=0)
+ax_b.plot(qM, gamma[i_dark, :], color="k", ls=LS_DARK, label=r"$q_f=0$")
+ax_b.plot(qM, gamma[i_cancel, :], color="k", ls=LS_CANCEL, label=r"$q_f=q_M$")
+ax_b.set_xscale("log")
+ax_b.set_xlim(qM.min(), qM.max())
+ax_b.xaxis.set_major_locator(LogLocator(base=10, numticks=12))
+ax_b.set_ylim(0.9, 2.2)
+ax_b.yaxis.set_major_locator(MultipleLocator(0.2))
+ax_b.yaxis.set_minor_locator(MultipleLocator(0.05))
+ax_b.yaxis.set_major_formatter(FormatStrFormatter("$%.1f$"))
+ax_b.set_xlabel(r"$q_M$")
+ax_b.set_ylabel(r"$\gamma$ in $D\propto(\xi_{\rm rel}/u_0)^{\gamma}$")
+ax_b.legend(loc="center right")
+panel_label(ax_b, "b")
+
+png, pdf = save_figure(fig, figure_dir / "photocenter_scaling")[::-1]
+plt.close(fig)
+
+# ---------------- alternative: panel (a) only (slopes are in Table 7)
+fig = plt.figure(figsize=(fig_width(0.6), 2.7))
+ax = fig.add_axes([0.155, 0.15, 0.825, 0.83])
+draw_scaling_panel(ax, label_panel=False)
+png_alt, pdf_alt = save_figure(fig, figure_dir / "photocenter_scaling_alt")[::-1]
+plt.close(fig)
+
+np.savez(verify_dir / "photocenter_scaling_plotted_values.npz",
+         xi=xi, qM=qM, D_dark=D[i_dark], D_cancel=D[i_cancel],
+         gamma_dark=gamma[i_dark], gamma_cancel=gamma[i_cancel],
+         q_indices=np.array([nearest_index(qM, t) for t in q_targets]))
+
+metadata = figure_dir / "photocenter_scaling.txt"
+metadata.write_text("\n".join([
+    f"dataset={filename}",
+    f"dataset_commit={dataset_commit}",
+    "figure=photocenter_scaling",
+    f"xi_fit_min={XI_FIT_MIN}",
+    f"xi_fit_max={XI_FIT_MAX}",
+    f"D_floor={D_FLOOR}",
+    "dark_expected_gamma=1",
+    "photocenter_cancel_expected_gamma=2",
+    "",
+]))
+print("Input :", filename)
+print("PDF :", pdf, pdf_alt)
+print("PNG :", png, png_alt)
+print("Meta :", metadata)

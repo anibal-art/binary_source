@@ -13,7 +13,6 @@ import scipy.optimize as so
 from functions_aux import (
     mag,
     flux_to_mag,
-    sigma_W149_func,
     mag_to_flux,
     sigma_flux_from_sigma_mag,
     sigma_flux_from_flux,

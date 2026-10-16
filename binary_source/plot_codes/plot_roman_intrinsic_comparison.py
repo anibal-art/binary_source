@@ -26,29 +26,24 @@ OUTDIR.mkdir(
     exist_ok=True,
 )
 
-OUT_PDF = OUTDIR / "roman_intrinsic_comparison_f146.pdf"
-OUT_PNG = OUTDIR / "roman_intrinsic_comparison_f146.png"
+OUT_PDF = OUTDIR / "roman_intrinsic_comparison.pdf"
+OUT_PNG = OUTDIR / "roman_intrinsic_comparison.png"
 
 
 # ============================================================
-# Style
+# Style (shared paper style)
 # ============================================================
 
-plt.rcParams.update(
-    {
-        "font.family": "serif",
-        "font.serif": ["STIXGeneral"],
-        "mathtext.fontset": "stix",
-        "font.size": 12,
-        "axes.labelsize": 13,
-        "axes.titlesize": 13,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "legend.fontsize": 10,
-        "figure.dpi": 150,
-        "savefig.dpi": 600,
-    }
-)
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from paper_style import (apply_paper_style, fig_width, heatmap, panel_label,
+                         save_figure, halo, d_norm, place_contour_labels,
+                         CHI2_CMAP, D_CMAP, D_LABEL, F146_STYLE, C_ORANGE,
+                         LW_MAIN, LW_THIN, FS_ANNOT)
+import matplotlib.ticker as mticker
+
+apply_paper_style()
+
 
 
 # ============================================================
@@ -142,316 +137,149 @@ if not np.all(
 # Coordinates
 # ============================================================
 
-X, Y = np.meshgrid(
-    P_over_tE,
-    u0,
-)
+X, Y = np.meshgrid(P_over_tE, u0)
 
-
-# ============================================================
-# Display quantity
-# ============================================================
-
-# Plot log10 DeltaChi2.
-# Clip only for visualization; original values are untouched.
+# Display quantity: log10 DeltaChi2, clipped only for the colour scale.
 CHI2_FLOOR = 1.0e-2
+logchi = np.log10(np.maximum(CHI2, CHI2_FLOOR))
+print("log10 DeltaChi2 global range:", np.nanmin(logchi), np.nanmax(logchi))
 
-logchi = np.log10(
-    np.maximum(
-        CHI2,
-        CHI2_FLOOR,
-    )
-)
-
-global_min = np.nanmin(
-    logchi
-)
-
-global_max = np.nanmax(
-    logchi
-)
-
-print(
-    "log10 DeltaChi2 global range:",
-    global_min,
-    global_max,
-)
-
-
-# A fixed common range makes all three panels directly comparable.
+# Fixed common range so the three panels are directly comparable.
 VMIN = -2.0
 VMAX = 8.0
+norm = Normalize(vmin=VMIN, vmax=VMAX)
 
-norm = Normalize(
-    vmin=VMIN,
-    vmax=VMAX,
-)
-
-
-# ============================================================
-# Contours
-# ============================================================
-
-D_LEVELS = [
-    1.0e-3,
-    1.0e-2,
-]
-
+D_LEVELS = [1.0e-3, 1.0e-2]
 CHI2_LEVEL = 100.0
 
+U0_TICKS = [0.01, 0.03, 0.1, 0.3]
+U0_LABELS = ["$0.01$", "$0.03$", "$0.1$", "$0.3$"]
+
+
+def format_u0_axis(axis):
+    axis.set_major_locator(mticker.FixedLocator(U0_TICKS))
+    axis.set_major_formatter(mticker.FixedFormatter(U0_LABELS))
+    axis.set_minor_locator(mticker.LogLocator(base=10, subs=np.arange(2, 10), numticks=10))
+    axis.set_minor_formatter(mticker.NullFormatter())
+
 
 # ============================================================
-# Plot
+# Manuscript version: three panels, log10 DeltaChi2 + contours
 # ============================================================
 
-fig, axes = plt.subplots(
-    1,
-    len(mags),
-    figsize=(13.2, 4.25),
-    sharex=True,
-    sharey=True,
-)
-
-if len(mags) == 1:
-    axes = [axes]
-
+fig = plt.figure(figsize=(fig_width(1.0), 2.7))
+left, gap, right_cb = 0.075, 0.018, 0.875
+w = (right_cb - 0.02 - left - 2 * gap) / 3
+bottom, top = 0.15, 0.81
+axes = [fig.add_axes([left + k * (w + gap), bottom, w, top - bottom]) for k in range(len(mags))]
+cax = fig.add_axes([right_cb, bottom, 0.016, top - bottom])
 
 mesh = None
+for im, (ax, mag) in enumerate(zip(axes, mags)):
+    mesh = heatmap(ax, X, Y, logchi[im], cmap=CHI2_CMAP, norm=norm)
 
-for im, (ax, mag) in enumerate(
-    zip(
-        axes,
-        mags,
-    )
-):
-
-    # --------------------------------------------------------
-    # Roman DeltaChi2 background
-    # --------------------------------------------------------
-
-    mesh = ax.pcolormesh(
-        X,
-        Y,
-        logchi[im],
-        shading="auto",
-        cmap="viridis",
-        norm=norm,
-        rasterized=True,
-    )
-
-    # --------------------------------------------------------
-    # Intrinsic D contours
-    # --------------------------------------------------------
-
-    # --------------------------------------------------------
-    # White underlay for intrinsic D contours
-    #
-    # Drawing the same contours twice produces a robust halo:
-    # a thick white line underneath and a thinner black line
-    # on top. This keeps D visible across the full viridis map.
-    # --------------------------------------------------------
-
-    ax.contour(
-        X,
-        Y,
-        D,
-        levels=D_LEVELS,
-        colors="white",
-        linewidths=3.4,
-        linestyles=[
-            "--",
-            "-",
-        ],
-        zorder=4,
-    )
-
-    cs_D = ax.contour(
-        X,
-        Y,
-        D,
-        levels=D_LEVELS,
-        colors="black",
-        linewidths=1.35,
-        linestyles=[
-            "--",
-            "-",
-        ],
-        zorder=5,
-    )
-
-    labels_D = ax.clabel(
-        cs_D,
-        inline=False,
-        fontsize=9,
-        fmt={
-            1.0e-3: r"$D=10^{-3}$",
-            1.0e-2: r"$D=10^{-2}$",
-        },
-    )
-
-    # White halo around the contour labels.
-    for txt in labels_D:
-        txt.set_path_effects(
-            [
-                pe.Stroke(
-                    linewidth=3.0,
-                    foreground="white",
-                ),
-                pe.Normal(),
-            ]
-        )
-
-    # --------------------------------------------------------
-    # Roman model-separation contour
-    # --------------------------------------------------------
-
-    cs_chi = ax.contour(
-        X,
-        Y,
-        CHI2[im],
-        levels=[CHI2_LEVEL],
-        colors="white",
-        linewidths=2.0,
-    )
-
-    labels_chi = ax.clabel(
-        cs_chi,
-        inline=False,
-        fontsize=9,
-        fmt={
-            CHI2_LEVEL:
-                r"$\Delta\chi^2=100$"
-        },
-    )
-
-    # Dark halo improves the white-label contrast on the
-    # brightest parts of the colormap.
-    for txt in labels_chi:
-        txt.set_path_effects(
-            [
-                pe.Stroke(
-                    linewidth=2.5,
-                    foreground="black",
-                ),
-                pe.Normal(),
-            ]
-        )
-
-    # --------------------------------------------------------
-    # Axes
-    # --------------------------------------------------------
+    ax.contour(X, Y, D, levels=D_LEVELS, colors="white", linewidths=2.4,
+               linestyles=["--", "-"], zorder=4)
+    cs_D = ax.contour(X, Y, D, levels=D_LEVELS, colors="black",
+                      linewidths=LW_THIN + 0.2, linestyles=["--", "-"], zorder=5)
+    cs_chi = ax.contour(X, Y, CHI2[im], levels=[CHI2_LEVEL], colors="white",
+                        linewidths=LW_MAIN, zorder=6)
+    cs_chi.set_path_effects(halo(2.2, "black"))
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-
-    ax.set_xlim(
-        P_over_tE.min(),
-        P_over_tE.max(),
-    )
-
-    ax.set_ylim(
-        u0.min(),
-        u0.max(),
-    )
-
-    ax.set_title(
-        rf"$F146={mag:.0f}$"
-    )
-
-    ax.set_xlabel(
-        r"$P/t_E$"
-    )
-
-    ax.tick_params(
-        which="both",
-        direction="in",
-        top=True,
-        right=True,
-    )
+    ax.set_xlim(P_over_tE.min(), P_over_tE.max())
+    ax.set_ylim(u0.min(), u0.max())
+    ax.xaxis.set_major_locator(mticker.LogLocator(base=10, numticks=10))
+    format_u0_axis(ax.yaxis)
+    if im > 0:
+        ax.tick_params(labelleft=False)
+    ax.set_xlabel(r"$P/t_E$")
+    ax.set_title(rf"F146 $={mag:.0f}$")
+    panel_label(ax, "abc"[im])
 
 
-axes[0].set_ylabel(
-    r"$u_0$"
-)
+axes[0].set_ylabel(r"$u_0$")
 
+# Contours are identified by a legend (lines are too close for inline labels)
+legend_handles = [
+    plt.Line2D([], [], color="black", ls="-", lw=LW_THIN + 0.2,
+               path_effects=halo(2.4, "white"), label=r"$D_{\rm BSPL-PSPL}=10^{-2}$"),
+    plt.Line2D([], [], color="black", ls="--", lw=LW_THIN + 0.2,
+               path_effects=halo(2.4, "white"), label=r"$D_{\rm BSPL-PSPL}=10^{-3}$"),
+    plt.Line2D([], [], color="white", ls="-", lw=LW_MAIN,
+               path_effects=halo(2.2, "black"), label=r"$\Delta\chi^2_{\rm Roman}=100$"),
+]
+leg = fig.legend(handles=legend_handles, loc="upper center", ncol=3,
+                 bbox_to_anchor=(0.47, 1.0), frameon=True, fancybox=False,
+                 edgecolor="none", facecolor="0.80", borderpad=0.35,
+                 columnspacing=1.5)
 
-# ============================================================
-# Layout
-# ============================================================
+cbar = fig.colorbar(mesh, cax=cax, orientation="vertical")
+cbar.set_label(r"$\log_{10}\Delta\chi^2_{\rm Roman}$")
+cbar.ax.tick_params(which="both", direction="in")
 
-fig.subplots_adjust(
-    left=0.075,
-    right=0.885,
-    bottom=0.18,
-    top=0.90,
-    wspace=0.08,
-)
-
-
-# ============================================================
-# Shared colorbar
-# ============================================================
-
-cax = fig.add_axes(
-    [
-        0.905,
-        0.18,
-        0.015,
-        0.72,
-    ]
-)
-
-cbar = fig.colorbar(
-    mesh,
-    cax=cax,
-    orientation="vertical",
-)
-
-cbar.set_label(
-    r"$\log_{10}\Delta\chi^2_{\rm Roman}$"
-)
-
-cbar.ax.tick_params(
-    which="both",
-    direction="in",
-)
-
-
-# ============================================================
-# Compact annotation
-# ============================================================
-
-fig.text(
-    0.48,
-    0.015,
-    (
-        r"Black contours: intrinsic $D_{\rm BSPL-PSPL}$; "
-        r"white contour: representative Roman model-separation level."
-    ),
-    ha="center",
-    va="bottom",
-    fontsize=10,
-)
-
-
-# ============================================================
-# Save
-# ============================================================
-
-fig.savefig(
-    OUT_PDF,
-    bbox_inches="tight",
-)
-
-fig.savefig(
-    OUT_PNG,
-    bbox_inches="tight",
-    dpi=600,
-)
-
+save_figure(fig, OUT_PDF.with_suffix(""))
 plt.close(fig)
+
+# ============================================================
+# Alternative: one D map in (u0, P/tE) with the three
+# DeltaChi2_Roman = 100 contours (F146 = 19, 21, 23)
+# ============================================================
+
+fig = plt.figure(figsize=(fig_width(0.6), 3.05))
+ax = fig.add_axes([0.16, 0.13, 0.80, 0.68])
+cax = fig.add_axes([0.16, 0.885, 0.80, 0.025])
+
+pcm = heatmap(ax, u0, P_over_tE, D.T, cmap=D_CMAP, norm=d_norm())
+cs_list, fmts, cols, halos = [], [], [], []
+for im, mag in enumerate(mags):
+    st = F146_STYLE[int(round(mag))]
+    cs = ax.contour(u0, P_over_tE, CHI2[im].T, levels=[CHI2_LEVEL],
+                    colors=st["color"], linestyles=st["ls"], linewidths=LW_MAIN + 0.2,
+                    zorder=6)
+    outline = "black" if st["color"].upper() in ("#FFFFFF", "WHITE", C_ORANGE.upper()) else "white"
+    cs.set_path_effects(halo(2.4, outline))
+    cs_list.append(cs)
+    fmts.append({CHI2_LEVEL: rf"${mag:.0f}$"})
+    cols.append(st["color"])
+    halos.append(halo(1.8, outline))
+
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(u0.min(), u0.max())
+ax.set_ylim(P_over_tE.min(), P_over_tE.max())
+ax.xaxis.set_major_locator(mticker.FixedLocator(U0_TICKS))
+ax.xaxis.set_major_formatter(mticker.FixedFormatter(U0_LABELS))
+ax.xaxis.set_minor_locator(mticker.LogLocator(base=10, subs=np.arange(2, 10), numticks=10))
+ax.xaxis.set_minor_formatter(mticker.NullFormatter())
+ax.yaxis.set_major_locator(mticker.LogLocator(base=10, numticks=10))
+ax.yaxis.set_minor_formatter(mticker.NullFormatter())
+ax.set_xlabel(r"$u_0$")
+ax.set_ylabel(r"$P/t_E$")
+place_contour_labels(ax, cs_list, fmts=fmts, colors=cols, label_halo=halos,
+                     box=(0.12, 0.88, 0.15, 0.85))
+ax.text(0.96, 0.95, r"$\Delta\chi^2_{\rm Roman}=100$, F146 $=19,21,23$",
+        transform=ax.transAxes, ha="right", va="top", fontsize=FS_ANNOT,
+        color="white")
+
+cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal")
+cbar.ax.xaxis.set_ticks_position("top")
+cbar.ax.xaxis.set_label_position("top")
+cbar.ax.tick_params(which="both", direction="in", pad=1.5)
+cbar.set_label(D_LABEL, labelpad=3)
+
+save_figure(fig, OUTDIR / "roman_intrinsic_comparison_alt")
+plt.close(fig)
+
+VERIFY = Path("figures/_verify")
+VERIFY.mkdir(parents=True, exist_ok=True)
+np.savez(VERIFY / "roman_intrinsic_comparison_plotted_values.npz",
+         u0=u0, P_over_tE=P_over_tE, D=D, CHI2=CHI2, logchi=logchi, mags=mags,
+         D_levels=np.array(D_LEVELS), chi2_level=CHI2_LEVEL)
 
 print()
 print("Saved:")
-print(" ", OUT_PDF)
-print(" ", OUT_PNG)
+for p in (OUT_PDF, OUT_PNG, OUTDIR / "roman_intrinsic_comparison_alt.pdf",
+          OUTDIR / "roman_intrinsic_comparison_alt.png"):
+    print(" ", p)

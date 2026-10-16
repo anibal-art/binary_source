@@ -46,74 +46,18 @@ import matplotlib.patheffects as pe
 
 from matplotlib.ticker import LogLocator
 from scipy.stats import spearmanr
-
-
 # ============================================================
-# GLOBAL PAPER STYLE
+# PAPER STYLE (shared)
 # ============================================================
 
-PAPER_DPI = 600
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from paper_style import (apply_paper_style, fig_width, heatmap, panel_label,
+                         save_figure, halo, pow10_label, BIAS_CMAP,
+                         FS_ANNOT, LW_THIN, C_BLUE, C_VERMILION)
 
-plt.rcParams.update({
+apply_paper_style()
 
-    # --------------------------------------------------------
-    # Fonts
-    # --------------------------------------------------------
-    "font.family": "serif",
-    "font.serif": ["STIXGeneral"],
-    "mathtext.fontset": "stix",
-
-    "font.size": 9,
-
-    "axes.labelsize": 10,
-    "axes.titlesize": 10,
-
-    "xtick.labelsize": 8.5,
-    "ytick.labelsize": 8.5,
-
-    "legend.fontsize": 8,
-
-    # --------------------------------------------------------
-    # Axes
-    # --------------------------------------------------------
-    "axes.linewidth": 0.8,
-
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-
-    "xtick.top": True,
-    "ytick.right": True,
-
-    "xtick.major.size": 4.0,
-    "ytick.major.size": 4.0,
-
-    "xtick.minor.size": 2.3,
-    "ytick.minor.size": 2.3,
-
-    "xtick.major.width": 0.75,
-    "ytick.major.width": 0.75,
-
-    "xtick.minor.width": 0.55,
-    "ytick.minor.width": 0.55,
-
-    # --------------------------------------------------------
-    # Lines
-    # --------------------------------------------------------
-    "lines.linewidth": 1.4,
-
-    # --------------------------------------------------------
-    # Saving
-    # --------------------------------------------------------
-    "savefig.dpi": PAPER_DPI,
-    "savefig.bbox": "tight",
-    "savefig.pad_inches": 0.03,
-
-    # --------------------------------------------------------
-    # PDF
-    # --------------------------------------------------------
-    "pdf.fonttype": 42,
-    "ps.fonttype": 42,
-})
 
 
 # ============================================================
@@ -1027,146 +971,6 @@ def log_edges(x):
 
 
 # ============================================================
-# D CONTOURS
-# ============================================================
-
-def add_D_contours(
-    ax,
-    x,
-    y,
-    D_map,
-    levels=D_LEVELS,
-):
-
-    X, Y = np.meshgrid(
-        x,
-        y,
-        indexing="ij",
-    )
-
-
-    valid_values = D_map[
-        np.isfinite(D_map)
-        &
-        (D_map > 0)
-    ]
-
-
-    if len(valid_values) == 0:
-        return None
-
-
-    dmin = np.nanmin(
-        valid_values
-    )
-
-    dmax = np.nanmax(
-        valid_values
-    )
-
-
-    levels_here = [
-        level
-        for level in levels
-        if dmin < level < dmax
-    ]
-
-
-    if len(levels_here) == 0:
-        return None
-
-
-    cs = ax.contour(
-
-        X,
-        Y,
-
-        np.ma.masked_invalid(
-            D_map
-        ),
-
-        levels=levels_here,
-
-        colors="black",
-
-        linewidths=0.90,
-
-        linestyles="-",
-
-        zorder=10,
-    )
-
-
-    # --------------------------------------------------------
-    # White halo
-    # --------------------------------------------------------
-
-    try:
-
-        for collection in cs.collections:
-
-            collection.set_path_effects([
-
-                pe.Stroke(
-                    linewidth=1.8,
-                    foreground="white",
-                ),
-
-                pe.Normal(),
-
-            ])
-
-    except AttributeError:
-
-        pass
-
-
-    # --------------------------------------------------------
-    # Labels
-    # --------------------------------------------------------
-
-    if LABEL_D_CONTOURS:
-
-        fmt = {
-            level:
-            rf"$D=10^{{{int(np.log10(level))}}}$"
-            for level in levels_here
-        }
-
-
-        labels = ax.clabel(
-
-            cs,
-
-            fmt=fmt,
-
-            fontsize=7.0,
-
-            inline=False,
-
-            inline_spacing=5,
-
-        )
-
-
-        for text in labels:
-
-            text.set_path_effects([
-
-                pe.Stroke(
-                    linewidth=2.0,
-                    foreground="white",
-                ),
-
-                pe.Normal(),
-
-            ])
-
-
-    return cs
-
-
-# ============================================================
 # COMMON AXIS STYLE
 # ============================================================
 
@@ -1347,725 +1151,199 @@ print("=" * 80)
 
 # END INDEPENDENT BIAS NORMS
 
-
-fig1, axes = plt.subplots(
-
-    1,
-    2,
-
-    figsize=(
-        7.2,
-        3.25,
-    ),
-
-)
-
-
-fig1.subplots_adjust(
-
-    left=0.085,
-
-    right=0.985,
-
-    bottom=0.16,
-
-    top=0.78,
-
-    wspace=0.20,
-
-)
-
-
-cmap = plt.get_cmap(
-    "RdBu_r"
-)
-
-
 # ============================================================
-# PANEL (a) — u0 SCAN
-# ============================================================
-
-ax = axes[0]
-
-
-pcm_u0 = ax.pcolormesh(
-
-    u0_edges,
-    P_u0_edges,
-
-    np.ma.masked_invalid(
-        u0_DTE_norm
-    ).T,
-
-    cmap=cmap,
-
-    norm=norm_DTE_u0,
-
-    shading="auto",
-
-    # Important:
-    # rasterize only the dense heatmap
-    rasterized=True,
-
-    zorder=1,
-
-)
-
-
-add_D_contours(
-
-    ax=ax,
-
-    x=u0_data["parameter"],
-
-    y=u0_data["P_over_tE"],
-
-    D_map=u0_data["D"],
-
-)
-
-
-format_log_panel(ax)
-
-
-ax.set_xlabel(
-    r"$u_0$"
-)
-
-ax.set_ylabel(
-    r"$P/t_E$"
-)
-
-
-ax.text(
-
-    0.045,
-    0.95,
-
-    "(a)",
-
-    transform=ax.transAxes,
-
-    ha="left",
-    va="top",
-
-    fontsize=9.5,
-
-    zorder=20,
-
-)
-
-
-# ============================================================
-# PANEL (b) — q_M SCAN
-# ============================================================
-
-ax = axes[1]
-
-
-pcm_q = ax.pcolormesh(
-
-    q_edges,
-    P_q_edges,
-
-    np.ma.masked_invalid(
-        q_DTE_norm
-    ).T,
-
-    cmap=cmap,
-
-    norm=norm_DTE_q,
-
-    shading="auto",
-
-    rasterized=True,
-
-    zorder=1,
-
-)
-
-
-add_D_contours(
-
-    ax=ax,
-
-    x=q_data["parameter"],
-
-    y=q_data["P_over_tE"],
-
-    D_map=q_data["D"],
-
-)
-
-
-format_log_panel(ax)
-
-
-ax.set_xlabel(
-    r"$q_M=M_2/M_1$"
-)
-
-
-ax.text(
-
-    0.045,
-    0.95,
-
-    "(b)",
-
-    transform=ax.transAxes,
-
-    ha="left",
-    va="top",
-
-    fontsize=9.5,
-
-    zorder=20,
-
-)
-
-
-# ============================================================
-# COMMON TOP COLORBAR
-# ============================================================
-
-pos_left = axes[0].get_position()
-pos_right = axes[1].get_position()
-
-
-# ============================================================
-# PANEL-SPECIFIC TOP COLORBARS
-# ============================================================
-
-for this_ax, this_pcm in [
-
-    (
-        axes[0],
-        pcm_u0,
-    ),
-
-    (
-        axes[1],
-        pcm_q,
-    ),
-
-]:
-
-    pos_this = this_ax.get_position()
-
-    cax_this = fig1.add_axes([
-
-        pos_this.x0,
-
-        0.855,
-
-        pos_this.width,
-
-        0.025,
-
-    ])
-
-    cbar_this = fig1.colorbar(
-
-        this_pcm,
-
-        cax=cax_this,
-
-        orientation="horizontal",
-
-        extend="both",
-
-    )
-
-    cbar_this.ax.xaxis.set_ticks_position(
-        "top"
-    )
-
-    cbar_this.ax.xaxis.set_label_position(
-        "top"
-    )
-
-    cbar_this.ax.tick_params(
-
-        direction="in",
-
-        labelsize=8,
-
-        pad=2,
-
-    )
-
-    cbar_this.set_label(
-
-        r"$\Delta t_E/t_E$",
-
-        fontsize=10,
-
-        labelpad=3,
-
-    )
-
-
-# ============================================================
-
-figure1_png = os.path.join(
-    output_directory,
-    f"paper_tE_bias_D_contours_tE{int(tE_plot)}.png",
-)
-
-figure1_pdf = os.path.join(
-    output_directory,
-    f"paper_tE_bias_D_contours_tE{int(tE_plot)}.pdf",
-)
-
-
-fig1.savefig(
-
-    figure1_png,
-
-    dpi=PAPER_DPI,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-fig1.savefig(
-
-    figure1_pdf,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-print()
-print("=" * 80)
-print("FIGURE 1 SAVED")
-print(figure1_png)
-print(figure1_pdf)
-print("=" * 80)
-
-
-plt.show()
-
-
-# ============================================================
+# PLOTTING (restyled; loaded arrays and colour norms above are unchanged)
 # ============================================================
 #
-# FIGURE 2
-#
-# CORRELATED u0 -- tE PARAMETER SHIFTS
-#
-# ============================================================
+# Fig. 3: paper_tE_bias_D_contours_tE30.{pdf,png}   printed width 6.14 in
+# Fig. 4: paper_u0_tE_correlated_bias_tE30.{pdf,png}  printed width 3.07 in
+#         paper_u0_tE_correlated_bias_tE30_alt.{pdf,png} (+ top axis P [d])
 # ============================================================
 
+import json
+import matplotlib.ticker as mticker
 
-# ============================================================
-# FIND COMMON u0 = 0.1 SLICE
-# ============================================================
+verify_directory = os.path.join(home, "binary_source", "figures", "_verify")
+os.makedirs(verify_directory, exist_ok=True)
 
-iu = np.argmin(
-
-    np.abs(
-
-        np.log10(
-            u0_data["parameter"]
-        )
-
-        -
-
-        np.log10(
-            u0_slice_target
-        )
-
-    )
-
-)
+def _percent(v, _pos=None):
+    s = f"{100.0 * v:.1f}"
+    return "$0.0$" if s in ("-0.0", "0.0") else f"${s}$"
 
 
-u0_used = (
-    u0_data[
-        "parameter"
-    ][iu]
-)
+percent_fmt = mticker.FuncFormatter(_percent)
 
 
-# ============================================================
-# FIND q_M ~ 0.5 SLICE
-# ============================================================
+def D_contours_labelled(ax, x, y, D_map, label_xfrac, levels=D_LEVELS):
+    """Black D contours with inline labels at chosen positions.
 
-iq = np.argmin(
+    label_xfrac: {level: [fraction of log-x axis span, ...]} giving where
+    along each branch the label goes (one entry per branch, ordered by
+    decreasing mean y of the branch).
+    """
+    X, Y = np.meshgrid(x, y, indexing="ij")
+    valid_values = D_map[np.isfinite(D_map) & (D_map > 0)]
+    dmin, dmax = np.nanmin(valid_values), np.nanmax(valid_values)
+    levels_here = [lv for lv in levels if dmin < lv < dmax]
+    cs = ax.contour(X, Y, np.ma.masked_invalid(D_map), levels=levels_here,
+                    colors="black", linewidths=LW_THIN, linestyles="-",
+                    zorder=10)
 
-    np.abs(
-
-        np.log10(
-            q_data["parameter"]
-        )
-
-        -
-
-        np.log10(
-            q_slice_target
-        )
-
-    )
-
-)
-
-
-q_used = (
-    q_data[
-        "parameter"
-    ][iq]
-)
+    lx0, lx1 = np.log10(ax.get_xlim())
+    manual = []
+    for i, lv in enumerate(cs.levels):
+        segs = [s for s in cs.allsegs[i] if len(s) > 5]
+        segs.sort(key=lambda s: -np.mean(np.log10(s[:, 1])))
+        for seg, frac in zip(segs, label_xfrac.get(lv, [])):
+            if frac is None:
+                continue
+            lxs = np.log10(seg[:, 0])
+            target = lx0 + frac * (lx1 - lx0)
+            j = int(np.argmin(np.abs(lxs - target)))
+            manual.append((seg[j, 0], seg[j, 1]))
+    fmt = {lv: pow10_label(lv) for lv in cs.levels}
+    texts = ax.clabel(cs, fmt=fmt, fontsize=FS_ANNOT, inline=True,
+                      inline_spacing=3, manual=manual)
+    for t in texts:
+        t.set_path_effects(halo(1.6))
+    return cs, levels_here
 
 
-# ============================================================
-# EXTRACT u0-SCAN SLICE
-# ============================================================
+def log_axes(ax):
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=12))
+    ax.yaxis.set_major_locator(LogLocator(base=10.0, numticks=12))
+    ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10), numticks=12))
+    ax.yaxis.set_minor_formatter(mticker.NullFormatter())
 
-x_u0 = (
-    u0_data[
-        "P_over_tE"
+
+# ------------------------------------------------------------
+# FIGURE 3
+# ------------------------------------------------------------
+
+def draw_figure3(alt=False):
+    fig = plt.figure(figsize=(fig_width(1.0), 2.85))
+    left, right, gap = 0.085, 0.985, 0.075
+    w = (right - left - gap) / 2.0
+    ax_bottom, ax_top = 0.135, 0.765
+    axes = [fig.add_axes([left + k * (w + gap), ax_bottom, w, ax_top - ax_bottom])
+            for k in range(2)]
+    caxes = [fig.add_axes([left + k * (w + gap), 0.815, w, 0.03])
+             for k in range(2)]
+
+    panels = [
+        (axes[0], caxes[0], u0_edges, P_u0_edges, u0_DTE_norm, norm_DTE_u0,
+         u0_data, r"$u_0$", {1e-4: [0.12], 1e-3: [0.90], 1e-2: [0.50, 0.85]}),
+        (axes[1], caxes[1], q_edges, P_q_edges, q_DTE_norm, norm_DTE_q,
+         q_data, r"$q_M=M_2/M_1$", {1e-4: [0.40], 1e-3: [0.62], 1e-2: [0.86]}),
     ]
-)
+    contour_levels = {}
+    for k, (ax, cax, xe, ye, Z, norm, data, xlabel, lab) in enumerate(panels):
+        pcm = heatmap(ax, xe, ye, np.ma.masked_invalid(Z).T, cmap=BIAS_CMAP,
+                      norm=norm, zorder=1)
+        log_axes(ax)
+        ax.set_xlim(xe[0], xe[-1])
+        ax.set_ylim(ye[0], ye[-1])
+        _, lv = D_contours_labelled(ax, data["parameter"], data["P_over_tE"],
+                                    data["D"], lab)
+        contour_levels["u0" if k == 0 else "qM"] = lv
+        if alt:
+            X, Y = np.meshgrid(data["parameter"], data["P_over_tE"], indexing="ij")
+            if np.nanmax(np.abs(Z)) > 0.01:
+                ax.contour(X, Y, np.abs(Z), levels=[0.01], colors="k",
+                           linewidths=LW_THIN, linestyles=":", zorder=11)
+        ax.set_xlabel(xlabel)
+        if k == 0:
+            ax.set_ylabel(r"$P/t_E$")
+        panel_label(ax, "ab"[k])
+
+        cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal", extend="both")
+        cbar.ax.xaxis.set_ticks_position("top")
+        cbar.ax.xaxis.set_label_position("top")
+        cbar.ax.tick_params(which="both", direction="in", pad=1.5)
+        lim = norm.vmax
+        step = 0.1 / 100 if lim < 0.004 else 0.2 / 100
+        if lim > 0.008:
+            step = 0.5 / 100
+        cbar.set_ticks(np.arange(-np.floor(lim / step), np.floor(lim / step) + 1) * step)
+        cbar.ax.xaxis.set_major_formatter(percent_fmt)
+        cbar.ax.xaxis.set_minor_locator(mticker.NullLocator())
+        cbar.set_label(r"$\Delta t_E/t_E$ (\%)", labelpad=3)
+
+    stem = os.path.join(output_directory,
+                        f"paper_tE_bias_D_contours_tE{int(tE_plot)}" + ("_alt" if alt else ""))
+    out = save_figure(fig, stem)
+    plt.close(fig)
+    return out, contour_levels
+
+
+out3, contour_levels3 = draw_figure3(alt=False)
+max_abs_DTE = max(np.nanmax(np.abs(u0_DTE_norm)), np.nanmax(np.abs(q_DTE_norm)))
+print("FIGURE 3:", *out3)
+print(f"max |DtE/tE| over both scans = {max_abs_DTE:.3e}")
+# |DtE/tE| = 1% is reached only in a few cells at the (u0, P/tE) corner
+# (u0 ~ 0.01, P/tE ~ 0.3); a 1% contour adds no information, so the
+# alternative version is not written by default.
+MAKE_FIG3_ALT = False
+if MAKE_FIG3_ALT:
+    out3_alt, _ = draw_figure3(alt=True)
+    print("FIGURE 3 alt:", *out3_alt)
+
+np.savez(os.path.join(verify_directory, f"paper_tE_bias_tE{int(tE_plot)}_plotted_values.npz"),
+         u0_param=u0_data["parameter"], u0_P_over_tE=u0_data["P_over_tE"],
+         u0_DTE_norm=u0_DTE_norm, u0_D=u0_data["D"],
+         q_param=q_data["parameter"], q_P_over_tE=q_data["P_over_tE"],
+         q_DTE_norm=q_DTE_norm, q_D=q_data["D"],
+         vmax_u0=vmax_DTE_u0, vmax_q=vmax_DTE_q)
+
+# ------------------------------------------------------------
+# FIGURE 4
+# ------------------------------------------------------------
+
+iu = np.argmin(np.abs(np.log10(u0_data["parameter"]) - np.log10(u0_slice_target)))
+u0_used = u0_data["parameter"][iu]
+x_u0 = u0_data["P_over_tE"]
+du0_u0 = u0_DU0_norm[iu, :]
+dtE_u0 = u0_DTE_norm[iu, :]
+
+valid_slice = np.isfinite(du0_u0) & np.isfinite(dtE_u0)
+rho_slice, p_slice = spearmanr(du0_u0[valid_slice], dtE_u0[valid_slice])
+print(f"FIGURE 4: u0 used = {u0_used:.8f}, Spearman rho = {rho_slice:.5f}, p = {p_slice:.5e}")
+
+
+def draw_figure4(alt=False):
+    fig = plt.figure(figsize=(fig_width(0.5), 2.45 if not alt else 2.65))
+    top = 0.97 if not alt else 0.82
+    ax = fig.add_axes([0.205, 0.165 if not alt else 0.15, 0.765, top - (0.165 if not alt else 0.15)])
+    ax.axhline(0.0, lw=0.5, ls=":", color="0.4", zorder=0)
+    ax.plot(x_u0, du0_u0, color=C_BLUE, ls="-", label=r"$\Delta u_0/u_0$")
+    ax.plot(x_u0, dtE_u0, color=C_VERMILION, ls="--", label=r"$\Delta t_E/t_E$")
+    ax.set_xscale("log")
+    ax.xaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    ax.set_xlim(x_u0.min(), x_u0.max())
+    ax.yaxis.set_major_formatter(percent_fmt)
+    ax.set_xlabel(r"$P/t_E$")
+    ax.set_ylabel(r"Relative PSPL bias (\%)")
+    ax.legend(loc="lower right")
+    if alt:
+        ax.tick_params(top=False, which="both")
+        sec = ax.secondary_xaxis("top", functions=(lambda r: r * tE_plot,
+                                                   lambda p: p / tE_plot))
+        sec.set_xlabel(r"$P$ [d]")
+        sec.tick_params(which="both", direction="in")
+        sec.xaxis.set_major_locator(LogLocator(base=10, numticks=12))
+    stem = os.path.join(output_directory,
+                        f"paper_u0_tE_correlated_bias_tE{int(tE_plot)}" + ("_alt" if alt else ""))
+    out = save_figure(fig, stem)
+    plt.close(fig)
+    return out
+
 
-
-du0_u0 = (
-    u0_DU0_norm[
-        iu,
-        :
-    ]
-)
-
-
-dtE_u0 = (
-    u0_DTE_norm[
-        iu,
-        :
-    ]
-)
-
-
-# ============================================================
-# q_M-SCAN CONSISTENCY SLICE
-# ============================================================
-
-x_q = (
-    q_data[
-        "P_over_tE"
-    ]
-)
-
-
-du0_q = (
-    q_DU0_norm[
-        iq,
-        :
-    ]
-)
-
-
-dtE_q = (
-    q_DTE_norm[
-        iq,
-        :
-    ]
-)
-
-
-# ============================================================
-# SPEARMAN CORRELATION
-# ============================================================
-
-valid_slice = (
-
-    np.isfinite(
-        du0_u0
-    )
-
-    &
-
-    np.isfinite(
-        dtE_u0
-    )
-
-)
-
-
-rho_slice, p_slice = spearmanr(
-
-    du0_u0[
-        valid_slice
-    ],
-
-    dtE_u0[
-        valid_slice
-    ],
-
-)
-
-
-print()
-print("=" * 80)
-print("FIGURE 2")
-print(f"u0 used                 = {u0_used:.8f}")
-print(f"q_M closest to 0.5      = {q_used:.8f}")
-print(f"Spearman rho            = {rho_slice:.5f}")
-print(f"Spearman p-value        = {p_slice:.5e}")
-print("=" * 80)
-
-
-# ============================================================
-# FIGURE 2
-#
-# ~3.5 inch:
-# suitable for single-column placement.
-# ============================================================
-
-fig2, ax = plt.subplots(
-
-    figsize=(
-        3.65,
-        3.0,
-    ),
-
-)
-
-
-# ============================================================
-# MAIN CURVES
-# ============================================================
-
-ax.plot(
-
-    x_u0,
-    du0_u0,
-
-    lw=1.7,
-
-    label=
-    r"$\Delta u_0/u_{0,\rm true}$",
-
-)
-
-
-ax.plot(
-
-    x_u0,
-    dtE_u0,
-
-    lw=1.7,
-
-    label=
-    r"$\Delta t_E/t_E$",
-
-)
-
-
-# ============================================================
-# OPTIONAL CONSISTENCY OVERLAY
-# ============================================================
-
-if SHOW_Q_CONSISTENCY:
-
-
-    ax.plot(
-
-        x_q,
-        du0_q,
-
-        "--",
-
-        lw=1.0,
-
-        alpha=0.7,
-
-        label=(
-            rf"$\Delta u_0/u_0$, "
-            rf"$q_M={q_used:.3f}$ scan"
-        ),
-
-    )
-
-
-    ax.plot(
-
-        x_q,
-        dtE_q,
-
-        "--",
-
-        lw=1.0,
-
-        alpha=0.7,
-
-        label=(
-            rf"$\Delta t_E/t_E$, "
-            rf"$q_M={q_used:.3f}$ scan"
-        ),
-
-    )
-
-
-# ============================================================
-# ZERO LINE
-# ============================================================
-
-ax.axhline(
-
-    0.0,
-
-    lw=0.75,
-
-    linestyle=":",
-
-    color="0.35",
-
-    zorder=0,
-
-)
-
-
-# ============================================================
-# FORMAT
-# ============================================================
-
-ax.set_xscale(
-    "log"
-)
-
-
-ax.set_xlabel(
-    r"$P/t_E$"
-)
-
-
-ax.set_ylabel(
-    r"Relative PSPL parameter bias"
-)
-
-
-ax.tick_params(
-
-    axis="both",
-
-    which="both",
-
-    direction="in",
-
-    top=True,
-
-    right=True,
-
-)
-
-
-ax.xaxis.set_major_locator(
-    LogLocator(
-        base=10
-    )
-)
-
-
-ax.grid(
-    False
-)
-
-
-# ============================================================
-# ANNOTATION
-# ============================================================
-
-ax.text(
-
-    0.96,
-    0.95,
-
-    (
-        rf"$u_0={u0_used:.2f}$"
-        "\n"
-        rf"$q_M=0.5$"
-        "\n"
-        rf"$\rho_s={rho_slice:.3f}$"
-    ),
-
-    transform=ax.transAxes,
-
-    ha="right",
-    va="top",
-
-    fontsize=8.2,
-
-)
-
-
-# ============================================================
-# LEGEND
-# ============================================================
-
-ax.legend(
-
-    frameon=False,
-
-    loc="lower right",
-
-    handlelength=2.3,
-
-    borderaxespad=0.5,
-
-)
-
-
-# ============================================================
-# SAVE FIGURE 2
-# ============================================================
-
-figure2_png = os.path.join(
-    output_directory,
-    f"paper_u0_tE_correlated_bias_tE{int(tE_plot)}.png",
-)
-
-figure2_pdf = os.path.join(
-    output_directory,
-    f"paper_u0_tE_correlated_bias_tE{int(tE_plot)}.pdf",
-)
-
-
-fig2.savefig(
-
-    figure2_png,
-
-    dpi=PAPER_DPI,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-fig2.savefig(
-
-    figure2_pdf,
-
-    bbox_inches="tight",
-
-    facecolor="white",
-
-)
-
-
-print()
-print("=" * 80)
-print("FIGURE 2 SAVED")
-print(figure2_png)
-print(figure2_pdf)
-print("=" * 80)
-
-plt.show()
+print("FIGURE 4:", *draw_figure4(False))
+print("FIGURE 4 alt:", *draw_figure4(True))
+np.savez(os.path.join(verify_directory, f"paper_u0_tE_correlated_bias_tE{int(tE_plot)}_plotted_values.npz"),
+         P_over_tE=x_u0, du0_u0=du0_u0, dtE_tE=dtE_u0, u0_used=u0_used,
+         spearman_rho=rho_slice, spearman_p=p_slice)
+with open(os.path.join(verify_directory, "fig3_contour_levels.json"), "w") as fh:
+    json.dump({k: [float(v) for v in lv] for k, lv in contour_levels3.items()}, fh)

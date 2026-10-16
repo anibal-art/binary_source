@@ -34,6 +34,11 @@ from functions_aux import (
     a_from_P_kepler_days,
 )
 
+from binary_source.analysis.roman_f146_backend import (
+    sigma_f146_pandeia_ab,
+    provenance as pandeia_provenance,
+)
+
 
 # ============================================================
 # Default physical configuration
@@ -308,16 +313,41 @@ def build_roman_times(
 # F146 photometric precision
 # ============================================================
 
+ROMAN_NOISE_BACKEND = "legacy"
+
+
+def set_roman_noise_backend(name):
+    global ROMAN_NOISE_BACKEND
+
+    name = str(name).strip().lower()
+
+    if name not in {
+        "legacy",
+        "pandeia",
+    }:
+        raise ValueError(
+            "Roman noise backend must be "
+            "'legacy' or 'pandeia'."
+        )
+
+    ROMAN_NOISE_BACKEND = name
+
+
+
 def sigma_f146_safe(magnitude):
     """
-    Single-epoch F146 precision used by the Roman forecast.
+    Single-epoch F146 precision for the Roman forecast.
 
-    The underlying sigma_F146_func is normalized to the
-    current GBTDS requirement S/N~100 at F146_AB=21.2.
+    The magnitude convention of this experiment is F146 AB.
 
-    We restrict the faint end to F146<=27 to avoid using the
-    simplified prescription arbitrarily far into the
-    noise-dominated regime.
+    Backends
+    --------
+    legacy:
+        historical binary_source approximation.
+
+    pandeia:
+        RomanF146Noise from the sibling roman_rubin repository,
+        evaluated directly in AB magnitudes.
     """
 
     magnitude = np.asarray(
@@ -332,18 +362,32 @@ def sigma_f146_safe(magnitude):
             "Non-finite F146 magnitudes."
         )
 
-    if np.any(
-        magnitude > 27.0
-    ):
-        raise ValueError(
-            "The light curve contains F146 > 27. "
-            "The adopted F146 precision model is not "
-            "used beyond this range."
+    if ROMAN_NOISE_BACKEND == "legacy":
+
+        if np.any(
+            magnitude > 27.0
+        ):
+            raise ValueError(
+                "The light curve contains F146 > 27. "
+                "The legacy F146 precision model is "
+                "not used beyond this range."
+            )
+
+        sigma = sigma_F146_func(
+            magnitude
         )
 
-    sigma = sigma_F146_func(
-        magnitude
-    )
+    elif ROMAN_NOISE_BACKEND == "pandeia":
+
+        sigma = sigma_f146_pandeia_ab(
+            magnitude
+        )
+
+    else:
+        raise RuntimeError(
+            f"Unknown Roman noise backend: "
+            f"{ROMAN_NOISE_BACKEND}"
+        )
 
     return np.asarray(
         sigma,

@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -99,20 +100,23 @@ def get_noise_model():
     return _NOISE_MODEL
 
 
-def sigma_f146_pandeia_ab(magnitude_ab):
+def evaluate_f146_pandeia_ab(
+    magnitude_ab,
+):
     """
-    Roman F146 single-epoch magnitude uncertainty from the
-    roman_rubin Pandeia R2026.1 model.
+    Evaluate the Roman F146 Pandeia model in AB magnitudes.
 
-    Parameters
-    ----------
-    magnitude_ab : scalar or array
-        F146 AB magnitude.
+    Unlike sigma_f146_pandeia_ab(), this function does not
+    reject fully saturated samples.  Instead it exposes the
+    instrumental validity/saturation flags so the caller can
+    construct a fixed observation mask.
 
-    Returns
-    -------
-    sigma_mag : ndarray
-        Magnitude uncertainty.
+    Fully saturated epochs:
+        valid=False, sigma_mag non-finite.
+
+    Partially saturated epochs:
+        retained whenever Pandeia returns a valid finite
+        uncertainty.
     """
 
     mag = np.asarray(
@@ -120,25 +124,125 @@ def sigma_f146_pandeia_ab(magnitude_ab):
         dtype=float,
     )
 
-    if np.any(~np.isfinite(mag)):
+    if np.any(
+        ~np.isfinite(mag)
+    ):
         raise ValueError(
             "Non-finite F146 AB magnitude."
         )
 
     model = get_noise_model()
 
-    sigma = np.asarray(
-        model.sigma_mag_ab(mag),
+    # All-NaN detector medians are expected when every SCA is
+    # fully saturated at a given magnitude.  The validity flag
+    # carries that information explicitly, so do not emit one
+    # warning per saturated sample.
+    with warnings.catch_warnings():
+
+        warnings.filterwarnings(
+            "ignore",
+            message="All-NaN slice encountered",
+            category=RuntimeWarning,
+        )
+
+        result = model.evaluate_ab(
+            mag
+        )
+
+    return {
+        "mag_ab":
+            np.asarray(
+                result["mag_ab"],
+                dtype=float,
+            ),
+
+        "snr":
+            np.asarray(
+                result["snr"],
+                dtype=float,
+            ),
+
+        "sigma_mag":
+            np.asarray(
+                result["sigma_mag"],
+                dtype=float,
+            ),
+
+        "valid":
+            np.asarray(
+                result["valid"],
+                dtype=bool,
+            ),
+
+        "full_saturated":
+            np.asarray(
+                result["full_saturated"],
+                dtype=bool,
+            ),
+
+        "partial_saturated":
+            np.asarray(
+                result["partial_saturated"],
+                dtype=bool,
+            ),
+
+        "unsaturated":
+            np.asarray(
+                result["unsaturated"],
+                dtype=bool,
+            ),
+
+        "sat_nresultants":
+            np.asarray(
+                result["sat_nresultants"],
+                dtype=float,
+            ),
+    }
+
+
+def sigma_f146_pandeia_ab(magnitude_ab):
+    """
+    Roman F146 single-epoch magnitude uncertainty from the
+    roman_rubin Pandeia R2026.1 model.
+
+    This strict uncertainty-only interface preserves the
+    behavior used by the existing Asimov analysis: every
+    requested epoch must have a valid finite uncertainty.
+
+    For analyses that explicitly handle saturation masks, use
+    evaluate_f146_pandeia_ab().
+    """
+
+    mag = np.asarray(
+        magnitude_ab,
         dtype=float,
     )
 
-    if np.any(
-        ~np.isfinite(sigma)
+    result = evaluate_f146_pandeia_ab(
+        mag
+    )
+
+    sigma = np.asarray(
+        result["sigma_mag"],
+        dtype=float,
+    )
+
+    valid = np.asarray(
+        result["valid"],
+        dtype=bool,
+    )
+
+    bad_mask = (
+        ~valid
+        | ~np.isfinite(sigma)
         | (sigma <= 0.0)
+    )
+
+    if np.any(
+        bad_mask
     ):
         bad = mag[
-            ~np.isfinite(sigma)
-            | (sigma <= 0.0)
+            bad_mask
         ]
 
         raise ValueError(

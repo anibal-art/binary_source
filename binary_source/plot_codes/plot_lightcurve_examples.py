@@ -76,25 +76,78 @@ N_POINTS = 10_000
 TRAJECTORY_LIMIT = 1.15
 D_REFERENCE = 1.0e-2
 
-# The confused example is fixed.  The distinguishable example is selected
-# from a small targeted geometry search and then recomputed at full resolution.
+# Projected Einstein radius for the strong-mismatch
+# Kepler-consistent examples in Figure 1.
+#
+# Figure 2 uses the fiducial rEhat = 5 AU family.
+# These illustrative examples deliberately use a smaller
+# but still physical projected Einstein scale.
+REHAT_AU = 1.5
+
+# Representative strong-mismatch cases selected directly from the
+# final Kepler-consistent tE=30 d production grid used for Figure 2.
+#
+# Source-binary physics:
+#   M1 = 2 Msun
+#   M2 = 1 Msun
+#   qM = 0.5
+#   qf = 0
+#   rEhat = 5 AU
+#
+# Both cases use the fiducial production geometry.
+#
+# Grid provenance:
+#
+# Case A:
+#   results/final_a1b8a9b31002/u0_multi_tE/scan_u0_tE30/
+#   scan_kepler_u0_067.npz, period index 0
+#
+# Case B:
+#   results/final_a1b8a9b31002/u0_multi_tE/scan_u0_tE30/
+#   scan_kepler_u0_128.npz, period index 36
+#
 CASES = [
     {
-        "name": "Clearly distinguishable BSPL",
+        # Kepler-consistent search provenance:
+        # /tmp/kepler_fig1_strong_search/case_0582.npz
+        "name": "Strong BSPL mismatch: P/tE = 0.75",
         "basename": "example_1",
         "expected": "distinguishable",
-        "auto_search": True,
+        "auto_search": False,
+
+        "P_days": 22.5,
+        "u0_true": 0.10,
+
+        # Production geometry:
+        # theta/pi = 0
+        # phi/pi   = 0.5
+        # i/pi     = 0.5
+        "theta": 0.0,
+        "phi0": np.pi / 2,
+        "lambda_xi": np.pi / 2,
+
+        "D_expected": 0.1573940135242437,
     },
     {
-        "name": "BSPL confused with PSPL",
-        "P_days": 6000.0,
-        "u0_true": U0_TRUE,
-        "theta": THETA,
-        "phi0": PHI0,
-        "lambda_xi": LAMBDA_XI,
-        "basename": "example_2_confused",
-        "expected": "confused",
+        # Kepler-consistent search provenance:
+        # /tmp/kepler_fig1_strong_search/case_1170.npz
+        "name": "Strong BSPL mismatch: P/tE = 1.50",
+        "basename": "example_2",
+        "expected": "distinguishable",
         "auto_search": False,
+
+        "P_days": 45.0,
+        "u0_true": 0.30,
+
+        # Production geometry:
+        # theta/pi = 0.25
+        # phi/pi   = 0.5
+        # i/pi     = 0.5
+        "theta": np.pi / 4,
+        "phi0": np.pi / 2,
+        "lambda_xi": np.pi / 2,
+
+        "D_expected": 0.13194476592478394,
     },
 ]
 
@@ -257,21 +310,32 @@ def kepler_binary_source_xiE(
         Ds_kpc=Ds_kpc,
     )
 
-    # 1 mas at 1 kpc = 1 AU.
-    RE_source_AU = thetaE_mas * Ds_kpc
+    # Controlled projected Einstein-radius scale.
+    #
+    # This matches the production parameterization used in the
+    # strong-mismatch search rather than deriving rEhat from the
+    # illustrative lens-mass metadata below.
+    RE_source_AU = float(REHAT_AU)
 
-    if xi_source == "source1":
-        a_source_AU = a1_AU
-    elif xi_source == "source2":
-        a_source_AU = a2_AU
-    elif xi_source == "relative":
-        a_source_AU = a_rel_AU
-    else:
-        raise ValueError("xi_source must be 'source1', 'source2', or 'relative'.")
+    # IMPORTANT:
+    # pyLIMA's circular binary-source model expects the RELATIVE
+    # binary separation in Einstein-radius units.  The q_mass
+    # parameter then distributes that relative orbit between the
+    # two components around the barycenter.
+    #
+    # Therefore the quantity passed to pyLIMA must be
+    #
+    #     xi_rel = a_rel / R_E
+    #
+    # rather than the barycentric orbit of Source 1.
+    xi_rel = a_rel_AU / RE_source_AU
 
-    xiE = a_source_AU / RE_source_AU
+    # Individual barycentric amplitudes are retained only for
+    # physical interpretation / figure annotations.
+    xi_E1 = a1_AU / RE_source_AU
+    xi_E2 = a2_AU / RE_source_AU
 
-    return xiE, {
+    return xi_rel, {
         "P_days": P_days,
         "P_yr": P_yr,
         "Mtot_source_Msun": Mtot_source_Msun,
@@ -288,7 +352,16 @@ def kepler_binary_source_xiE(
         "RE_source_AU": RE_source_AU,
         "tE_model_days": tE_days,
         "xi_source": xi_source,
-        "xiE": xiE,
+
+        # Relative separation actually passed to pyLIMA.
+        "xi_rel": xi_rel,
+
+        # Individual barycentric orbital amplitudes.
+        "xi_E1": xi_E1,
+        "xi_E2": xi_E2,
+
+        # Backward-compatible alias used elsewhere in this script.
+        "xiE": xi_rel,
     }
 
 
@@ -1304,7 +1377,8 @@ def plot_case(case, out):
         rf"  $\; q_M={Q_MASS:g}$"
         rf"  $\; q_f={Q_FLUX:g}$"
         rf"  $\; \hat r_E={kinfo['RE_source_AU']:.3g}\,\mathrm{{AU}}$"
-        rf"  $\; \xi_{{E,1}}={out['xiE_use']:.3g}$"
+        rf"  $\; \xi_{{\rm rel}}={kinfo['xi_rel']:.3g}$"
+        rf"  $\; \xi_{{E,1}}={kinfo['xi_E1']:.3g}$"
     )
 
     line_geom = (
@@ -1556,7 +1630,9 @@ def main():
         print(f"lambda/pi   = {out['lambda_xi']/np.pi:.6f}")
         print(f"a_rel       = {kinfo['a_rel_AU']:.6f} AU")
         print(f"R_E,source  = {kinfo['RE_source_AU']:.6f} AU")
-        print(f"xi_E,1      = {out['xiE_use']:.6e}")
+        print(f"xi_rel      = {kinfo['xi_rel']:.6e}")
+        print(f"xi_E,1      = {kinfo['xi_E1']:.6e}")
+        print(f"xi_E,2      = {kinfo['xi_E2']:.6e}")
         print(f"u1_min      = {out['u1_min']:.6e}")
         print(f"u2_min      = {out['u2_min']:.6e}")
         print(f"trajectory dy = {out['y_span']:.6e}")
@@ -1577,6 +1653,16 @@ def main():
             f"{out['n_lightcurve_peaks']}"
         )
         print(f"D           = {out['D']:.6e}")
+
+        if "D_expected" in case:
+            print(
+                f"D expected  = "
+                f"{case['D_expected']:.6e}"
+            )
+            print(
+                f"delta D     = "
+                f"{out['D'] - case['D_expected']:.6e}"
+            )
         print(f"Rmax        = {out['Rmax']:.6e}")
         print(f"t_dev       = {out['t_dev']:.6e} d")
 

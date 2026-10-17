@@ -1239,6 +1239,7 @@ def make_h0_truth(
     u0_true,
     tE_true,
     source_mag,
+    blend_ratio=0.0,
 ):
     """
     Construct the deterministic PSPL truth and the fixed Roman
@@ -1261,10 +1262,43 @@ def make_h0_truth(
         tE=tE_true,
     )
 
+    blend_ratio = float(
+        blend_ratio
+    )
+
+    if (
+        not np.isfinite(
+            blend_ratio
+        )
+        or blend_ratio < 0.0
+    ):
+        raise ValueError(
+            "blend_ratio = Fb/Fs must be finite and >= 0."
+        )
+
+    # source_mag is the unmagnified SOURCE magnitude.
+    #
+    # With b = Fb/Fs,
+    #
+    #     F(t) / Fs = A(t) + b
+    #
+    # so the true observed magnitude, including the blend,
+    # must be passed to Pandeia before computing uncertainties
+    # and saturation.
     mag_truth = (
         float(source_mag)
         - 2.5
-        * np.log10(A)
+        * np.log10(
+            A + blend_ratio
+        )
+    )
+
+    baseline_mag = (
+        float(source_mag)
+        - 2.5
+        * np.log10(
+            1.0 + blend_ratio
+        )
     )
 
     instrument = (
@@ -1321,6 +1355,21 @@ def make_h0_truth(
             np.asarray(
                 A,
                 dtype=float,
+            ),
+
+        "blend_ratio":
+            float(
+                blend_ratio
+            ),
+
+        "source_mag":
+            float(
+                source_mag
+            ),
+
+        "baseline_mag":
+            float(
+                baseline_mag
             ),
 
         "mag_truth":
@@ -1386,6 +1435,7 @@ def prepare_h0_configuration(
     tE_true,
     source_mag,
     evaluator=None,
+    blend_ratio=0.0,
 ):
     """
     Prepare all deterministic quantities shared by every
@@ -1412,6 +1462,7 @@ def prepare_h0_configuration(
         u0_true=u0_true,
         tE_true=tE_true,
         source_mag=source_mag,
+        blend_ratio=blend_ratio,
     )
 
     keep = np.asarray(

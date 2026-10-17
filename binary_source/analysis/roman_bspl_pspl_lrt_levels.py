@@ -2030,6 +2030,7 @@ def run_h0_lrt_ladder(
     seed,
     omega_grid,
     max_level=LEVEL_4,
+    blend_ratio=0.0,
 ):
     """
     Generate ONE noisy H0 realization and fit every requested
@@ -2055,6 +2056,7 @@ def run_h0_lrt_ladder(
             tE_true=tE_true,
             source_mag=source_mag,
             evaluator=legacy_evaluator,
+            blend_ratio=blend_ratio,
         )
     )
 
@@ -2118,6 +2120,10 @@ def run_h0_lrt_ladder(
         )
     )
 
+    truth = prepared[
+        "truth"
+    ]
+
     rows = []
 
     for level in LEVELS:
@@ -2154,6 +2160,25 @@ def run_h0_lrt_ladder(
                 "seed":
                     int(
                         seed
+                    ),
+
+                "source_mag":
+                    float(
+                        source_mag
+                    ),
+
+                "blend_ratio":
+                    float(
+                        truth[
+                            "blend_ratio"
+                        ]
+                    ),
+
+                "baseline_mag":
+                    float(
+                        truth[
+                            "baseline_mag"
+                        ]
                     ),
 
                 "h1_level":
@@ -2259,6 +2284,34 @@ def run_h0_lrt_ladder(
                             "tE"
                         ]
                     ),
+
+                "h0_fs":
+                    float(
+                        h0[
+                            "fs"
+                        ]
+                    ),
+
+                "h0_ft":
+                    float(
+                        h0[
+                            "ft"
+                        ]
+                    ),
+
+                "h1_fs":
+                    float(
+                        best[
+                            "fs"
+                        ]
+                    ),
+
+                "h1_ft":
+                    float(
+                        best[
+                            "ft"
+                        ]
+                    ),
             }
         )
 
@@ -2348,6 +2401,13 @@ def main():
     )
 
     parser.add_argument(
+        "--blend-ratio",
+        type=float,
+        default=0.0,
+        help="True blending ratio Fb/Fs.",
+    )
+
+    parser.add_argument(
         "--u0",
         type=float,
         default=0.1,
@@ -2427,6 +2487,7 @@ def main():
             seed=args.seed,
             omega_grid=omega_grid,
             max_level=args.max_level,
+            blend_ratio=args.blend_ratio,
         )
     )
 
@@ -2451,6 +2512,11 @@ def main():
     print(
         "F146       =",
         args.source_mag,
+    )
+
+    print(
+        "Fb/Fs      =",
+        args.blend_ratio,
     )
 
     print(

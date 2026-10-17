@@ -61,6 +61,7 @@ def _init_worker(
     p_max,
     n_omega,
     max_level,
+    blend_ratio,
 ):
     """
     Build deterministic quantities once per worker.
@@ -76,6 +77,7 @@ def _init_worker(
     source_mag = float(source_mag)
     u0_true = float(u0_true)
     tE_true = float(tE_true)
+    blend_ratio = float(blend_ratio)
 
     t, t0_true = (
         base.roman.build_roman_times(
@@ -100,6 +102,7 @@ def _init_worker(
             tE_true=tE_true,
             source_mag=source_mag,
             evaluator=legacy_evaluator,
+            blend_ratio=blend_ratio,
         )
     )
 
@@ -133,6 +136,9 @@ def _init_worker(
         {
             "source_mag":
                 source_mag,
+
+            "blend_ratio":
+                blend_ratio,
 
             "u0_true":
                 u0_true,
@@ -307,6 +313,20 @@ def _run_one(
                     "source_mag":
                         source_mag,
 
+                    "blend_ratio":
+                        float(
+                            truth[
+                                "blend_ratio"
+                            ]
+                        ),
+
+                    "baseline_mag":
+                        float(
+                            truth[
+                                "baseline_mag"
+                            ]
+                        ),
+
                     "u0_true":
                         u0_true,
 
@@ -435,6 +455,34 @@ def _run_one(
                         float(
                             best[
                                 "tE"
+                            ]
+                        ),
+
+                    "h0_fs":
+                        float(
+                            h0[
+                                "fs"
+                            ]
+                        ),
+
+                    "h0_ft":
+                        float(
+                            h0[
+                                "ft"
+                            ]
+                        ),
+
+                    "h1_fs":
+                        float(
+                            best[
+                                "fs"
+                            ]
+                        ),
+
+                    "h1_ft":
+                        float(
+                            best[
+                                "ft"
                             ]
                         ),
 
@@ -871,6 +919,13 @@ def main():
     )
 
     parser.add_argument(
+        "--blend-ratio",
+        type=float,
+        default=0.0,
+        help="True blending ratio Fb/Fs.",
+    )
+
+    parser.add_argument(
         "--u0",
         type=float,
         required=True,
@@ -933,6 +988,16 @@ def main():
         parser.parse_args()
     )
 
+    if (
+        not np.isfinite(
+            args.blend_ratio
+        )
+        or args.blend_ratio < 0.0
+    ):
+        parser.error(
+            "--blend-ratio must be finite and >= 0."
+        )
+
     outdir = Path(
         args.output_dir
     )
@@ -981,6 +1046,11 @@ def main():
     print(
         "F146       =",
         args.source_mag,
+    )
+
+    print(
+        "Fb/Fs      =",
+        args.blend_ratio,
     )
 
     print(
@@ -1039,6 +1109,7 @@ def main():
             args.p_max,
             args.n_omega,
             args.max_level,
+            args.blend_ratio,
         ),
     ) as executor:
 
@@ -1181,6 +1252,24 @@ def main():
                 args.source_mag
             ),
 
+        "source_mag_definition":
+            "unmagnified source-only F146 AB magnitude",
+
+        "blend_ratio":
+            float(
+                args.blend_ratio
+            ),
+
+        "baseline_mag":
+            float(
+                args.source_mag
+                - 2.5
+                * np.log10(
+                    1.0
+                    + args.blend_ratio
+                )
+            ),
+
         "u0_true":
             float(
                 args.u0
@@ -1274,10 +1363,12 @@ def main():
 
         "noise_generation":
             (
-                "Gaussian perturbation in magnitude using "
-                "truth-derived Pandeia sigma_mag; fit objective "
-                "is profiled chi2 in flux. This is the current "
-                "validated pilot mechanism."
+                "True observed flux is Fs*A + Fb with "
+                "blend_ratio=Fb/Fs. The blended noiseless "
+                "magnitude is passed to Pandeia before deriving "
+                "sigma_mag and saturation. Gaussian perturbation "
+                "is then applied in magnitude; fit objective is "
+                "profiled chi2 in flux."
             ),
 
         "saturation_policy":

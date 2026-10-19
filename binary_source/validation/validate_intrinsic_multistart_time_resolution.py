@@ -46,7 +46,7 @@ if str(ROOT) not in sys.path:
     )
 
 
-from binary_source.analysis import roman_bspl_pspl_asimov as roman
+from binary_source.analysis import intrinsic_xallarap as roman
 
 
 # ============================================================

@@ -176,7 +176,7 @@ It is also useful to compile the key scripts:
 ```bash
 python -m py_compile \
     binary_source/functions_aux.py \
-    binary_source/analysis/roman_bspl_pspl_asimov.py \
+    binary_source/analysis/run_roman_bspl_asimov.py \
     binary_source/plot_codes/plot_intrinsic_tE_paper.py \
     binary_source/plot_codes/plot_intrinsic_biases_paper.py \
     binary_source/plot_codes/plot_roman_intrinsic_comparison.py \
@@ -190,7 +190,7 @@ python -m py_compile \
 The primary intrinsic one-luminous-source grid is:
 
 ```text
-results/scan_many_tE_200x200/scan_u0_tE30/
+results/intrinsic_xallarap_vs_pspl_parallax_tE30/intrinsic_parallax_grid.parquet/
 ```
 
 Properties:
@@ -288,7 +288,7 @@ At \(q_f=q_M\), the first-order photocenter term cancels, but the system is not 
 The current Roman analysis is:
 
 ```text
-binary_source/analysis/roman_bspl_pspl_asimov.py
+binary_source/analysis/run_roman_bspl_asimov.py
 ```
 
 ### Current Roman prescription
@@ -354,7 +354,7 @@ The old W149 results are retained only as a legacy comparison.
 Before a large Roman production, always run:
 
 ```bash
-python binary_source/analysis/roman_bspl_pspl_asimov.py \
+python binary_source/analysis/run_roman_bspl_asimov.py \
     --mode smoke \
     --tE 30 \
     --source-mag 21
@@ -391,13 +391,13 @@ cd ~/binary_source
 
 mkdir -p results/roman_asimov_f146_tE30
 
-time python binary_source/analysis/roman_bspl_pspl_asimov.py \
+time python binary_source/analysis/run_roman_bspl_asimov.py \
     --mode grid \
     --tE 30 \
     --magnitudes 19 21 23 \
     --anchor-season 2 \
     --fit-window-tE 3.5 \
-    --intrinsic-grid-dir results/scan_many_tE_200x200/scan_u0_tE30 \
+    --intrinsic-grid results/intrinsic_xallarap_vs_pspl_parallax_tE30/intrinsic_parallax_grid.parquet \
     --intrinsic-u0-max 1.0 \
     --output results/roman_asimov_f146_tE30/roman_intrinsic_grid_f146_tE30.npz \
     |& tee results/roman_asimov_f146_tE30/run_f146_tE30.log
@@ -662,7 +662,7 @@ PY
 
 ```text
 Intrinsic:
-results/scan_many_tE_200x200/scan_u0_tE30/
+results/intrinsic_xallarap_vs_pspl_parallax_tE30/intrinsic_parallax_grid.parquet/
 
 Two luminous sources:
 results/final_483d90a0fd07/qmass_qflux_tE30/
@@ -711,13 +711,13 @@ conda activate rubin-sim
 
 python -m py_compile \
     binary_source/functions_aux.py \
-    binary_source/analysis/roman_bspl_pspl_asimov.py
+    binary_source/analysis/run_roman_bspl_asimov.py
 
 ls -lh \
-    results/scan_many_tE_200x200/scan_u0_tE30 \
+    results/intrinsic_xallarap_vs_pspl_parallax_tE30/intrinsic_parallax_grid.parquet \
     results/roman_asimov_f146_tE30
 
-python binary_source/analysis/roman_bspl_pspl_asimov.py \
+python binary_source/analysis/run_roman_bspl_asimov.py \
     --mode smoke \
     --tE 30 \
     --source-mag 21
@@ -804,23 +804,23 @@ The primary manuscript analysis uses `tE = 30 d`.
 Before the full Roman run, use the smoke test:
 
 ```bash
-python binary_source/analysis/roman_bspl_pspl_asimov.py --mode smoke --tE 30 --source-mag 21
+python binary_source/analysis/run_roman_bspl_asimov.py --mode smoke --tE 30 --source-mag 21
 ```
 
-The expected sampling is 8390 F146 epochs.
+The expected sampling is 8688 F146 epochs.
 
 Generate the final Roman grid with:
 
 ```bash
 mkdir -p results/roman_asimov_f146_tE30
 
-python binary_source/analysis/roman_bspl_pspl_asimov.py \
+python binary_source/analysis/run_roman_bspl_asimov.py \
     --mode grid \
     --tE 30 \
     --magnitudes 19 21 23 \
     --anchor-season 2 \
     --fit-window-tE 3.5 \
-    --intrinsic-grid-dir results/scan_many_tE_200x200/scan_u0_tE30 \
+    --intrinsic-grid results/intrinsic_xallarap_vs_pspl_parallax_tE30/intrinsic_parallax_grid.parquet \
     --intrinsic-u0-max 1.0 \
     --output results/roman_asimov_f146_tE30/roman_intrinsic_grid_f146_tE30.npz
 ```

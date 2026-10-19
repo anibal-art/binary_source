@@ -3,10 +3,10 @@
 import numpy as np
 
 from binary_source.analysis import (
-    roman_bspl_pspl_lrt as base,
+    intrinsic_fit_tools as base,
 )
 from binary_source.analysis import (
-    roman_bspl_pspl_lrt_parallax as par,
+    intrinsic_parallax as par,
 )
 
 

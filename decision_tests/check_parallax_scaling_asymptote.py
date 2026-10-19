@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from binary_source.analysis import (
-    roman_bspl_pspl_lrt as base,
+    intrinsic_fit_tools as base,
 )
 
 

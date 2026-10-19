@@ -136,21 +136,21 @@ run_analysis () {
 
     run_stage \
         "5/7 — Roman F146 smoke test" \
-        python binary_source/analysis/roman_bspl_pspl_asimov.py \
+        python binary_source/analysis/run_roman_bspl_asimov.py \
             --mode smoke \
             --tE 30 \
             --source-mag 21
 
     run_stage \
         "6/7 — Roman F146 full Asimov grid" \
-        python binary_source/analysis/roman_bspl_pspl_asimov.py \
+        python binary_source/analysis/run_roman_bspl_asimov.py \
             --mode grid \
             --tE 30 \
             --magnitudes 19 21 23 \
             --anchor-season 2 \
             --fit-window-tE 3.5 \
-            --intrinsic-grid-dir \
-                results/scan_many_tE_200x200/scan_u0_tE30 \
+            --intrinsic-grid \
+                results/intrinsic_xallarap_vs_pspl_parallax_tE30/intrinsic_parallax_grid.parquet \
             --intrinsic-u0-max 1.0 \
             --output \
                 results/roman_asimov_f146_tE30/roman_intrinsic_grid_f146_tE30.npz

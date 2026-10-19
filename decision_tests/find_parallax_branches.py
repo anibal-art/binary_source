@@ -6,8 +6,8 @@ from scipy.optimize import least_squares
 
 import intrinsic_bspl_pspl_parallax_scan as seq
 
-from binary_source.analysis import roman_bspl_pspl_lrt as base
-from binary_source.analysis import roman_bspl_pspl_lrt_parallax as par
+from binary_source.analysis import intrinsic_fit_tools as base
+from binary_source.analysis import intrinsic_parallax as par
 
 
 U0_TRUE = 0.1

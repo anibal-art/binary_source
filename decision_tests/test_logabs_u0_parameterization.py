@@ -7,7 +7,7 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from binary_source.analysis import (
-    roman_bspl_pspl_lrt as base,
+    intrinsic_fit_tools as base,
 )
 
 

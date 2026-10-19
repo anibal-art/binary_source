@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import sys
 import inspect
 import multiprocessing as mp
 import traceback
@@ -11,8 +12,8 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 
-from binary_source.analysis import roman_bspl_pspl_lrt as base
-from binary_source.analysis import roman_bspl_pspl_lrt_parallax as par
+from binary_source.analysis import intrinsic_fit_tools as base
+from binary_source.analysis import intrinsic_parallax as par
 
 
 # ============================================================
@@ -32,13 +33,17 @@ Q_FLUX = 0.0
 
 EPHEMERIS_PATH = Path(
     "/export/storage3/rubin/microlensing/romanrubin/"
-    "roman_rubin_lrt_pandeia_20261016/"
+    "roman_rubin/"
     "ephemerides/Roman_positions.npy"
 )
 
-OUTPUT_DIR = Path(
-    "results/"
-    "intrinsic_xallarap_vs_pspl_parallax_tE30"
+OUTPUT_DIR = (
+    Path("results")
+    / (
+        "intrinsic_xallarap_vs_pspl_parallax_tE30_smoke"
+        if "--smoke" in sys.argv
+        else "intrinsic_xallarap_vs_pspl_parallax_tE30"
+    )
 )
 
 
@@ -121,7 +126,7 @@ def pspl_magnification(
 #
 # We deliberately do NOT reimplement the Roman ephemeris
 # machinery here.  We find the evaluator already present in
-# roman_bspl_pspl_lrt_parallax.py by its public behavior:
+# intrinsic_parallax.py by its public behavior:
 #
 #   magnification(t0,u0,tE,piEN,piEE)
 #

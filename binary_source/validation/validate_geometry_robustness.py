@@ -52,7 +52,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # Existing project implementation
 # ============================================================
 
-from binary_source.analysis import roman_bspl_pspl_asimov as roman
+from binary_source.analysis import intrinsic_xallarap as roman
 
 from binary_source.validation.validate_intrinsic_multistart_time_resolution import (
     fit_one_start,

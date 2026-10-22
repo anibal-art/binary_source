@@ -1,0 +1,35 @@
+{
+  "schema_version": "roman_bspl_lrt_fit_policy_v1",
+  "production_ready": false,
+  "note": "SCHEMA ONLY. Populate fit_reference, explicit bounds and starts from observed light-curve features before running.",
+  "fit_reference": {
+    "t0": 0.0,
+    "u0": 0.0,
+    "tE": 0.0
+  },
+  "optimizer_options": {
+    "xtol": 1e-08,
+    "ftol": 1e-08,
+    "gtol": 1e-08,
+    "max_nfev": 50000,
+    "x_scale": "jac"
+  },
+  "PSPL": {
+    "fit_parallax": false,
+    "fit_double_source": false,
+    "bounds": {},
+    "starts": []
+  },
+  "PSPL_PI": {
+    "fit_parallax": true,
+    "fit_double_source": false,
+    "bounds": {},
+    "starts": []
+  },
+  "BSPL": {
+    "fit_parallax": false,
+    "fit_double_source": true,
+    "bounds": {},
+    "starts": []
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "schema_version": "roman_bspl_lrt_fit_policy_smoke_v1",
+  "production_ready": false,
+  "warning": "INTEGRATION SMOKE ONLY. Uses fixed truth-near starts. Never use for calibration or power.",
+  "fit_reference": {
+    "t0": 2461849.0,
+    "u0": 0.3,
+    "tE": 57.0703125
+  },
+  "optimizer_options": {
+    "xtol": 1e-08,
+    "ftol": 1e-08,
+    "gtol": 1e-08,
+    "max_nfev": 10000,
+    "x_scale": "jac"
+  },
+  "PSPL": {
+    "fit_parallax": false,
+    "fit_double_source": false,
+    "bounds": {
+      "t0": [
+        2461700.0,
+        2462000.0
+      ],
+      "u0": [
+        -2.0,
+        2.0
+      ],
+      "tE": [
+        1.0,
+        300.0
+      ]
+    },
+    "starts": [
+      {
+        "label": "smoke_pspl",
+        "initial_guess": {
+          "t0": 2461849.0,
+          "u0": 0.25,
+          "tE": 60.0
+        }
+      }
+    ]
+  },
+  "PSPL_PI": {
+    "fit_parallax": true,
+    "fit_double_source": false,
+    "bounds": {
+      "t0": [
+        2461700.0,
+        2462000.0
+      ],
+      "u0": [
+        -2.0,
+        2.0
+      ],
+      "tE": [
+        1.0,
+        300.0
+      ],
+      "piEN": [
+        -3.0,
+        3.0
+      ],
+      "piEE": [
+        -3.0,
+        3.0
+      ]
+    },
+    "starts": [
+      {
+        "label": "smoke_pspl_pi",
+        "initial_guess": {
+          "t0": 2461849.0,
+          "u0": 0.25,
+          "tE": 60.0,
+          "piEN": 0.0,
+          "piEE": 0.0
+        }
+      }
+    ]
+  },
+  "BSPL": {
+    "fit_parallax": false,
+    "fit_double_source": true,
+    "bounds": {
+      "t0": [
+        2461700.0,
+        2462000.0
+      ],
+      "u0": [
+        -2.0,
+        2.0
+      ],
+      "tE": [
+        1.0,
+        300.0
+      ],
+      "xi_para": [
+        -100.0,
+        100.0
+      ],
+      "xi_perp": [
+        -100.0,
+        100.0
+      ],
+      "xi_angular_velocity": [
+        6.283185307179586e-05,
+        0.6283185307179586
+      ],
+      "xi_phase": [
+        -3.141592653589793,
+        9.42477796076938
+      ],
+      "xi_inclination": [
+        -1.5707963267948966,
+        1.5707963267948966
+      ],
+      "xi_mass_ratio": [
+        0.0001,
+        100.0
+      ],
+      "q_flux_W149": [
+        0.0,
+        100.0
+      ]
+    },
+    "starts": [
+      {
+        "label": "smoke_bspl",
+        "initial_guess": {
+          "t0": 2461849.0,
+          "u0": 0.25,
+          "tE": 60.0,
+          "xi_para": 0.25,
+          "xi_perp": 0.0,
+          "xi_angular_velocity": 0.017202423838958484,
+          "xi_phase": 3.0,
+          "xi_inclination": 1.5,
+          "xi_mass_ratio": 0.5,
+          "q_flux_W149": 0.0001
+        }
+      }
+    ]
+  }
+}

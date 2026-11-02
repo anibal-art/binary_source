@@ -180,3 +180,5 @@ __pycache__/
 
 # Full paper reproduction logs
 /reproduction_logs/
+logs/
+resultsDb_sqlite.db

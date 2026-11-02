@@ -54,7 +54,11 @@ if not ROMAN_RUBIN_REPO.exists():
 
 sys.path.insert(0, str(ROMAN_RUBIN_REPO))
 
-from catalog.event_reader import load_event_from_catalog  # noqa: E402
+from binary_source.analysis.lrt_catalog_io import (  # noqa: E402
+    load_event_from_catalog,
+    check_truth_kind,
+    row_identity,
+)
 import fit_lc  # noqa: E402
 import functions_roman_rubin as frr  # noqa: E402
 
@@ -70,6 +74,22 @@ EXPECTED_EPHEMERIS_SHA256 = (
 )
 
 FIT_KEYS = ("PSPL", "PSPL_PI", "BSPL")
+
+# Fit families required by each statistical experiment.
+#
+# h0a: PSPL truth calibrates Test A:
+#      PSPL vs BSPL
+#
+# h0b: PSPL+parallax truth calibrates Test B:
+#      PSPL+parallax vs BSPL
+#
+# h1: BSPL truth measures the power of both tests on the same dataset:
+#     PSPL vs BSPL and PSPL+parallax vs BSPL
+FIT_KEYS_BY_TRUTH = {
+    "h0a": ("PSPL", "BSPL"),
+    "h0b": ("PSPL_PI", "BSPL"),
+    "h1": ("PSPL", "PSPL_PI", "BSPL"),
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -454,6 +474,9 @@ def run_catalog_event(args) -> dict:
         args.truth_kind
     )
 
+    # Reject e.g. --truth-kind h0a on a pi_E != 0 row, or h1 on H0.
+    check_truth_kind(event, args.truth_kind)
+
     np.random.seed(simulation_seed)
 
     true_model, true_params, decision = frr.simulate_event_for_fit(
@@ -484,8 +507,11 @@ def run_catalog_event(args) -> dict:
 
     fits = {}
 
-    # Same exact numerical dataset for all three fit families.
-    for fit_key in FIT_KEYS:
+    fit_keys = FIT_KEYS_BY_TRUTH[args.truth_kind]
+
+    # Every fit required by this truth kind sees the same exact
+    # numerical dataset.
+    for fit_key in fit_keys:
         before_hash = sha256_array(data["W149"])
 
         fits[fit_key] = run_fit_bank(
@@ -506,20 +532,42 @@ def run_catalog_event(args) -> dict:
                 f"Dataset changed during {fit_key} fit bank."
             )
 
-    chi2_pspl = float(fits["PSPL"]["best"]["chi2"])
-    chi2_pspl_pi = float(fits["PSPL_PI"]["best"]["chi2"])
-    chi2_bspl = float(fits["BSPL"]["best"]["chi2"])
+    chi2_pspl = (
+        float(fits["PSPL"]["best"]["chi2"])
+        if "PSPL" in fits
+        else None
+    )
 
-    raw_a = chi2_pspl - chi2_bspl
-    t_a = max(0.0, raw_a)
-    t_b = chi2_pspl_pi - chi2_bspl
+    chi2_pspl_pi = (
+        float(fits["PSPL_PI"]["best"]["chi2"])
+        if "PSPL_PI" in fits
+        else None
+    )
+
+    chi2_bspl = float(
+        fits["BSPL"]["best"]["chi2"]
+    )
+
+    if args.truth_kind in ("h0a", "h1"):
+        raw_a = chi2_pspl - chi2_bspl
+        t_a = max(0.0, raw_a)
+    else:
+        raw_a = None
+        t_a = None
+
+    if args.truth_kind in ("h0b", "h1"):
+        t_b = chi2_pspl_pi - chi2_bspl
+    else:
+        t_b = None
 
     return {
-        "runner_schema_version": "roman_bspl_lrt_catalog_runner_v1",
+        "runner_schema_version": "roman_bspl_lrt_catalog_runner_v2",
         "catalog_path": str(args.catalog),
         "catalog_event_index": int(args.catalog_event_index),
+        "catalog_row": row_identity(event),
         "simulation_seed": int(simulation_seed),
         "truth_kind": args.truth_kind,
+        "fit_keys_executed": list(fit_keys),
         "truth_parallax": bool(truth_parallax),
         "truth_double_source": bool(truth_double_source),
         "decision": bool(decision),
@@ -535,9 +583,15 @@ def run_catalog_event(args) -> dict:
             "chi2_PSPL": chi2_pspl,
             "chi2_PSPL_PI": chi2_pspl_pi,
             "chi2_BSPL": chi2_bspl,
-            "delta_chi2_A_raw": float(raw_a),
-            "T_A": float(t_a),
-            "T_B": float(t_b),
+            "delta_chi2_A_raw": (
+                None if raw_a is None else float(raw_a)
+            ),
+            "T_A": (
+                None if t_a is None else float(t_a)
+            ),
+            "T_B": (
+                None if t_b is None else float(t_b)
+            ),
             "test_A_definition": (
                 "T_A=max(0, chi2_PSPL-chi2_BSPL)"
             ),

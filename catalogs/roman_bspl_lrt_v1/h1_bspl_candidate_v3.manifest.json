@@ -1,0 +1,615 @@
+{
+  "Mtot_source_Msun": 3.0,
+  "blend_ratio": 0.0,
+  "catalog_kind": "h1",
+  "catalog_schema_version": "roman_bspl_lrt_catalog_v3",
+  "columns": [
+    "catalog_event_index",
+    "simulation_seed",
+    "catalog_schema_version",
+    "catalog_kind",
+    "config_id",
+    "power_cell_id",
+    "realization_id",
+    "scan_family",
+    "system_type",
+    "ra",
+    "dec",
+    "maf_ra",
+    "maf_dec",
+    "l_deg",
+    "b_deg",
+    "t0",
+    "u0",
+    "tE",
+    "trajectory_reference",
+    "piEN",
+    "piEE",
+    "piE",
+    "piE_angle_rad",
+    "is_zero_parallax",
+    "source_mag_F146_AB",
+    "source_mag_F146_Vega",
+    "W149",
+    "W149_semantics",
+    "blend_ratio_W149",
+    "blend_ratio_F146",
+    "ephemeris_name",
+    "ephemeris_sha256",
+    "truth_double_source",
+    "u",
+    "g",
+    "r",
+    "i",
+    "z",
+    "Y",
+    "config_name",
+    "geometry_id",
+    "geometry_kind",
+    "field_id",
+    "genulens_event_id",
+    "star_id",
+    "xi_para",
+    "xi_perp",
+    "xi_angular_velocity",
+    "xi_phase",
+    "xi_inclination",
+    "xi_mass_ratio",
+    "q_flux",
+    "q_flux_W149",
+    "orbit_alpha_rad",
+    "sin_xi_inclination",
+    "inclination_convention",
+    "rotation_convention",
+    "Mtot_source_Msun",
+    "M1_source_Msun",
+    "M2_source_Msun",
+    "q_mass",
+    "P_days",
+    "P_over_tE",
+    "a_rel_AU",
+    "rEhat_AU",
+    "xi_rel",
+    "xi_E_primary",
+    "xi_E_over_u0",
+    "t0_barycenter",
+    "u0_barycenter_line",
+    "source1_mag_F146_AB",
+    "source2_mag_F146_AB",
+    "u0_grid_index",
+    "period_grid_index",
+    "qM_grid_index",
+    "qf_grid_index",
+    "ptE_grid_index",
+    "event_seed",
+    "truth_config_id"
+  ],
+  "conventions": {
+    "flux": "q_flux = F2/F1",
+    "inclination": "pyLIMA: +-pi/2 face-on, 0 edge-on; isotropic = sin(i) ~ U(-1,1)",
+    "magnitude": "source_mag_F146_AB = total unresolved source system",
+    "masses": "q_mass = M2/M1 <= 1",
+    "rotation": "pyLIMA R(-alpha), alpha = atan2(xi_perp, xi_para)",
+    "trajectory": "(t0,u0) = source 1 at (0,u0) at t0; barycenter line stored as diagnostic",
+    "xi": "xi_para, xi_perp carry xi_rel = a_rel/rEhat (relative orbit)"
+  },
+  "family_counts": {
+    "one_luminous_qM_P": 39000,
+    "one_luminous_u0_P": 117000,
+    "one_luminous_u0_P_fiducial": 39000,
+    "two_luminous_qM_qf": 27300
+  },
+  "fiducial_geometry": {
+    "alpha": 0.0,
+    "phase": 0.0,
+    "xi_inclination": 1.5707963267948966
+  },
+  "geometry_design": {
+    "fiducial_families": [
+      "one_luminous_u0_P_fiducial",
+      "one_luminous_qM_P",
+      "two_luminous_qM_qf"
+    ],
+    "marginalized": "n isotropic geometries (LHS in alpha, phase, sin i_pyLIMA), shared across cells via geometry_id; one noise seed per row",
+    "marginalized_families": [
+      "one_luminous_u0_P",
+      "one_luminous_u0_P_tE150"
+    ],
+    "uncertainty": "report binomial error per cell AND bootstrap over geometry_id"
+  },
+  "geometry_seed": 20261023,
+  "grids": {
+    "marginalized_geometries": [
+      {
+        "geometry_id": 0,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.620953805138624,
+        "xi_inclination": -0.42399456348195247,
+        "xi_phase": 4.801731882857255
+      },
+      {
+        "geometry_id": 1,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.5667867733285339,
+        "xi_inclination": 0.8782207464800107,
+        "xi_phase": 1.356819910743157
+      },
+      {
+        "geometry_id": 2,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.0293831074492046,
+        "xi_inclination": -0.9210510901824605,
+        "xi_phase": 6.133834378916616
+      },
+      {
+        "geometry_id": 3,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.7711511169636387,
+        "xi_inclination": 0.06565303578735399,
+        "xi_phase": 1.5393048716642246
+      },
+      {
+        "geometry_id": 4,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.665887579580256,
+        "xi_inclination": -0.6773884792576333,
+        "xi_phase": 3.7450157837627684
+      },
+      {
+        "geometry_id": 5,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.1594702060121356,
+        "xi_inclination": -0.8412205058868296,
+        "xi_phase": 5.511111513819234
+      },
+      {
+        "geometry_id": 6,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.5235572755043215,
+        "xi_inclination": -0.39363671919145893,
+        "xi_phase": 3.822518456896234
+      },
+      {
+        "geometry_id": 7,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.2782982336428588,
+        "xi_inclination": -0.2143761627643234,
+        "xi_phase": 0.8457134279895276
+      },
+      {
+        "geometry_id": 8,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.9846474772655105,
+        "xi_inclination": -1.0798650587021503,
+        "xi_phase": 3.5485783895486978
+      },
+      {
+        "geometry_id": 9,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.15545679845336713,
+        "xi_inclination": 0.42755374184737166,
+        "xi_phase": 5.782142286230685
+      },
+      {
+        "geometry_id": 10,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.174557367545275,
+        "xi_inclination": 0.7413914334378868,
+        "xi_phase": 4.388682606965101
+      },
+      {
+        "geometry_id": 11,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 6.095569726971325,
+        "xi_inclination": -0.08444136537563603,
+        "xi_phase": 4.091166705443705
+      },
+      {
+        "geometry_id": 12,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.3502390873747043,
+        "xi_inclination": 0.3251423706868267,
+        "xi_phase": 1.9764457270420364
+      },
+      {
+        "geometry_id": 13,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.4856481613607735,
+        "xi_inclination": -0.28366906663572006,
+        "xi_phase": 2.0437669654088886
+      },
+      {
+        "geometry_id": 14,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.5704025174585365,
+        "xi_inclination": 0.6665453135103744,
+        "xi_phase": 4.634520269939461
+      },
+      {
+        "geometry_id": 15,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.712632264044089,
+        "xi_inclination": 0.4787973743767661,
+        "xi_phase": 2.419556548236592
+      },
+      {
+        "geometry_id": 16,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.673178287097314,
+        "xi_inclination": -0.31080999603963744,
+        "xi_phase": 2.5856663665688955
+      },
+      {
+        "geometry_id": 17,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.463696894630268,
+        "xi_inclination": -0.038998530384048546,
+        "xi_phase": 5.358535594512829
+      },
+      {
+        "geometry_id": 18,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.2229006124882664,
+        "xi_inclination": 0.20878913190364953,
+        "xi_phase": 1.0355779752991339
+      },
+      {
+        "geometry_id": 19,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.8968397968554056,
+        "xi_inclination": 0.3961641121174998,
+        "xi_phase": 5.592787611728314
+      },
+      {
+        "geometry_id": 20,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.413152834660975,
+        "xi_inclination": -0.5795902720004691,
+        "xi_phase": 3.2709579270414304
+      },
+      {
+        "geometry_id": 21,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.0490378185089786,
+        "xi_inclination": -0.9356421961842172,
+        "xi_phase": 0.9002193355098168
+      },
+      {
+        "geometry_id": 22,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.6788561844055836,
+        "xi_inclination": 0.1658732274767957,
+        "xi_phase": 4.454857105854743
+      },
+      {
+        "geometry_id": 23,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.026653959357233,
+        "xi_inclination": 0.8277947477305049,
+        "xi_phase": 1.67527544643342
+      },
+      {
+        "geometry_id": 24,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 6.1862197141787725,
+        "xi_inclination": 0.3456320310401526,
+        "xi_phase": 2.7635554223630425
+      },
+      {
+        "geometry_id": 25,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.4678261909144914,
+        "xi_inclination": 0.1211494906803403,
+        "xi_phase": 0.5165870031504992
+      },
+      {
+        "geometry_id": 26,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.8747203155438057,
+        "xi_inclination": 0.5273302017815181,
+        "xi_phase": 3.0772885550838325
+      },
+      {
+        "geometry_id": 27,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.7408873900323045,
+        "xi_inclination": -0.7593375042540614,
+        "xi_phase": 5.669089458079899
+      },
+      {
+        "geometry_id": 28,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.370355741783163,
+        "xi_inclination": -1.2436239195672616,
+        "xi_phase": 4.952654240666598
+      },
+      {
+        "geometry_id": 29,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.169449643409356,
+        "xi_inclination": -0.4954314031481666,
+        "xi_phase": 0.13876067756222468
+      },
+      {
+        "geometry_id": 30,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.4012864202551556,
+        "xi_inclination": -0.7381545821666178,
+        "xi_phase": 5.979155935420457
+      },
+      {
+        "geometry_id": 31,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.93119579423755,
+        "xi_inclination": 0.6104953904514571,
+        "xi_phase": 3.9050843479136192
+      },
+      {
+        "geometry_id": 32,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.831416826985674,
+        "xi_inclination": 1.0300720022395153,
+        "xi_phase": 2.8258536048312073
+      },
+      {
+        "geometry_id": 33,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.7171760710465525,
+        "xi_inclination": 0.7876729324062354,
+        "xi_phase": 5.108072457060434
+      },
+      {
+        "geometry_id": 34,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.497142800125433,
+        "xi_inclination": -1.0155565093956174,
+        "xi_phase": 1.2442954493238938
+      },
+      {
+        "geometry_id": 35,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.6299905926609854,
+        "xi_inclination": 0.09127756861800206,
+        "xi_phase": 5.271897469030281
+      },
+      {
+        "geometry_id": 36,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.9718301975307555,
+        "xi_inclination": -0.5083247566600142,
+        "xi_phase": 1.8399656049193425
+      },
+      {
+        "geometry_id": 37,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 3.128686753996103,
+        "xi_inclination": -0.3528709554364118,
+        "xi_phase": 0.47411879686136954
+      },
+      {
+        "geometry_id": 38,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.1602264529968158,
+        "xi_inclination": -1.456251434776606,
+        "xi_phase": 4.176337770631037
+      },
+      {
+        "geometry_id": 39,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.934880228520577,
+        "xi_inclination": 1.1348614496614051,
+        "xi_phase": 0.6664517306640483
+      },
+      {
+        "geometry_id": 40,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.317238906495637,
+        "xi_inclination": -0.07477177750802158,
+        "xi_phase": 0.3768799617245303
+      },
+      {
+        "geometry_id": 41,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.280286203426788,
+        "xi_inclination": 0.5796674708166086,
+        "xi_phase": 1.418881919186216
+      },
+      {
+        "geometry_id": 42,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.9880432316463602,
+        "xi_inclination": -0.12591162029783926,
+        "xi_phase": 2.9423966797272696
+      },
+      {
+        "geometry_id": 43,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.3733067219005033,
+        "xi_inclination": 0.2527975583363533,
+        "xi_phase": 3.1792430891192747
+      },
+      {
+        "geometry_id": 44,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.6250712481185925,
+        "xi_inclination": -0.6389010384742461,
+        "xi_phase": 2.2220008735384265
+      },
+      {
+        "geometry_id": 45,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 4.839453227077371,
+        "xi_inclination": 1.3193369850196084,
+        "xi_phase": 6.246810895972145
+      },
+      {
+        "geometry_id": 46,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 1.8135504508812637,
+        "xi_inclination": 0.01593261449482456,
+        "xi_phase": 2.2843586778714693
+      },
+      {
+        "geometry_id": 47,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 0.05659390293095379,
+        "xi_inclination": 1.1898661197109577,
+        "xi_phase": 4.742107825719377
+      },
+      {
+        "geometry_id": 48,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 2.885055754957411,
+        "xi_inclination": 0.9843618911859721,
+        "xi_phase": 3.41782532547161
+      },
+      {
+        "geometry_id": 49,
+        "geometry_kind": "isotropic_lhs",
+        "orbit_alpha_rad": 5.086925872484776,
+        "xi_inclination": -0.19307959814658304,
+        "xi_phase": 0.029842148369784504
+      }
+    ],
+    "period_grid_days": [
+      10.0,
+      11.689518164985783,
+      13.664483492953257,
+      15.97312280060254,
+      18.671810912919195,
+      21.826447283974872,
+      25.514065200312885,
+      29.824712862168912,
+      34.86365227678084,
+      40.75392965871778,
+      47.639380104013405,
+      55.6881399094527,
+      65.0967523045817,
+      76.09496685459875,
+      88.95134973108236,
+      103.979841848149,
+      121.54742500762859,
+      142.08308325339223,
+      166.08827826277167,
+      194.14919457438816,
+      226.95105366946683,
+      265.29484644318944,
+      310.1168926574779,
+      365.25,
+      423.75871606040636,
+      495.353520895917,
+      579.0443980602483,
+      676.8750009458535,
+      791.2342618981327,
+      924.9147277217335,
+      1081.1807510766077,
+      1263.8482029342983,
+      1477.377652598511,
+      1726.9832906594343,
+      2018.7602546790388,
+      2359.8334667821937,
+      2758.531617629184,
+      3224.590545296395,
+      3769.3909753883595,
+      4406.236427773573,
+      5150.678076168122,
+      6020.894493336132,
+      7038.135554931554,
+      8227.241341700466,
+      9617.248711152964,
+      11242.100350620862,
+      13141.47362611758,
+      15361.749466718296,
+      17957.14494371641,
+      20991.037201085546,
+      24537.51106639817,
+      28683.16813342009,
+      33529.24149249553,
+      39194.06774847221,
+      45815.97669054491,
+      53556.669177068965,
+      62605.16572014828,
+      73182.42219076182,
+      85546.72535565685,
+      100000.0
+    ],
+    "qM_grid": [
+      0.0001,
+      0.00021544346900318845,
+      0.00046415888336127773,
+      0.001,
+      0.002154434690031882,
+      0.004641588833612777,
+      0.01,
+      0.021544346900318822,
+      0.046415888336127774,
+      0.1,
+      0.21544346900318823,
+      0.5,
+      1.0
+    ],
+    "qf_grid": [
+      0.0,
+      0.0001,
+      0.00021544346900318845,
+      0.00046415888336127773,
+      0.001,
+      0.002154434690031882,
+      0.004641588833612777,
+      0.01,
+      0.021544346900318822,
+      0.046415888336127774,
+      0.1,
+      0.21544346900318823,
+      0.5,
+      1.0
+    ],
+    "two_luminous_periods_days": [
+      10.0,
+      30.0,
+      90.0
+    ],
+    "u0_grid": [
+      0.01,
+      0.0144225,
+      0.0208008,
+      0.03,
+      0.044814,
+      0.0669433,
+      0.1,
+      0.144225,
+      0.208008,
+      0.3,
+      0.444697,
+      0.659184,
+      0.977124
+    ]
+  },
+  "include_te150": false,
+  "n_realizations": 50,
+  "noise_seed_base": 2000000000,
+  "noise_seed_range": [
+    2000000000,
+    2000222299
+  ],
+  "output": "/export/storage3/rubin/microlensing/romanrubin/binary_source_lrt_blend_parallax_dev/catalogs/roman_bspl_lrt_v1/h1_bspl_candidate_v3.parquet",
+  "pending_verification": [
+    "W149 = source-1 magnitude; check_catalog_simulation must give baseline = total",
+    "effective blending recorded as zero in simulated outputs",
+    "noise-free simulated curve equals degeneracy_fit.py magnification",
+    "u0 grid resolution audit against Figure 7"
+  ],
+  "production_frozen": false,
+  "rEhat_AU": 5.0,
+  "rows": 222300,
+  "sha256": "3b3d30a319f072fbe1cb3a5a24f85db00a96336b60642c1a14d4f3e9eabcdde9",
+  "sky_position": {
+    "dec": -29.152232510353276,
+    "note": "fixed Roman field used by roman_rubin",
+    "ra": 267.92497054815516
+  },
+  "status": "CANDIDATE",
+  "t0": 2461849.0,
+  "tE_main_days": 30.0,
+  "two_luminous_short_cut": "p10"
+}

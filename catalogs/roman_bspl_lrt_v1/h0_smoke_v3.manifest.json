@@ -1,0 +1,30 @@
+{
+  "catalog_kind": "h0",
+  "catalog_schema_version": "roman_bspl_lrt_catalog_v3",
+  "n_realizations": 2,
+  "notes": [
+    "Test A: rows with is_zero_parallax, --truth-kind h0a",
+    "Test B: all rows, --truth-kind h0b",
+    "directions not yet aligned with observer acceleration axis",
+    "|pi_E|=1 on an axis reaches the [-1,1] fit bound: widen bounds"
+  ],
+  "output": "/export/storage3/rubin/microlensing/romanrubin/binary_source_lrt_blend_parallax_dev/catalogs/roman_bspl_lrt_v1/h0_smoke_v3.parquet",
+  "piE_direction_offset_deg": 0.0,
+  "production_frozen": false,
+  "sha256": "676727f73dc4cecfb7c1d2fb0f7b5bceba361f996c23ec7430ea68d006f831f0",
+  "status": "SMOKE",
+  "strata": [
+    "30"
+  ],
+  "summary": {
+    "configurations": 27,
+    "families": {
+      "h0_tE30": 54
+    },
+    "rows": 54,
+    "seed_range": [
+      3000000000,
+      3000000053
+    ]
+  }
+}

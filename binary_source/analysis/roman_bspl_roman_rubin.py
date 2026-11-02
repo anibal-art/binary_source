@@ -205,6 +205,7 @@ def xallarap_parameters(
     M2_Msun=M2_MSUN,
     rEhat_AU=REHAT_AU,
     theta=THETA,
+    xi_rel_override=None,
 ):
     """
     Same physical convention as the manuscript intrinsic grids:
@@ -253,6 +254,11 @@ def xallarap_parameters(
         / float(rEhat_AU)
     )
 
+    # Dimensionless scans fix xi_rel directly (same role as
+    # override_xiE in degeneracy_fit); a_rel_AU is then only metadata.
+    if xi_rel_override is not None:
+        xi_rel = float(xi_rel_override)
+
     xi_para = (
         xi_rel
         * np.cos(theta)
@@ -281,6 +287,7 @@ def xallarap_parameters(
         "xi_para": xi_para,
         "xi_perp": xi_perp,
         "xi_angular_velocity": omega,
+        "xi_rel_override": xi_rel_override is not None,
     }
 
 
@@ -294,10 +301,12 @@ def build_event_params(
     phi=PHI,
     inclination=INCLINATION,
     theta=THETA,
+    xi_rel=None,
 ):
     xal = xallarap_parameters(
         P_days=P_days,
         theta=theta,
+        xi_rel_override=xi_rel,
     )
 
     roman_mag_vega = (
@@ -386,6 +395,10 @@ def simulate_roman_bspl(
     q_flux=Q_FLUX,
     time_window_te=FIT_WINDOW_TE,
     apply_photometric_filter=False,
+    phi=PHI,
+    inclination=INCLINATION,
+    theta=THETA,
+    xi_rel=None,
 ):
     """
     Simulate a Roman BSPL/xallarap light curve entirely through
@@ -412,6 +425,10 @@ def simulate_roman_bspl(
             t0=t0,
             source_mag_ab=source_mag_ab,
             q_flux=q_flux,
+            phi=phi,
+            inclination=inclination,
+            theta=theta,
+            xi_rel=xi_rel,
         )
     )
 
@@ -428,7 +445,7 @@ def simulate_roman_bspl(
     ephemerides = (
         root
         / "ephemerides"
-        / "Roman_positions.npy"
+        / "Roman_positions_2027_2032_periodic_v1.npy"
     )
 
     model, py_params, decision = (
@@ -506,6 +523,45 @@ def _chi2(fit):
     )
 
 
+def pylima_covariance(fit):
+    """
+    Parameter names, covariance and 1-sigma uncertainties exactly as
+    returned by the pyLIMA TRF fit (fit_results['covariance_matrix'],
+    in physical coordinates for the default fit coordinates).
+
+    pyLIMA rescales (J^T J)^{-1} by chi2/(N - k). This is the intended
+    estimate for light curves WITH photometric noise; it is not meaningful
+    for noiseless (Asimov) light curves.
+    """
+    names = list(
+        fit.fit_parameters.keys()
+    )
+
+    results = fit.fit_results
+
+    cov = results.get(
+        "covariance_matrix_physical",
+        None,
+    )
+
+    if cov is None:
+        cov = results["covariance_matrix"]
+
+    cov = np.asarray(
+        cov,
+        dtype=float,
+    )
+
+    return {
+        "names": names,
+        "covariance": cov,
+        "sigma": {
+            name: float(np.sqrt(max(cov[k, k], 0.0)))
+            for k, name in enumerate(names)
+        },
+    }
+
+
 def fit_pspl_comparison(
     simulation,
     output_dir,
@@ -570,11 +626,14 @@ def fit_pspl_comparison(
         params["tE"]
     )
 
+    # Bounds scale with tE: |t0 - t0_true| <= 2 tE and
+    # 0.02 <= tE/tE_true <= 20 (fixed 10 d / 100 d bounds
+    # cannot represent tE = 100-200 d events).
     common_bounds = {
         "t0": {
             "bounds": [
-                t0 - 10.0,
-                t0 + 10.0,
+                t0 - 2.0 * tE,
+                t0 + 2.0 * tE,
             ],
         },
         "u0": {
@@ -585,8 +644,8 @@ def fit_pspl_comparison(
         },
         "tE": {
             "bounds": [
-                1.0,
-                100.0,
+                0.02 * tE,
+                20.0 * tE,
             ],
         },
     }
@@ -746,6 +805,15 @@ def fit_pspl_comparison(
 
         "chi2_h1":
             chi2_h1,
+
+        "cov_h0":
+            pylima_covariance(fit_h0),
+
+        "cov_h1":
+            pylima_covariance(fit_h1),
+
+        "n_data":
+            int(len(roman_lc)),
 
         "delta_chi2":
             chi2_h0

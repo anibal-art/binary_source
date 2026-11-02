@@ -68,8 +68,13 @@ def event_snr(simulation):
 
     tel = model.event.telescopes[0]
 
+    # Noise-free model flux: identical to the data for Asimov light
+    # curves, and free of the noise contribution otherwise.
     flux = plain(
-        tel.lightcurve["flux"]
+        model.compute_the_microlensing_model(
+            tel,
+            params,
+        )["photometry"]
     )
 
     err_flux = plain(
@@ -103,6 +108,57 @@ def event_snr(simulation):
             )
         )
     )
+
+
+def truth_chi2(simulation):
+    """
+    chi2 of the TRUE BSPL model (true parameters, not fitted) on the
+    simulated Roman data. Zero for Asimov data; ~N for noisy data.
+    """
+    model = simulation["model"]
+    params = simulation["py_params"]
+
+    if len(model.event.telescopes) != 1:
+        raise RuntimeError(
+            "Expected exactly one Roman telescope."
+        )
+
+    tel = model.event.telescopes[0]
+
+    observed = plain(
+        tel.lightcurve["flux"]
+    )
+
+    err_flux = plain(
+        tel.lightcurve["err_flux"]
+    )
+
+    truth = plain(
+        model.compute_the_microlensing_model(
+            tel,
+            params,
+        )["photometry"]
+    )
+
+    return float(
+        np.sum(
+            ((observed - truth) / err_flux) ** 2
+        )
+    )
+
+
+def sigma_piE_magnitude(cov, piEN, piEE):
+    """Linear propagation of the (piEN, piEE) covariance to |piE|."""
+    names = cov["names"]
+    c = cov["covariance"]
+    i = names.index("piEN")
+    j = names.index("piEE")
+    piE = float(np.hypot(piEN, piEE))
+    if piE == 0.0:
+        return float(np.sqrt(0.5 * (c[i, i] + c[j, j])))
+    g = np.array([piEN, piEE]) / piE
+    cc = np.array([[c[i, i], c[i, j]], [c[j, i], c[j, j]]])
+    return float(np.sqrt(max(g @ cc @ g, 0.0)))
 
 
 def verify_asimov(simulation):
@@ -176,6 +232,11 @@ def run_case(
     tE,
     source_mag_ab,
     fit_window_tE,
+    phi=bs.PHI,
+    inclination=bs.INCLINATION,
+    theta=bs.THETA,
+    xi_rel=None,
+    asimov=True,
 ):
     simulation = (
         bs.simulate_roman_bspl(
@@ -187,12 +248,16 @@ def run_case(
             source_mag_ab=float(
                 source_mag_ab
             ),
-            asimov=True,
+            asimov=bool(asimov),
             truth_parallax=False,
             q_flux=0.0,
             time_window_te=float(
                 fit_window_tE
             ),
+            phi=float(phi),
+            inclination=float(inclination),
+            theta=float(theta),
+            xi_rel=xi_rel,
         )
     )
 
@@ -200,6 +265,15 @@ def run_case(
         verify_asimov(
             simulation
         )
+        if asimov
+        else np.nan
+    )
+
+    # Asimov: 0. Noisy data: chi2 of the true BSPL model, so that
+    # Delta chi2 = chi2_fit - chi2_truth (a lower bound of the
+    # BSPL-fit likelihood-ratio statistic).
+    chi2_truth = truth_chi2(
+        simulation
     )
 
     with tempfile.TemporaryDirectory(
@@ -252,7 +326,7 @@ def run_case(
     D_roman_eff = (
         np.sqrt(
             max(
-                chi2_pspl,
+                chi2_pspl - chi2_truth,
                 0.0,
             )
         )
@@ -291,14 +365,28 @@ def run_case(
                 ]
             ),
 
-        # Historical Figure-7 statistic:
-        # Asimov BSPL truth => chi2_truth = 0.
+        # Delta chi2 relative to the TRUE BSPL model (not fitted).
+        # Asimov: chi2_truth = 0, as in the historical figure.
         "delta_chi2_pspl":
+            chi2_pspl - chi2_truth,
+
+        "delta_chi2_pspl_parallax":
+            chi2_parallax - chi2_truth,
+
+        "chi2_truth":
+            chi2_truth,
+
+        "chi2_pspl":
             chi2_pspl,
 
-        # New robustness statistic after allowing annual parallax.
-        "delta_chi2_pspl_parallax":
+        "chi2_pspl_parallax":
             chi2_parallax,
+
+        "n_data":
+            fit["n_data"],
+
+        "asimov":
+            bool(asimov),
 
         "parallax_absorbed_chi2":
             (
@@ -348,6 +436,26 @@ def run_case(
 
         "max_asimov_flux_difference":
             max_asimov_diff,
+
+        # pyLIMA covariance (meaningful for noisy data only).
+        "sigma_tE":
+            fit["cov_h0"]["sigma"]["tE"],
+
+        "sigma_u0":
+            fit["cov_h0"]["sigma"]["u0"],
+
+        "sigma_t0":
+            fit["cov_h0"]["sigma"]["t0"],
+
+        "sigma_parallax_tE":
+            fit["cov_h1"]["sigma"]["tE"],
+
+        "sigma_piE":
+            sigma_piE_magnitude(
+                fit["cov_h1"],
+                best1[3],
+                best1[4],
+            ),
     }
 
 

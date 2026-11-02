@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=40
 #SBATCH --hint=nomultithread
 #SBATCH --mem=128G
-#SBATCH --partition=NOMBRE_REAL
+#SBATCH --partition=milliways-int
 #SBATCH --job-name="roman_xiE"
 #SBATCH --output=roman_xiE_%A_%a.log
 #SBATCH --open-mode=append

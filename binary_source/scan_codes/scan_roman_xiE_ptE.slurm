@@ -27,6 +27,7 @@ export NUMEXPR_NUM_THREADS=1
 export HDF5_USE_FILE_LOCKING=FALSE
 
 PY=/home/anibalvarela/.conda/envs/pyLIMA_test/bin/python
+export PATH="/home/anibalvarela/.conda/envs/gittools/bin:$PATH"   # git is not installed on the compute nodes
 export ROMAN_RUBIN_REPO="${ROMAN_RUBIN_REPO:-/export/storage3/rubin/microlensing/romanrubin/roman_rubin_bspl_main}"
 cd "$SLURM_SUBMIT_DIR"
 

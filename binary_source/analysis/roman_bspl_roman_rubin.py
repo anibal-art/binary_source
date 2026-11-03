@@ -55,6 +55,13 @@ Q_FLUX = 0.0
 
 T0 = 2461849.0
 
+# Physical event coordinates (deg). The current roman_rubin requires
+# data['ra'], data['dec']: they define the pyLIMA Event, hence the
+# North/East basis of the parallax, and the Event used by the fits.
+# Same Roman/Rubin field as the historical roman_rubin RA_FIELD/DEC_FIELD.
+EVENT_RA_DEG = 267.92497054815516
+EVENT_DEC_DEG = -29.152232510353276
+
 FIT_WINDOW_TE = 3.5
 
 
@@ -366,6 +373,10 @@ def build_event_params(
         "blend_ratio_W149":
             0.0,
 
+        # Physical event coordinates (required by roman_rubin sim_event).
+        "ra": float(EVENT_RA_DEG),
+        "dec": float(EVENT_DEC_DEG),
+
         # Project metadata.
         "F146_AB":
             float(
@@ -432,6 +443,33 @@ def simulate_roman_bspl(
         )
     )
 
+    # roman_rubin main requires a materialized realization: fsource_<band>,
+    # ftotal_<band> and blend_ratio_<band> (generating the fluxes from the
+    # magnitude at simulation time was removed). Same formula as the removed
+    # flux_parameters_from_blend_ratio: F = 10**((ZP - mag)/2.5),
+    # fsource = F/(1+g), ftotal = F, with g = blend_ratio_W149 and the
+    # simulation zero point of roman_rubin.
+    from photometry.constants import SIMULATION_BAND_ZERO_POINTS
+
+    g_w149 = float(event_params["blend_ratio_W149"])
+    f_base = 10.0 ** (
+        (
+            float(SIMULATION_BAND_ZERO_POINTS["W149"])
+            - float(event_params["W149"])
+        )
+        / 2.5
+    )
+
+    event_params.setdefault(
+        "fsource_W149",
+        f_base / (1.0 + g_w149),
+    )
+
+    event_params.setdefault(
+        "ftotal_W149",
+        f_base,
+    )
+
     half_window = (
         float(time_window_te)
         * float(tE)
@@ -448,23 +486,24 @@ def simulate_roman_bspl(
         / "Roman_positions_2027_2032_periodic_v1.npy"
     )
 
+    # roman_rubin main: sim_event (simulate_event_for_fit was a thin
+    # wrapper around it and has been removed).
     model, py_params, decision = (
-        frr.simulate_event_for_fit(
-            i=int(event_index),
-            event_params=dict(
+        frr.sim_event(
+            int(event_index),
+            dict(
                 event_params
             ),
-            path_ephemerides=str(
+            str(
                 ephemerides
             ),
-            model="PSPL",
+            "PSPL",
             time_window=time_window,
             use_roman=True,
             use_rubin=False,
             truth_parallax=bool(
                 truth_parallax
             ),
-            rubin_pointing_mode="fixed",
             apply_detection_criteria=False,
             apply_photometric_filter=bool(
                 apply_photometric_filter
@@ -610,8 +649,12 @@ def fit_pspl_comparison(
         )
     )
 
-    origin = frr.get_model_origin(
-        model_true
+    # get_model_origin was removed from roman_rubin main; it was
+    # getattr(model, "origin", None).
+    origin = getattr(
+        model_true,
+        "origin",
+        None,
     )
 
     t0 = float(

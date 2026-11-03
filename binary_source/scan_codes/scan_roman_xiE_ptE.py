@@ -71,7 +71,7 @@ PILOT_NAME = "roman_xiE_ptE_pilot"
 
 KEYS = [
     "delta_chi2_pspl", "delta_chi2_pspl_parallax",
-    "chi2_truth", "chi2_pspl", "chi2_pspl_parallax", "n_data",
+    "chi2_truth", "chi2_truth_fixed_flux", "chi2_pspl", "chi2_pspl_parallax", "n_data",
     "snr_event", "D_roman_eff",
     "best_t0", "best_u0", "best_tE", "sigma_t0", "sigma_u0", "sigma_tE",
     "best_parallax_tE", "sigma_parallax_tE",
@@ -212,12 +212,13 @@ def pilot(workers):
                 print("FAILED", c, traceback.format_exc(), flush=True)
     rows.sort(key=lambda x: (x[0][2] is not None, not x[0][6], x[0][1], x[0][3], x[0][5]))
     print("\nasimov u0   tE   xi_E     P/tE   F146  dchi2_A    dchi2_B    "
-          "chi2_true/N  dtE/tE    sig_tE/tE  piE      sig_piE   sec")
+          "dchi2_A_fixF chi2_true/N  dtE/tE    sig_tE/tE  piE      sig_piE   sec")
     for c, r in rows:
         u0, tE, xi, pte, _, m, asimov = c
         print(f"{'yes' if asimov else 'no ':>6} {u0:4.2f} {tE:4.0f} "
               f"{('kepler' if xi is None else f'{xi:.3g}'):>7} {pte:7.3g} {m:5.1f} "
               f"{r['delta_chi2_pspl']:10.4g} {r['delta_chi2_pspl_parallax']:10.4g} "
+              f"{r['chi2_pspl'] - r['chi2_truth_fixed_flux']:11.4g} "
               f"{r['chi2_truth'] / r['n_data']:11.4f} {(r['best_tE'] - tE) / tE:9.3g} "
               f"{r['sigma_tE'] / tE:10.3g} {r['best_piE']:8.3g} {r['sigma_piE']:8.3g} "
               f"{r['seconds']:5.0f}")

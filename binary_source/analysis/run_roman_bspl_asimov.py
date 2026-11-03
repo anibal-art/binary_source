@@ -110,10 +110,21 @@ def event_snr(simulation):
     )
 
 
-def truth_chi2(simulation):
+def truth_chi2(simulation, profile_fluxes=True):
     """
-    chi2 of the TRUE BSPL model (true parameters, not fitted) on the
-    simulated Roman data. Zero for Asimov data; ~N for noisy data.
+    chi2 of the TRUE BSPL model (true shape parameters, not fitted) on the
+    simulated Roman data.
+
+    profile_fluxes=True (default): the source and total fluxes are profiled
+    with roman_rubin's exact box-constrained linear least squares
+    (fitting.flux_profile.bounded_profile_ftotal_2d, the solver used by
+    flux_method="bounded_profile"), so that the true model has the same
+    flux freedom as the fitted PSPL models. Asimov data: the true fluxes
+    are the exact solution and chi2 = 0. Noisy data: the noise is drawn in
+    magnitude, so the flux noise has a small mean bias that free fluxes
+    absorb; profiling removes that asymmetry from Delta chi2.
+
+    profile_fluxes=False: true fluxes kept fixed (previous definition).
     """
     model = simulation["model"]
     params = simulation["py_params"]
@@ -133,18 +144,43 @@ def truth_chi2(simulation):
         tel.lightcurve["err_flux"]
     )
 
-    truth = plain(
-        model.compute_the_microlensing_model(
-            tel,
-            params,
-        )["photometry"]
+    if not profile_fluxes:
+        truth = plain(
+            model.compute_the_microlensing_model(
+                tel,
+                params,
+            )["photometry"]
+        )
+
+        return float(
+            np.sum(
+                ((observed - truth) / err_flux) ** 2
+            )
+        )
+
+    bs.load_roman_rubin()      # puts roman_rubin on sys.path
+    from fitting.flux_profile import bounded_profile_ftotal_2d
+
+    # pyLIMA double source: magnification = A1 + q_flux A2.
+    # Normalise to a unit baseline: flux = fsource (A - 1) + ftotal.
+    q_flux = float(
+        simulation["event_params"].get("q_flux", 0.0)
     )
 
-    return float(
-        np.sum(
-            ((observed - truth) / err_flux) ** 2
+    magnification = plain(
+        model.model_magnification(
+            tel,
+            params,
         )
+    ) / (1.0 + q_flux)
+
+    profile = bounded_profile_ftotal_2d(
+        magnification,
+        observed,
+        err_flux,
     )
+
+    return float(profile["chi2"])
 
 
 def sigma_piE_magnitude(cov, piEN, piEE):
@@ -269,11 +305,17 @@ def run_case(
         else np.nan
     )
 
-    # Asimov: 0. Noisy data: chi2 of the true BSPL model, so that
-    # Delta chi2 = chi2_fit - chi2_truth (a lower bound of the
-    # BSPL-fit likelihood-ratio statistic).
+    # chi2 of the true BSPL shape with profiled fluxes (same flux freedom
+    # as the PSPL fits), so that Delta chi2 = chi2_fit - chi2_truth is a
+    # lower bound of the BSPL-fit likelihood-ratio statistic. Asimov: 0.
     chi2_truth = truth_chi2(
         simulation
+    )
+
+    # Diagnostic only: previous definition with the true fluxes fixed.
+    chi2_truth_fixed_flux = truth_chi2(
+        simulation,
+        profile_fluxes=False,
     )
 
     with tempfile.TemporaryDirectory(
@@ -375,6 +417,9 @@ def run_case(
 
         "chi2_truth":
             chi2_truth,
+
+        "chi2_truth_fixed_flux":
+            chi2_truth_fixed_flux,
 
         "chi2_pspl":
             chi2_pspl,

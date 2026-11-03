@@ -15,8 +15,9 @@
 #   pilot:       sbatch scan_roman_xiE_ptE.slurm --pilot --workers 40
 #   production:  sbatch --array=0-7 scan_roman_xiE_ptE.slurm --workers 40
 #   summary:     python scan_roman_xiE_ptE.py --summarize
-# roman_rubin must be the sibling checkout on branch bspl-xallarap-model,
-# or set ROMAN_RUBIN_REPO.
+# Python environment and roman_rubin checkout are fixed here, so the job
+# does not depend on the conda environment or variables of the terminal
+# that submits it. ROMAN_RUBIN_REPO can still be overridden at submission.
 
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=1
@@ -25,8 +26,16 @@ export OPENBLAS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 export HDF5_USE_FILE_LOCKING=FALSE
 
-PY="$CONDA_PREFIX/bin/python"
+PY=/home/anibalvarela/.conda/envs/pyLIMA_test/bin/python
+export ROMAN_RUBIN_REPO="${ROMAN_RUBIN_REPO:-/export/storage3/rubin/microlensing/romanrubin/roman_rubin_bspl_main}"
 cd "$SLURM_SUBMIT_DIR"
+
+# Provenance diagnostics (printed at the top of the log).
+echo "[env] host=$(hostname) python=$PY"
+echo "[env] ROMAN_RUBIN_REPO=$ROMAN_RUBIN_REPO"
+echo "[env] git=$(command -v git || echo NOT_FOUND)"
+echo "[env] binary_source HEAD: $(git -C "$SLURM_SUBMIT_DIR" rev-parse --short=12 HEAD 2>&1)"
+echo "[env] roman_rubin   HEAD: $(git -C "$ROMAN_RUBIN_REPO" rev-parse --short=12 HEAD 2>&1)"
 
 if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
     "$PY" scan_roman_xiE_ptE.py --shard "$SLURM_ARRAY_TASK_ID" \

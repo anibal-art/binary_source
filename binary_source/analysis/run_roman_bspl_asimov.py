@@ -273,7 +273,12 @@ def run_case(
     theta=bs.THETA,
     xi_rel=None,
     asimov=True,
+    photometric_filter=False,
 ):
+    # photometric_filter=True applies roman_rubin's Roman F146 policy:
+    # fully saturated, invalid and S/N < 5 points are removed (they carry
+    # no usable measurement; with the filter off they are kept with NaN
+    # uncertainties).
     simulation = (
         bs.simulate_roman_bspl(
             event_index=int(event_index),
@@ -294,6 +299,7 @@ def run_case(
             inclination=float(inclination),
             theta=float(theta),
             xi_rel=xi_rel,
+            apply_photometric_filter=bool(photometric_filter),
         )
     )
 
@@ -335,22 +341,6 @@ def run_case(
         fit["chi2_h1"]
     )
 
-    if (
-        chi2_parallax
-        >
-        chi2_pspl
-        + 1e-6
-        * (
-            1.0
-            + abs(chi2_pspl)
-        )
-    ):
-        raise RuntimeError(
-            "Nested-model violation: "
-            f"chi2_PSPL={chi2_pspl}, "
-            f"chi2_PSPL+piE={chi2_parallax}"
-        )
-
     best0 = np.asarray(
         fit["best_h0"],
         dtype=float,
@@ -360,6 +350,21 @@ def run_case(
         fit["best_h1"],
         dtype=float,
     )
+
+    # PSPL is nested in PSPL+parallax. If the H1 fit still ends above H0
+    # after the retries in fit_pspl_comparison, H1 did not converge: keep
+    # the (valid) PSPL fit and mark every PSPL+parallax quantity as NaN,
+    # instead of discarding the whole case.
+    h1_ok = bool(
+        fit["h1_nested_ok"]
+    )
+
+    if not h1_ok:
+        chi2_parallax = np.nan
+        best1 = np.full(
+            5,
+            np.nan,
+        )
 
     snr = event_snr(
         simulation
@@ -493,14 +498,23 @@ def run_case(
             fit["cov_h0"]["sigma"]["t0"],
 
         "sigma_parallax_tE":
-            fit["cov_h1"]["sigma"]["tE"],
+            fit["cov_h1"]["sigma"]["tE"] if h1_ok else np.nan,
 
         "sigma_piE":
             sigma_piE_magnitude(
                 fit["cov_h1"],
                 best1[3],
                 best1[4],
-            ),
+            ) if h1_ok else np.nan,
+
+        "h1_nested_ok":
+            h1_ok,
+
+        "h1_attempts":
+            int(fit["h1_attempts"]),
+
+        "photometric_filter":
+            bool(photometric_filter),
     }
 
 

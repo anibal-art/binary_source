@@ -773,11 +773,17 @@ def fit_pspl_comparison(
         dtype=float,
     )
 
-    fit_h1, _, _ = (
-        fit_lc.fit_rubin_roman(
+    def run_h1(initial, flux_method=None, subdir="H1"):
+        h1_path = output_dir / subdir
+        h1_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        fit, _, _ = fit_lc.fit_rubin_roman(
             Source=int(seed),
             event_params=params,
-            path_save=h1_dir,
+            path_save=h1_path,
             path_ephemerides=str(
                 ephemerides
             ),
@@ -795,41 +801,25 @@ def fit_pspl_comparison(
             fit_model="PSPL",
             fit_parallax=True,
             fit_bounds=h1_bounds,
-
-            # H1 starts exactly from the H0 optimum
-            # with pi_E = 0.
-            initial_guess={
-                "t0":
-                    float(
-                        best_h0[0]
-                    ),
-
-                "u0":
-                    float(
-                        best_h0[1]
-                    ),
-
-                "tE":
-                    float(
-                        best_h0[2]
-                    ),
-
-                "piEN": 0.0,
-                "piEE": 0.0,
-            },
-
+            initial_guess=initial,
             random_state=int(seed),
             event_ra=event_ra,
             event_dec=event_dec,
+            flux_method=flux_method,
         )
-    )
 
-    best_h1 = np.asarray(
-        fit_h1.fit_results[
-            "best_model"
-        ],
-        dtype=float,
-    )
+        return fit
+
+    # H1 starts exactly from the H0 optimum with pi_E = 0.
+    h1_start = {
+        "t0": float(best_h0[0]),
+        "u0": float(best_h0[1]),
+        "tE": float(best_h0[2]),
+        "piEN": 0.0,
+        "piEE": 0.0,
+    }
+
+    fit_h1 = run_h1(h1_start)
 
     chi2_h0 = _chi2(
         fit_h0
@@ -837,6 +827,68 @@ def fit_pspl_comparison(
 
     chi2_h1 = _chi2(
         fit_h1
+    )
+
+    # PSPL is nested in PSPL+parallax (pi_E = 0), so a converged H1 fit
+    # must satisfy chi2_h1 <= chi2_h0. If not, the H1 optimizer stopped in
+    # a worse local minimum (its flux start is chosen by pyLIMA, not taken
+    # from H0). Retry with profiled fluxes (roman_rubin bounded_profile),
+    # both signs of u0 and small pi_E offsets, and keep the best H1.
+    nested_tol = 1e-6 * (1.0 + abs(chi2_h0))
+    h1_attempts = 1
+
+    if chi2_h1 > chi2_h0 + nested_tol:
+
+        retry_starts = []
+
+        for u0_start in (h1_start["u0"], -h1_start["u0"]):
+            for piEN, piEE in (
+                (0.0, 0.0),
+                (0.05, 0.0),
+                (-0.05, 0.0),
+                (0.0, 0.05),
+                (0.0, -0.05),
+            ):
+                retry_starts.append(
+                    dict(
+                        h1_start,
+                        u0=float(u0_start),
+                        piEN=piEN,
+                        piEE=piEE,
+                    )
+                )
+
+        for k, start in enumerate(retry_starts):
+            try:
+                fit_try = run_h1(
+                    start,
+                    flux_method="bounded_profile",
+                    subdir=f"H1_retry_{k:02d}",
+                )
+            except Exception:
+                continue
+
+            h1_attempts += 1
+            chi2_try = _chi2(
+                fit_try
+            )
+
+            if chi2_try < chi2_h1:
+                fit_h1 = fit_try
+                chi2_h1 = chi2_try
+
+            if chi2_h1 <= chi2_h0 + nested_tol:
+                break
+
+    h1_nested_ok = bool(
+        chi2_h1 <= chi2_h0 + nested_tol
+    )
+
+    best_h1 = np.asarray(
+        fit_h1.fit_results[
+            "best_model"
+        ],
+        dtype=float,
     )
 
     return {
@@ -848,6 +900,12 @@ def fit_pspl_comparison(
 
         "chi2_h1":
             chi2_h1,
+
+        "h1_nested_ok":
+            h1_nested_ok,
+
+        "h1_attempts":
+            int(h1_attempts),
 
         "cov_h0":
             pylima_covariance(fit_h0),

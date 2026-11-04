@@ -22,12 +22,25 @@ the appropriate estimate for noisy data.
 Roman results depend on t_E through the cadence and the seasons, so t_E is
 a grid axis.
 
+Photometric policy: roman_rubin's Roman F146 filter is applied
+(PHOTOMETRIC_FILTER = True): fully saturated, invalid and S/N < 5 points
+are removed, as for real data. With the filter off, those points were kept
+with NaN uncertainties and the case failed.
+
+PSPL+parallax: if the H1 fit ends above the nested PSPL fit, it is retried
+(fit_pspl_comparison); if it still fails, the PSPL results are kept and the
+H1 quantities are NaN (h1_nested_ok = 0).
+
 Usage
 -----
     python scan_roman_xiE_ptE.py --pilot --workers 40
     python scan_roman_xiE_ptE.py --estimate --seconds-per-case 20
     python scan_roman_xiE_ptE.py --shard $SLURM_ARRAY_TASK_ID --n-shards 8 --workers 40
     python scan_roman_xiE_ptE.py --summarize
+    # recompute only the failed cases of an earlier run (same seeds),
+    # copying the others, plus an equivalence check on a sample of them:
+    python scan_roman_xiE_ptE.py --redo-from <old .../roman_xiE_ptE_maps> \
+        --shard $SLURM_ARRAY_TASK_ID --n-shards 8 --workers 40
 """
 
 import argparse
@@ -64,6 +77,8 @@ XI_GRID = XI_E_GRID[::2]                          # 20 nodes
 PT_GRID = PTE_GRID[::2]                           # 20 nodes
 GEO = geometries(N_GEOMETRIES)                    # row 0 = reference geometry
 FIT_WINDOW_TE = 3.5
+PHOTOMETRIC_FILTER = True                         # roman_rubin Roman F146 policy
+CHECK_EVERY = 197                                 # --redo-from: re-run 1 in ~197 good cases
 DCHI2_LEVELS = np.array([25.0, 50.0, 100.0])      # reference levels until H0 calibration
 
 OUTPUT_NAME = "roman_xiE_ptE_maps"
@@ -77,6 +92,7 @@ KEYS = [
     "best_parallax_tE", "sigma_parallax_tE",
     "best_piEN", "best_piEE", "best_piE", "sigma_piE",
     "max_asimov_flux_difference", "seconds",
+    "h1_nested_ok", "h1_attempts",
 ]
 
 assert np.isclose(bs.M2_MSUN / bs.M1_MSUN, Q_M), "q_M differs from the intrinsic scan"
@@ -133,6 +149,7 @@ def one_case(u0, tE, xi_e, p_te, geo_row, mag, seed, asimov=False):
         theta=float(theta),
         xi_rel=None if xi_e is None else float(xi_e) * (1.0 + Q_M) / Q_M,
         asimov=bool(asimov),
+        photometric_filter=PHOTOMETRIC_FILTER,
     )
     r["seconds"] = time.time() - t1
     return r
@@ -164,9 +181,94 @@ def worker(args):
         out, **res, error=err, noise_seed=seeds,
         u0=u0, tE=tE, xi_E=xi_e, P_over_tE=PT_GRID, F146=MAG_VALUES,
         geometry=GEO[ig], q_mass=Q_M, fit_window_tE=FIT_WINDOW_TE, asimov=False,
+        photometric_filter=np.full(shape, PHOTOMETRIC_FILTER),
+        case_commit=np.full(shape, CODE_COMMIT, dtype="<U20"),
         code_commit=CODE_COMMIT, code_dirty=CODE_DIRTY,
     )
     return "done"
+
+
+CHECK_KEYS = ("delta_chi2_pspl", "delta_chi2_pspl_parallax", "best_tE", "sigma_tE")
+
+
+def worker_redo(args):
+    """Copy an earlier task file, recomputing only its failed cases with the
+    same noise seeds. A sample of the good cases (1 in CHECK_EVERY seeds) is
+    recomputed too, to check that the current code reproduces them."""
+    iu, it, ix, ig, directory, old_dir = args
+    out = outfile(directory, iu, it, ix, ig)
+    if valid(out):
+        return "skip", []
+    with np.load(outfile(old_dir, iu, it, ix, ig), allow_pickle=False) as d:
+        old = {k: d[k].copy() for k in d.files}
+    shape = (len(PT_GRID), len(MAG_VALUES))
+    res = {k: (old[k].astype(float) if k in old else np.full(shape, np.nan)) for k in KEYS}
+    good_old = old["error"] == ""
+    res["h1_nested_ok"] = np.where(good_old & np.isfinite(res["delta_chi2_pspl"]), 1.0, np.nan)
+    res["h1_attempts"] = np.where(np.isfinite(res["h1_nested_ok"]), 1.0, np.nan)
+    err = old["error"].astype("<U300")
+    filt = np.zeros(shape, dtype=bool)
+    case_commit = np.full(shape, str(old["code_commit"]), dtype="<U20")
+    seeds = old["noise_seed"].astype(np.int64)
+    checks = []
+    u0, tE, xi_e = U0_VALUES[iu], TE_VALUES[it], XI_GRID[ix]
+    for ip, p_te in enumerate(PT_GRID):
+        if not reachable(xi_e, p_te):
+            continue
+        for im, mag in enumerate(MAG_VALUES):
+            failed = err[ip, im] != ""
+            check = (not failed) and seeds[ip, im] % CHECK_EVERY == 0
+            if not (failed or check):
+                continue
+            try:
+                r = one_case(u0, tE, xi_e, p_te, GEO[ig], mag, seeds[ip, im])
+            except Exception as exc:
+                if failed:
+                    err[ip, im] = f"{type(exc).__name__}: {exc}"[:300]
+                    case_commit[ip, im] = CODE_COMMIT
+                    filt[ip, im] = PHOTOMETRIC_FILTER
+                continue
+            if failed:
+                for k in KEYS:
+                    res[k][ip, im] = float(r[k])
+                err[ip, im] = ""
+                case_commit[ip, im] = CODE_COMMIT
+                filt[ip, im] = PHOTOMETRIC_FILTER
+            else:
+                checks.append(tuple(
+                    (float(r[k]) - res[k][ip, im]) / max(abs(res[k][ip, im]), 1.0)
+                    for k in CHECK_KEYS))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        out, **res, error=err, noise_seed=seeds,
+        u0=u0, tE=tE, xi_E=xi_e, P_over_tE=PT_GRID, F146=MAG_VALUES,
+        geometry=GEO[ig], q_mass=Q_M, fit_window_tE=FIT_WINDOW_TE, asimov=False,
+        photometric_filter=filt, case_commit=case_commit,
+        redo_from=str(old_dir), code_commit=CODE_COMMIT, code_dirty=CODE_DIRTY,
+    )
+    return "done", checks
+
+
+def run_redo(tasks, directory, old_dir, workers):
+    jobs = [(*t, str(directory), str(old_dir)) for t in tasks]
+    n = 0
+    checks = []
+    t0 = time.time()
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        futs = [ex.submit(worker_redo, j) for j in jobs]
+        for f in as_completed(futs):
+            _, c = f.result()
+            checks += c
+            n += 1
+            if n % 25 == 0 or n == len(jobs):
+                print(f"{n}/{len(jobs)} tasks | {time.time() - t0:.0f} s", flush=True)
+    c = np.array(checks)
+    print(f"equivalence check on {len(c)} previously good cases "
+          f"(relative difference, current code vs earlier run):")
+    for k, col in zip(CHECK_KEYS, c.T if len(c) else [[]] * len(CHECK_KEYS)):
+        col = np.asarray(col, float)
+        col = col[np.isfinite(col)]
+        print(f"  {k:26s} max |diff| = {np.max(np.abs(col)) if col.size else float('nan'):.3e}")
 
 
 def run_tasks(tasks, directory, workers):
@@ -260,8 +362,14 @@ def summarize():
     tE_true = TE_VALUES[None, :, None, None, None, None]
     z_tE = ((S["best_tE"] - tE_true) / S["sigma_tE"])[:, :, :, :, rnd, :]
     z_pi = (S["best_piE"] / S["sigma_piE"])[:, :, :, :, rnd, :]
-    frac = {f"frac_dchi2_A_above_{int(L)}": np.nanmean(dA > L, axis=4) for L in DCHI2_LEVELS}
-    frac.update({f"frac_dchi2_B_above_{int(L)}": np.nanmean(dB > L, axis=4) for L in DCHI2_LEVELS})
+    # fractions over the orientations with a valid value (NaN excluded)
+    def frac_above(x, L):
+        n = np.isfinite(x).sum(axis=4)
+        return np.where(n > 0, (x > L).sum(axis=4) / np.maximum(n, 1), np.nan)
+    frac = {f"frac_dchi2_A_above_{int(L)}": frac_above(dA, L) for L in DCHI2_LEVELS}
+    frac.update({f"frac_dchi2_B_above_{int(L)}": frac_above(dB, L) for L in DCHI2_LEVELS})
+    frac["n_valid_A"] = np.isfinite(dA).sum(axis=4)
+    frac["n_valid_B"] = np.isfinite(dB).sum(axis=4)
     out = Path(directory) / "summary_roman_xiE_ptE.npz"
     np.savez_compressed(
         out, **{f"{k}_all": v for k, v in S.items()}, **frac,
@@ -288,6 +396,8 @@ def main():
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--n-shards", type=int, default=1)
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--redo-from", default=None,
+                    help="earlier roman_xiE_ptE_maps directory: recompute only its failed cases")
     a = ap.parse_args()
     if a.pilot:
         return pilot(a.workers)
@@ -299,8 +409,12 @@ def main():
         sys.exit("Refusing production run from a dirty working tree (commit first).")
     tasks = task_list()[a.shard::a.n_shards]
     print(f"commit {CODE_COMMIT} | shard {a.shard}/{a.n_shards} | {len(tasks)} tasks "
-          f"| workers {a.workers}", flush=True)
-    run_tasks(tasks, final_output_dir(OUTPUT_NAME), a.workers)
+          f"| workers {a.workers} | photometric_filter {PHOTOMETRIC_FILTER}"
+          + (f" | redo from {a.redo_from}" if a.redo_from else ""), flush=True)
+    if a.redo_from:
+        run_redo(tasks, final_output_dir(OUTPUT_NAME), Path(a.redo_from), a.workers)
+    else:
+        run_tasks(tasks, final_output_dir(OUTPUT_NAME), a.workers)
 
 
 if __name__ == "__main__":

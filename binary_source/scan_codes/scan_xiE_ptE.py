@@ -31,11 +31,18 @@ orientations: theta, phi uniform in [0, 2 pi), sin(i) uniform in [-1, 1]
 is uniform cos(inclination)). The random geometries are drawn once from a
 fixed seed and stored in the output.
 
+Two luminous sources (--qM, --qf): with q_f > 0 the light curve depends on
+(u0, xi_rel, P/tE, q_M, q_f) and the orientation. The grid is then read as
+the RELATIVE amplitude xi_rel and passed unchanged through ``override_xiE``;
+masses enter only through q_M (we use M1 = 1, M2 = q_M), and rEhat and tE are
+again irrelevant. Requires --u0; the output directory name carries q_M and q_f.
+
 Usage (from the repository root):
     python binary_source/scan_codes/scan_xiE_ptE.py --estimate
     python binary_source/scan_codes/scan_xiE_ptE.py --smoke
     python binary_source/scan_codes/scan_xiE_ptE.py
     python binary_source/scan_codes/scan_xiE_ptE.py --summarize
+    python binary_source/scan_codes/scan_xiE_ptE.py --u0 0.01 0.3 1 --refine 2 --qM 0.5 --qf 0.05
 """
 
 import argparse
@@ -118,7 +125,7 @@ def valid_npz(path, expected_P):
 
 
 def worker(task):
-    i_u0, u0, i_xi, xi_e, i_geo, (theta, phi, inc), pte, directory = task
+    i_u0, u0, i_xi, xi, i_geo, (theta, phi, inc), pte, (q_m, q_f), directory = task
     out = outfile_for(directory, i_u0, i_xi, i_geo)
     P_grid = np.asarray(pte) * TE
     if valid_npz(out, P_grid):
@@ -132,15 +139,16 @@ def worker(task):
         tE_true=TE,
         phi_true=float(phi),
         i_true=float(inc),
-        qflux_true=0.0,
+        qflux_true=float(q_f),
         theta_true=float(theta),
-        M1_Msun=M1,
-        M2_Msun=M2,
+        M1_Msun=M1 if q_f == 0.0 else 1.0,
+        M2_Msun=M2 if q_f == 0.0 else float(q_m),
         rEhat_AU=REHAT_AU,
         P_grid=P_grid,
         msource_true=MSOURCE,
         mtotal_true=MTOTAL,
-        override_xiE=float(xi_e) * (1.0 + Q_M) / Q_M,    # xi_rel giving xi_E
+        override_xiE=(float(xi) * (1.0 + Q_M) / Q_M if q_f == 0.0   # xi_E -> xi_rel
+                      else float(xi)),                              # grid is xi_rel
         set_flux_from_truth_photometry=True,
         rms_on_magnification=True,
         store_curves=False,
@@ -148,8 +156,9 @@ def worker(task):
     return "done"
 
 
-def build_tasks(u0_values, xi_grid, pte_grid, geo, directory):
-    return [(i_u0, float(u0), i_xi, float(xi), i_g, tuple(g), pte_grid, str(directory))
+def build_tasks(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0)):
+    return [(i_u0, float(u0), i_xi, float(xi), i_g, tuple(g), pte_grid, tuple(q_pair),
+             str(directory))
             for i_u0, u0 in enumerate(u0_values)
             for i_xi, xi in enumerate(xi_grid)
             for i_g, g in enumerate(geo)]
@@ -178,7 +187,7 @@ def run(tasks, max_workers):
         raise RuntimeError(f"{failed} tasks failed")
 
 
-def summarize(u0_values, xi_grid, pte_grid, geo, directory):
+def summarize(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0)):
     shape = (len(u0_values), len(xi_grid), len(geo), len(pte_grid))
     D = np.full(shape, np.nan)
     DTE = np.full(shape, np.nan)
@@ -203,12 +212,14 @@ def summarize(u0_values, xi_grid, pte_grid, geo, directory):
     out = Path(directory) / "summary_xiE_ptE.npz"
     np.savez(
         out,
-        u0=u0_values, xi_E=xi_grid, P_over_tE=pte_grid, geometries=geo,
+        u0=u0_values, **{("xi_E" if q_pair[1] == 0.0 else "xi_rel"): xi_grid},
+        P_over_tE=pte_grid, geometries=geo,
         D_all=D, dtE_over_tE_all=DTE, du0_over_u0_all=DU0, dt0_over_tE_all=DT0,
         D_p16_p50_p84=pct(D),
         abs_dtE_over_tE_p16_p50_p84=pct(np.abs(DTE)),
         D_reference_geometry=D[:, :, 0], dtE_over_tE_reference_geometry=DTE[:, :, 0],
-        q_mass_used=Q_M, tE_used=TE, n_random_geometries=len(geo) - 1,
+        q_mass_used=q_pair[0], q_flux_used=q_pair[1], tE_used=TE,
+        n_random_geometries=len(geo) - 1,
         code_commit=np.array(CODE_COMMIT), code_dirty=np.bool_(CODE_DIRTY),
         fit_objective=np.array(FIT_OBJECTIVE),
     )
@@ -230,7 +241,17 @@ def main():
     ap.add_argument("--refine", type=int, default=1,
                     help="k > 1 inserts k-1 nodes between the nodes of XI_E_GRID and "
                          "PTE_GRID (same range; every original node is kept)")
+    ap.add_argument("--qM", type=float, default=None,
+                    help="two luminous sources: mass ratio M2/M1 (requires --qf > 0)")
+    ap.add_argument("--qf", type=float, default=0.0,
+                    help="two luminous sources: flux ratio F2/F1; with qf > 0 the xi "
+                         "grid is the relative amplitude xi_rel")
     args = ap.parse_args()
+    if (args.qM is None) != (args.qf == 0.0):
+        ap.error("--qM and --qf > 0 must be given together")
+    if args.qf > 0.0 and not args.u0:
+        ap.error("--qM/--qf require --u0")
+    q_pair = (Q_M, 0.0) if args.qf == 0.0 else (args.qM, args.qf)
 
     if args.smoke:
         u0s, xis, ptes, geo = SMOKE["u0"], SMOKE["xi"], SMOKE["pte"], geometries(SMOKE["n_geo"])
@@ -247,6 +268,8 @@ def main():
                                k * (len(PTE_GRID) - 1) + 1)
             assert np.allclose(xis[::k], XI_E_GRID) and np.allclose(ptes[::k], PTE_GRID)
             tag += f"_refine{k}"
+        if q_pair[1] > 0.0:
+            tag += f"_qM{q_pair[0]:g}_qf{q_pair[1]:g}".replace(".", "p")
         directory = final_output_dir(f"{OUTPUT_NAME}_u0_{tag}")
     else:
         u0s, xis, ptes, geo = U0_VALUES, XI_E_GRID, PTE_GRID, geometries(N_GEOMETRIES)
@@ -256,12 +279,14 @@ def main():
               "marked dirty and not reused on a later run.")
 
     if args.summarize:
-        summarize(u0s, xis, ptes, geo, directory)
+        summarize(u0s, xis, ptes, geo, directory, q_pair)
         return
 
-    tasks = build_tasks(u0s, xis, ptes, geo, directory)
+    tasks = build_tasks(u0s, xis, ptes, geo, directory, q_pair)
     print(f"output   : {directory}")
-    print(f"grid     : {len(u0s)} u0 x {len(xis)} xi_E x {len(geo)} geometries "
+    xi_name = ("xi_E" if q_pair[1] == 0.0
+               else f"xi_rel (q_M={q_pair[0]:g}, q_f={q_pair[1]:g})")
+    print(f"grid     : {len(u0s)} u0 x {len(xis)} {xi_name} x {len(geo)} geometries "
           f"x {len(ptes)} P/tE = {len(tasks) * len(ptes)} PSPL fits")
     print(f"commit   : {CODE_COMMIT} (dirty={CODE_DIRTY})  workers={args.workers}")
 
@@ -269,7 +294,7 @@ def main():
         rng = np.random.default_rng(0)
         sample = [tasks[i] for i in rng.choice(len(tasks), size=min(4, len(tasks)),
                                                replace=False)]
-        est_dir = final_output_dir(OUTPUT_NAME + "_estimate")
+        est_dir = final_output_dir(Path(directory).name + "_estimate")
         sample = [t[:-1] + (str(est_dir),) for t in sample]
         t1 = time.time()
         for t in sample:
@@ -282,7 +307,7 @@ def main():
         return
 
     run(tasks, args.workers)
-    summarize(u0s, xis, ptes, geo, directory)
+    summarize(u0s, xis, ptes, geo, directory, q_pair)
 
 
 if __name__ == "__main__":

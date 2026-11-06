@@ -223,11 +223,20 @@ def main():
                     help="time a few tasks and estimate the full run")
     ap.add_argument("--summarize", action="store_true", help="collect NPZ files")
     ap.add_argument("--workers", type=int, default=MAX_WORKERS)
+    ap.add_argument("--u0", type=float, nargs="+", default=None,
+                    help="u0 values instead of U0_VALUES; written to a separate "
+                         "directory xiE_ptE_maps_u0_<values> (files are indexed by "
+                         "the position of u0 in the list)")
     args = ap.parse_args()
 
     if args.smoke:
         u0s, xis, ptes, geo = SMOKE["u0"], SMOKE["xi"], SMOKE["pte"], geometries(SMOKE["n_geo"])
         directory = final_output_dir(OUTPUT_NAME + "_smoke")
+    elif args.u0:
+        u0s, xis, ptes, geo = (np.array(args.u0, dtype=float), XI_E_GRID, PTE_GRID,
+                               geometries(N_GEOMETRIES))
+        tag = "_".join(f"{u:g}".replace(".", "p") for u in u0s)
+        directory = final_output_dir(f"{OUTPUT_NAME}_u0_{tag}")
     else:
         u0s, xis, ptes, geo = U0_VALUES, XI_E_GRID, PTE_GRID, geometries(N_GEOMETRIES)
         directory = final_output_dir(OUTPUT_NAME)

@@ -28,6 +28,9 @@ from functions_aux import (
 
 FIT_OBJECTIVE = "intrinsic_magnification_trapezoid"
 
+# np.trapezoid exists from numpy 2.0; np.trapz is the same rule in older numpy.
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 
 def _get_git_state():
     """
@@ -184,7 +187,7 @@ def intrinsic_magnification_objective(
         return 1e100
 
     return float(
-        np.trapezoid(
+        _trapezoid(
             residual**2,
             x=t,
         )
@@ -566,12 +569,12 @@ def compute_D_metric(
     # Norma L2 al cuadrado
     # --------------------------------------------------------
 
-    numerator = np.trapezoid(
+    numerator = _trapezoid(
         delta_A**2,
         x=t_valid,
     )
 
-    denominator = np.trapezoid(
+    denominator = _trapezoid(
         signal_A**2,
         x=t_valid,
     )

@@ -227,6 +227,9 @@ def main():
                     help="u0 values instead of U0_VALUES; written to a separate "
                          "directory xiE_ptE_maps_u0_<values> (files are indexed by "
                          "the position of u0 in the list)")
+    ap.add_argument("--refine", type=int, default=1,
+                    help="k > 1 inserts k-1 nodes between the nodes of XI_E_GRID and "
+                         "PTE_GRID (same range; every original node is kept)")
     args = ap.parse_args()
 
     if args.smoke:
@@ -236,6 +239,14 @@ def main():
         u0s, xis, ptes, geo = (np.array(args.u0, dtype=float), XI_E_GRID, PTE_GRID,
                                geometries(N_GEOMETRIES))
         tag = "_".join(f"{u:g}".replace(".", "p") for u in u0s)
+        if args.refine > 1:
+            k = args.refine
+            xis = np.logspace(np.log10(XI_E_GRID[0]), np.log10(XI_E_GRID[-1]),
+                              k * (len(XI_E_GRID) - 1) + 1)
+            ptes = np.logspace(np.log10(PTE_GRID[0]), np.log10(PTE_GRID[-1]),
+                               k * (len(PTE_GRID) - 1) + 1)
+            assert np.allclose(xis[::k], XI_E_GRID) and np.allclose(ptes[::k], PTE_GRID)
+            tag += f"_refine{k}"
         directory = final_output_dir(f"{OUTPUT_NAME}_u0_{tag}")
     else:
         u0s, xis, ptes, geo = U0_VALUES, XI_E_GRID, PTE_GRID, geometries(N_GEOMETRIES)

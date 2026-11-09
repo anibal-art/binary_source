@@ -269,21 +269,32 @@ def intrinsic_parallax_objective(
     )
 
 
+PIE_START_NORM = 10.0
+
+
 def fit_pspl_parallax(
     t,
     A_truth,
     best_pspl,
     evaluator,
+    previous_solution=None,
 ):
     """
-    Fit PSPL + parallax to A_truth, starting from the best plain PSPL fit.
+    Fit PSPL + parallax to A_truth with several starting points
+    (the objective has several local minima where parallax absorbs much
+    of the binary-source signal):
 
-    Starts: (t0, +u0, tE, 0, 0) and (t0, -u0, tE, 0, 0) from the plain fit.
+      0-1  (t0, +u0, tE, 0, 0) and (t0, -u0, tE, 0, 0) from the plain fit;
+      2-5  (t0, +u0, tE, piE) with |piE| = PIE_START_NORM towards
+           N, E, S and W;
+      6    previous_solution, the best parallax fit of the previous
+           period of the grid (continuation in P), when given.
+
     Each start is followed by one Nelder-Mead restart from its own result.
     The plain PSPL is the piE = 0 member of this model, so if no start
-    improves on it the plain fit is returned (nested=True).
+    improves on it the plain fit is returned (nested=True, start=-1).
 
-    Returns dict(x, S, nested).
+    Returns dict(x, S, nested, start).
     """
 
     t0, u0, tE = np.asarray(best_pspl, dtype=float)
@@ -298,7 +309,22 @@ def fit_pspl_parallax(
         x=np.array([t0, abs(u0), tE, 0.0, 0.0]),
         S=S_plain,
         nested=True,
+        start=-1,
     )
+
+    starts = [
+        np.array([t0, +abs(u0), tE, 0.0, 0.0]),
+        np.array([t0, -abs(u0), tE, 0.0, 0.0]),
+    ]
+
+    for piEN0, piEE0 in ((1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)):
+        starts.append(
+            np.array([t0, abs(u0), tE,
+                      PIE_START_NORM * piEN0, PIE_START_NORM * piEE0])
+        )
+
+    if previous_solution is not None and np.all(np.isfinite(previous_solution)):
+        starts.append(np.asarray(previous_solution, dtype=float).copy())
 
     steps = np.array(
         [
@@ -318,9 +344,9 @@ def fit_pspl_parallax(
         fatol=1e-9 * max(S_plain, 1e-300),
     )
 
-    for sign in (+1.0, -1.0):
+    for i_start, x_start in enumerate(starts):
 
-        x0 = np.array([t0, sign * abs(u0), tE, 0.0, 0.0])
+        x0 = x_start.copy()
 
         for _ in range(2):          # start + one restart
 
@@ -341,7 +367,7 @@ def fit_pspl_parallax(
         S = float(res.fun)
 
         if np.isfinite(S) and S < best["S"]:
-            best = dict(x=x0.copy(), S=S, nested=False)
+            best = dict(x=x0.copy(), S=S, nested=False, start=i_start)
 
     return best
 
@@ -1013,6 +1039,8 @@ def run_grid_and_save_npz_kepler(
         BEST_PI = np.full((n_P, 5), np.nan, dtype=float)
         PI_NESTED = np.zeros(n_P, dtype=bool)
         SUCCESS_PI = np.zeros(n_P, dtype=bool)
+        PI_START = np.full(n_P, -1, dtype=np.int64)
+        previous_pi_solution = None
 
     A_AU = np.full(
         n_P,
@@ -1486,6 +1514,7 @@ def run_grid_and_save_npz_kepler(
                         A_truth=A_truth,
                         best_pspl=best,
                         evaluator=pi_evaluator,
+                        previous_solution=previous_pi_solution,
                     )
 
                     x_pi = pi_fit["x"]
@@ -1506,7 +1535,9 @@ def run_grid_and_save_npz_kepler(
 
                     BEST_PI[j_P, :] = x_pi
                     PI_NESTED[j_P] = bool(pi_fit["nested"])
+                    PI_START[j_P] = int(pi_fit["start"])
                     SUCCESS_PI[j_P] = True
+                    previous_pi_solution = np.asarray(x_pi, dtype=float)
 
                 except Exception as error:
 
@@ -1698,6 +1729,8 @@ def run_grid_and_save_npz_kepler(
             BEST_T0U0TE_PIEN_PIEE=BEST_PI,
             PI_NESTED=PI_NESTED,
             SUCCESS_PI=SUCCESS_PI,
+            PI_START=PI_START,
+            pie_start_norm=np.float64(PIE_START_NORM),
             parallax_time_offset=np.float64(parallax_time_offset),
             parallax_ephemerides_path=np.array(eph_path),
             parallax_ephemerides_sha256=np.array(eph_sha256),

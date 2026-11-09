@@ -1,5 +1,6 @@
 """Ideal/noiseless parallax evaluators used only for intrinsic degeneracy maps. Observational Roman fitting is delegated to roman_rubin."""
 from __future__ import annotations
+import hashlib
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -7,6 +8,10 @@ import numpy as np
 from pyLIMA.models import PSPL_model
 from binary_source.analysis import intrinsic_fit_tools as base
 THIS_FILE = Path(__file__).resolve()
+# Canonical Roman ephemeris of roman_rubin (provenance in
+# roman_rubin/ephemerides/Roman_positions_2027_2032_periodic_v1_provenance).
+# The legacy Roman_positions.npy was a time-shifted ephemeris that was rejected.
+EPHEMERIS_NAME = 'Roman_positions_2027_2032_periodic_v1.npy'
 DEFAULT_RR_ROOTS = (
     THIS_FILE.parents[3] / 'roman_rubin',
     Path('/share/storage3/rubin/microlensing/romanrubin/roman_rubin'),
@@ -20,7 +25,7 @@ def resolve_roman_ephemerides(path=None):
     Priority:
       1. explicit path
       2. ROMAN_EPHEMERIDES environment variable
-      3. ROMAN_RUBIN_ROOT/ephemerides/Roman_positions.npy
+      3. ROMAN_RUBIN_ROOT/ephemerides/<EPHEMERIS_NAME>
       4. known CHE roman_rubin roots
     """
     candidates = []
@@ -36,10 +41,10 @@ def resolve_roman_ephemerides(path=None):
         env_root = os.environ.get(env_name)
         if env_root:
             candidates.append(
-                Path(env_root) / 'ephemerides' / 'Roman_positions.npy'
+                Path(env_root) / 'ephemerides' / EPHEMERIS_NAME
             )
     for root in DEFAULT_RR_ROOTS:
-        candidates.append(root / 'ephemerides' / 'Roman_positions.npy')
+        candidates.append(root / 'ephemerides' / EPHEMERIS_NAME)
     for candidate in candidates:
         candidate = candidate.expanduser().resolve()
         if candidate.is_file():
@@ -57,6 +62,14 @@ def _load_ephemerides_cached(path_string):
     if np.any(np.diff(eph[:, 0]) <= 0.0):
         raise ValueError('Roman ephemeris JD column must be strictly increasing.')
     return eph
+
+def file_sha256(path):
+    """SHA256 of a file, stored with every parallax result for provenance."""
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 20), b''):
+            h.update(chunk)
+    return h.hexdigest()
 
 def load_roman_ephemerides(path=None):
     resolved = resolve_roman_ephemerides(path)

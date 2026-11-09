@@ -37,12 +37,20 @@ the RELATIVE amplitude xi_rel and passed unchanged through ``override_xiE``;
 masses enter only through q_M (we use M1 = 1, M2 = q_M), and rEhat and tE are
 again irrelevant. Requires --u0; the output directory name carries q_M and q_f.
 
+Annual parallax (--parallax): each node is also fitted with PSPL + annual
+parallax seen from Roman (L2), with the same objective and Nelder-Mead
+settings (degeneracy_fit.fit_pspl_parallax). Parallax introduces the one-year
+orbit of the observer, so the map is no longer universal: it is computed for
+tE = 30 d and t0 = T0_PARALLAX (JD, middle of the third GBTDS season). The
+plain PSPL fit is unchanged and is stored next to the parallax fit.
+
 Usage (from the repository root):
     python binary_source/scan_codes/scan_xiE_ptE.py --estimate
     python binary_source/scan_codes/scan_xiE_ptE.py --smoke
     python binary_source/scan_codes/scan_xiE_ptE.py
     python binary_source/scan_codes/scan_xiE_ptE.py --summarize
     python binary_source/scan_codes/scan_xiE_ptE.py --u0 0.01 0.3 1 --refine 2 --qM 0.5 --qf 0.05
+    python binary_source/scan_codes/scan_xiE_ptE.py --u0 0.01 0.3 1 --parallax --estimate
 """
 
 import argparse
@@ -70,6 +78,7 @@ from final_config import (  # noqa: E402
 # ============================================================
 
 T0 = 50.0
+T0_PARALLAX = 2461849.0        # JD; midpoint of the third GBTDS season
 TE = 30.0                      # irrelevant for the dimensionless maps
 WINDOW_TE = 3.5
 M1, M2 = 2.0, 1.0              # irrelevant for q_f = 0 once xi_E is fixed
@@ -102,21 +111,22 @@ def geometries(n_random, seed=GEOMETRY_SEED):
     return np.vstack([ref, np.c_[theta, phi, inc]])
 
 
-def time_grid():
-    return np.linspace(T0 - WINDOW_TE * TE, T0 + WINDOW_TE * TE, FINAL_N_TIME)
+def time_grid(t0=T0):
+    return np.linspace(t0 - WINDOW_TE * TE, t0 + WINDOW_TE * TE, FINAL_N_TIME)
 
 
 def outfile_for(directory, i_u0, i_xi, i_geo):
     return Path(directory) / f"u0_{i_u0:02d}" / f"xi_{i_xi:03d}_geo_{i_geo:03d}.npz"
 
 
-def valid_npz(path, expected_P):
+def valid_npz(path, expected_P, parallax=False):
     path = Path(path)
     if not path.exists():
         return False
     try:
         with np.load(path, allow_pickle=False) as d:
             return (np.allclose(d["P_grid"], expected_P, rtol=1e-12, atol=0.0)
+                    and (not parallax or "D_PI" in d.files)
                     and str(d["code_commit"].item()) == CODE_COMMIT
                     and not bool(d["code_dirty"].item())
                     and str(d["fit_objective"].item()) == FIT_OBJECTIVE)
@@ -125,16 +135,18 @@ def valid_npz(path, expected_P):
 
 
 def worker(task):
-    i_u0, u0, i_xi, xi, i_geo, (theta, phi, inc), pte, (q_m, q_f), directory = task
+    (i_u0, u0, i_xi, xi, i_geo, (theta, phi, inc), pte, (q_m, q_f), parallax,
+     directory) = task
     out = outfile_for(directory, i_u0, i_xi, i_geo)
     P_grid = np.asarray(pte) * TE
-    if valid_npz(out, P_grid):
+    t0 = T0_PARALLAX if parallax else T0
+    if valid_npz(out, P_grid, parallax):
         return "skip"
     out.parent.mkdir(parents=True, exist_ok=True)
     run_grid_and_save_npz_kepler(
         out_npz_path=str(out),
-        t=time_grid(),
-        t0_true=T0,
+        t=time_grid(t0),
+        t0_true=t0,
         u0_true=float(u0),
         tE_true=TE,
         phi_true=float(phi),
@@ -152,13 +164,15 @@ def worker(task):
         set_flux_from_truth_photometry=True,
         rms_on_magnification=True,
         store_curves=False,
+        fit_parallax=bool(parallax),
     )
     return "done"
 
 
-def build_tasks(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0)):
+def build_tasks(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0),
+                parallax=False):
     return [(i_u0, float(u0), i_xi, float(xi), i_g, tuple(g), pte_grid, tuple(q_pair),
-             str(directory))
+             bool(parallax), str(directory))
             for i_u0, u0 in enumerate(u0_values)
             for i_xi, xi in enumerate(xi_grid)
             for i_g, g in enumerate(geo)]
@@ -187,9 +201,13 @@ def run(tasks, max_workers):
         raise RuntimeError(f"{failed} tasks failed")
 
 
-def summarize(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0)):
+def summarize(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0),
+              parallax=False):
     shape = (len(u0_values), len(xi_grid), len(geo), len(pte_grid))
     D = np.full(shape, np.nan)
+    DPI = np.full(shape, np.nan)
+    PIE = np.full(shape + (2,), np.nan)
+    eph_sha = set()
     DTE = np.full(shape, np.nan)
     DU0 = np.full(shape, np.nan)
     DT0 = np.full(shape, np.nan)
@@ -207,9 +225,26 @@ def summarize(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0)):
                     DTE[i_u0, i_xi, i_g] = np.where(ok, d["DTE"] / TE, np.nan)
                     DU0[i_u0, i_xi, i_g] = np.where(ok, d["DU0"] / u0, np.nan)
                     DT0[i_u0, i_xi, i_g] = np.where(ok, d["DT0"] / TE, np.nan)
+                    if parallax:
+                        ok_pi = ok & d["SUCCESS_PI"]
+                        DPI[i_u0, i_xi, i_g] = np.where(ok_pi, d["D_PI"], np.nan)
+                        PIE[i_u0, i_xi, i_g] = np.where(
+                            ok_pi[:, None], d["BEST_T0U0TE_PIEN_PIEE"][:, 3:5], np.nan)
+                        eph_sha.add(str(d["parallax_ephemerides_sha256"].item()))
     rnd = slice(1, None)                    # random geometries only
     pct = lambda a: np.nanpercentile(a[:, :, rnd], [16, 50, 84], axis=2)  # noqa: E731
     out = Path(directory) / "summary_xiE_ptE.npz"
+    extra = {}
+    if parallax:
+        if len(eph_sha) > 1:
+            raise RuntimeError(f"files computed with different ephemerides: {eph_sha}")
+        extra = dict(
+            D_pi_all=DPI, D_pi_p16_p50_p84=pct(DPI),
+            D_pi_over_D_p16_p50_p84=pct(DPI / D),
+            piE_all=PIE, D_pi_reference_geometry=DPI[:, :, 0],
+            t0_used=T0_PARALLAX,
+            parallax_ephemerides_sha256=np.array(eph_sha.pop() if eph_sha else ""),
+        )
     np.savez(
         out,
         u0=u0_values, **{("xi_E" if q_pair[1] == 0.0 else "xi_rel"): xi_grid},
@@ -222,6 +257,7 @@ def summarize(u0_values, xi_grid, pte_grid, geo, directory, q_pair=(Q_M, 0.0)):
         n_random_geometries=len(geo) - 1,
         code_commit=np.array(CODE_COMMIT), code_dirty=np.bool_(CODE_DIRTY),
         fit_objective=np.array(FIT_OBJECTIVE),
+        **extra,
     )
     print(f"summary written: {out}  (missing files: {missing})")
 
@@ -246,6 +282,9 @@ def main():
     ap.add_argument("--qf", type=float, default=0.0,
                     help="two luminous sources: flux ratio F2/F1; with qf > 0 the xi "
                          "grid is the relative amplitude xi_rel")
+    ap.add_argument("--parallax", action="store_true",
+                    help="also fit PSPL + annual parallax (Roman/L2) at every node; "
+                         "uses tE = 30 d and t0 = T0_PARALLAX")
     args = ap.parse_args()
     if (args.qM is None) != (args.qf == 0.0):
         ap.error("--qM and --qf > 0 must be given together")
@@ -255,7 +294,8 @@ def main():
 
     if args.smoke:
         u0s, xis, ptes, geo = SMOKE["u0"], SMOKE["xi"], SMOKE["pte"], geometries(SMOKE["n_geo"])
-        directory = final_output_dir(OUTPUT_NAME + "_smoke")
+        directory = final_output_dir(OUTPUT_NAME + "_smoke"
+                                     + ("_parallax" if args.parallax else ""))
     elif args.u0:
         u0s, xis, ptes, geo = (np.array(args.u0, dtype=float), XI_E_GRID, PTE_GRID,
                                geometries(N_GEOMETRIES))
@@ -270,24 +310,27 @@ def main():
             tag += f"_refine{k}"
         if q_pair[1] > 0.0:
             tag += f"_qM{q_pair[0]:g}_qf{q_pair[1]:g}".replace(".", "p")
+        if args.parallax:
+            tag += "_parallax"
         directory = final_output_dir(f"{OUTPUT_NAME}_u0_{tag}")
     else:
         u0s, xis, ptes, geo = U0_VALUES, XI_E_GRID, PTE_GRID, geometries(N_GEOMETRIES)
-        directory = final_output_dir(OUTPUT_NAME)
+        directory = final_output_dir(OUTPUT_NAME + ("_parallax" if args.parallax else ""))
     if CODE_DIRTY and not args.smoke:
         print("WARNING: repository has uncommitted changes; outputs will be "
               "marked dirty and not reused on a later run.")
 
     if args.summarize:
-        summarize(u0s, xis, ptes, geo, directory, q_pair)
+        summarize(u0s, xis, ptes, geo, directory, q_pair, args.parallax)
         return
 
-    tasks = build_tasks(u0s, xis, ptes, geo, directory, q_pair)
+    tasks = build_tasks(u0s, xis, ptes, geo, directory, q_pair, args.parallax)
     print(f"output   : {directory}")
     xi_name = ("xi_E" if q_pair[1] == 0.0
                else f"xi_rel (q_M={q_pair[0]:g}, q_f={q_pair[1]:g})")
     print(f"grid     : {len(u0s)} u0 x {len(xis)} {xi_name} x {len(geo)} geometries "
-          f"x {len(ptes)} P/tE = {len(tasks) * len(ptes)} PSPL fits")
+          f"x {len(ptes)} P/tE = {len(tasks) * len(ptes)} PSPL fits"
+          + (" (+ the same number of PSPL+parallax fits)" if args.parallax else ""))
     print(f"commit   : {CODE_COMMIT} (dirty={CODE_DIRTY})  workers={args.workers}")
 
     if args.estimate:
@@ -307,7 +350,7 @@ def main():
         return
 
     run(tasks, args.workers)
-    summarize(u0s, xis, ptes, geo, directory, q_pair)
+    summarize(u0s, xis, ptes, geo, directory, q_pair, args.parallax)
 
 
 if __name__ == "__main__":

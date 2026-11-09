@@ -66,7 +66,7 @@ import set_model_pyLIMA as sm
 EPHEMERIDES = (
     ROMAN_RUBIN_REPO
     / "ephemerides"
-    / "Roman_positions.npy"
+    / "Roman_positions_2027_2032_periodic_v1.npy"
 )
 
 

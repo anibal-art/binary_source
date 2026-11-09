@@ -194,6 +194,145 @@ def intrinsic_magnification_objective(
     )
 
 
+# ============================================================
+# Optional PSPL + annual-parallax fit (same objective, same
+# Nelder-Mead settings as the plain PSPL fit)
+# ============================================================
+
+PIE_BOUND = 40.0
+
+
+def intrinsic_parallax_objective(
+    fit_params,
+    t,
+    A_truth,
+    evaluator,
+):
+    """
+    Same objective as intrinsic_magnification_objective, with the PSPL
+    magnification replaced by PSPL + parallax:
+
+        S_A = integral [A_BSPL(t) - A_PSPL+pi(t)]^2 dt
+
+    fit_params = (t0, u0, tE, piEN, piEE). u0 may be negative, because
+    with parallax the side on which the lens passes matters.
+    """
+
+    t0, u0, tE, piEN, piEE = np.asarray(
+        fit_params,
+        dtype=float,
+    )
+
+    if (
+        not np.all(np.isfinite(fit_params))
+        or tE <= 0.0
+        or abs(piEN) > PIE_BOUND
+        or abs(piEE) > PIE_BOUND
+    ):
+        return 1e100
+
+    try:
+        A_fit = evaluator.magnification(
+            t0=t0,
+            u0=u0,
+            tE=tE,
+            piEN=piEN,
+            piEE=piEE,
+        )
+    except Exception:
+        return 1e100
+
+    residual = (
+        np.asarray(A_truth, dtype=float)
+        - np.asarray(A_fit, dtype=float)
+    )
+
+    if not np.all(np.isfinite(residual)):
+        return 1e100
+
+    return float(
+        _trapezoid(
+            residual**2,
+            x=t,
+        )
+    )
+
+
+def fit_pspl_parallax(
+    t,
+    A_truth,
+    best_pspl,
+    evaluator,
+):
+    """
+    Fit PSPL + parallax to A_truth, starting from the best plain PSPL fit.
+
+    Starts: (t0, +u0, tE, 0, 0) and (t0, -u0, tE, 0, 0) from the plain fit.
+    Each start is followed by one Nelder-Mead restart from its own result.
+    The plain PSPL is the piE = 0 member of this model, so if no start
+    improves on it the plain fit is returned (nested=True).
+
+    Returns dict(x, S, nested).
+    """
+
+    t0, u0, tE = np.asarray(best_pspl, dtype=float)
+
+    S_plain = intrinsic_magnification_objective(
+        [t0, abs(u0), tE],
+        t,
+        A_truth,
+    )
+
+    best = dict(
+        x=np.array([t0, abs(u0), tE, 0.0, 0.0]),
+        S=S_plain,
+        nested=True,
+    )
+
+    steps = np.array(
+        [
+            0.01 * tE,
+            0.05 * max(abs(u0), 1e-3),
+            0.05 * tE,
+            0.05,
+            0.05,
+        ]
+    )
+
+    options = dict(
+        maxiter=20000,
+        xatol=1e-10,
+        fatol=1e-12,
+    )
+
+    for sign in (+1.0, -1.0):
+
+        x0 = np.array([t0, sign * abs(u0), tE, 0.0, 0.0])
+
+        for _ in range(2):          # start + one restart
+
+            simplex = np.vstack(
+                [x0] + [x0 + steps[k] * np.eye(5)[k] for k in range(5)]
+            )
+
+            res = so.minimize(
+                intrinsic_parallax_objective,
+                x0=x0,
+                args=(t, A_truth, evaluator),
+                method="Nelder-Mead",
+                options=dict(options, initial_simplex=simplex),
+            )
+
+            x0 = np.asarray(res.x, dtype=float)
+
+        S = float(res.fun)
+
+        if np.isfinite(S) and S < best["S"]:
+            best = dict(x=x0.copy(), S=S, nested=False)
+
+    return best
+
+
 
 
 # ============================================================
@@ -659,6 +798,17 @@ def run_grid_and_save_npz_kepler(
     set_flux_from_truth_photometry: bool = True,
 
     rms_on_magnification: bool = True,
+
+    # ========================================================
+    # Optional second fit: PSPL + annual parallax seen from
+    # Roman (L2). t must then be in JD and t0_true is used as
+    # the parallax reference time. The plain PSPL fit and all
+    # its outputs are unchanged.
+    # ========================================================
+
+    fit_parallax: bool = False,
+
+    parallax_ephemerides_path: str | None = None,
 ):
 
     """
@@ -815,6 +965,35 @@ def run_grid_and_save_npz_kepler(
         np.nan,
         dtype=float,
     )
+
+    # ========================================================
+    # Optional PSPL + parallax fit
+    # ========================================================
+
+    if fit_parallax:
+
+        repo_root = Path(__file__).resolve().parents[1]
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+
+        from binary_source.analysis.intrinsic_parallax import (
+            PSPLParallaxEvaluator,
+            file_sha256,
+        )
+
+        pi_evaluator = PSPLParallaxEvaluator(
+            t,
+            t0_reference=t0_true,
+            ephemerides_path=parallax_ephemerides_path,
+        )
+
+        eph_path = str(pi_evaluator.ephemerides_path)
+        eph_sha256 = file_sha256(pi_evaluator.ephemerides_path)
+
+        D_PI = np.full(n_P, np.nan, dtype=float)
+        BEST_PI = np.full((n_P, 5), np.nan, dtype=float)
+        PI_NESTED = np.zeros(n_P, dtype=bool)
+        SUCCESS_PI = np.zeros(n_P, dtype=bool)
 
     A_AU = np.full(
         n_P,
@@ -1276,6 +1455,49 @@ def run_grid_and_save_npz_kepler(
             )
 
             # =================================================
+            # Optional PSPL + parallax fit
+            # =================================================
+
+            if fit_parallax:
+
+                try:
+
+                    pi_fit = fit_pspl_parallax(
+                        t=t,
+                        A_truth=A_truth,
+                        best_pspl=best,
+                        evaluator=pi_evaluator,
+                    )
+
+                    x_pi = pi_fit["x"]
+
+                    A_fit_pi = pi_evaluator.magnification(
+                        t0=x_pi[0],
+                        u0=x_pi[1],
+                        tE=x_pi[2],
+                        piEN=x_pi[3],
+                        piEE=x_pi[4],
+                    )
+
+                    D_PI[j_P] = compute_D_metric(
+                        t=t,
+                        A_truth=A_truth,
+                        A_fit=np.asarray(A_fit_pi, dtype=float),
+                    )
+
+                    BEST_PI[j_P, :] = x_pi
+                    PI_NESTED[j_P] = bool(pi_fit["nested"])
+                    SUCCESS_PI[j_P] = True
+
+                except Exception as error:
+
+                    print(
+                        f"[ERROR parallax] "
+                        f"P={P:.6g} d: "
+                        f"{error}"
+                    )
+
+            # =================================================
             # Save light curves
             # =================================================
 
@@ -1445,6 +1667,22 @@ def run_grid_and_save_npz_kepler(
             dtype=float,
         ),
     )
+
+    # ========================================================
+    # Optional PSPL + parallax results
+    # ========================================================
+
+    if fit_parallax:
+
+        payload.update(
+            D_PI=D_PI,
+            BEST_T0U0TE_PIEN_PIEE=BEST_PI,
+            PI_NESTED=PI_NESTED,
+            SUCCESS_PI=SUCCESS_PI,
+            pie_bound=np.float64(PIE_BOUND),
+            parallax_ephemerides_path=np.array(eph_path),
+            parallax_ephemerides_sha256=np.array(eph_sha256),
+        )
 
     # ========================================================
     # Save complete light curves

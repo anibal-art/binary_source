@@ -202,6 +202,22 @@ def intrinsic_magnification_objective(
 PIE_BOUND = 40.0
 
 
+class _ShiftedParallaxEvaluator:
+    """
+    PSPL + parallax evaluated on t + offset (JD) while the fit works in the
+    same relative time as the plain PSPL fit. t0 is passed relative and
+    shifted here, so the plain fit is exactly the one used without parallax.
+    """
+
+    def __init__(self, evaluator, offset):
+        self.evaluator = evaluator
+        self.offset = float(offset)
+        self.ephemerides_path = evaluator.ephemerides_path
+
+    def magnification(self, t0, **kwargs):
+        return self.evaluator.magnification(t0=t0 + self.offset, **kwargs)
+
+
 def intrinsic_parallax_objective(
     fit_params,
     t,
@@ -299,10 +315,12 @@ def fit_pspl_parallax(
         ]
     )
 
+    # Tolerances relative to the scale of the problem: S ~ S_plain, and
+    # 1e-9 relative in S is far below what D needs (D ~ sqrt(S)).
     options = dict(
-        maxiter=20000,
-        xatol=1e-10,
-        fatol=1e-12,
+        maxiter=5000,
+        xatol=1e-8,
+        fatol=1e-9 * max(S_plain, 1e-300),
     )
 
     for sign in (+1.0, -1.0):
@@ -801,12 +819,15 @@ def run_grid_and_save_npz_kepler(
 
     # ========================================================
     # Optional second fit: PSPL + annual parallax seen from
-    # Roman (L2). t must then be in JD and t0_true is used as
-    # the parallax reference time. The plain PSPL fit and all
-    # its outputs are unchanged.
+    # Roman (L2). The parallax model is evaluated at
+    # t + parallax_time_offset (JD), with reference time
+    # t0_true + parallax_time_offset; t, t0_true and the plain
+    # PSPL fit stay exactly as without parallax.
     # ========================================================
 
     fit_parallax: bool = False,
+
+    parallax_time_offset: float = 0.0,
 
     parallax_ephemerides_path: str | None = None,
 ):
@@ -981,10 +1002,13 @@ def run_grid_and_save_npz_kepler(
             file_sha256,
         )
 
-        pi_evaluator = PSPLParallaxEvaluator(
-            t,
-            t0_reference=t0_true,
-            ephemerides_path=parallax_ephemerides_path,
+        pi_evaluator = _ShiftedParallaxEvaluator(
+            PSPLParallaxEvaluator(
+                t + float(parallax_time_offset),
+                t0_reference=t0_true + float(parallax_time_offset),
+                ephemerides_path=parallax_ephemerides_path,
+            ),
+            parallax_time_offset,
         )
 
         eph_path = str(pi_evaluator.ephemerides_path)
@@ -1680,6 +1704,7 @@ def run_grid_and_save_npz_kepler(
             PI_NESTED=PI_NESTED,
             SUCCESS_PI=SUCCESS_PI,
             pie_bound=np.float64(PIE_BOUND),
+            parallax_time_offset=np.float64(parallax_time_offset),
             parallax_ephemerides_path=np.array(eph_path),
             parallax_ephemerides_sha256=np.array(eph_sha256),
         )

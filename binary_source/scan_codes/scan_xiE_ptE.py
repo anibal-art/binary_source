@@ -41,8 +41,10 @@ Annual parallax (--parallax): each node is also fitted with PSPL + annual
 parallax seen from Roman (L2), with the same objective and Nelder-Mead
 settings (degeneracy_fit.fit_pspl_parallax). Parallax introduces the one-year
 orbit of the observer, so the map is no longer universal: it is computed for
-tE = 30 d and t0 = T0_PARALLAX (JD, middle of the third GBTDS season). The
-plain PSPL fit is unchanged and is stored next to the parallax fit.
+tE = 30 d with the peak at T0_PARALLAX (JD, middle of the third GBTDS season).
+The simulation and the plain PSPL fit use the same relative time (T0 = 50) as
+without parallax, so D is identical; only the parallax model is evaluated at
+JD = t + (T0_PARALLAX - T0).
 
 Usage (from the repository root):
     python binary_source/scan_codes/scan_xiE_ptE.py --estimate
@@ -111,8 +113,8 @@ def geometries(n_random, seed=GEOMETRY_SEED):
     return np.vstack([ref, np.c_[theta, phi, inc]])
 
 
-def time_grid(t0=T0):
-    return np.linspace(t0 - WINDOW_TE * TE, t0 + WINDOW_TE * TE, FINAL_N_TIME)
+def time_grid():
+    return np.linspace(T0 - WINDOW_TE * TE, T0 + WINDOW_TE * TE, FINAL_N_TIME)
 
 
 def outfile_for(directory, i_u0, i_xi, i_geo):
@@ -139,14 +141,13 @@ def worker(task):
      directory) = task
     out = outfile_for(directory, i_u0, i_xi, i_geo)
     P_grid = np.asarray(pte) * TE
-    t0 = T0_PARALLAX if parallax else T0
     if valid_npz(out, P_grid, parallax):
         return "skip"
     out.parent.mkdir(parents=True, exist_ok=True)
     run_grid_and_save_npz_kepler(
         out_npz_path=str(out),
-        t=time_grid(t0),
-        t0_true=t0,
+        t=time_grid(),
+        t0_true=T0,
         u0_true=float(u0),
         tE_true=TE,
         phi_true=float(phi),
@@ -165,6 +166,7 @@ def worker(task):
         rms_on_magnification=True,
         store_curves=False,
         fit_parallax=bool(parallax),
+        parallax_time_offset=(T0_PARALLAX - T0) if parallax else 0.0,
     )
     return "done"
 

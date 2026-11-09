@@ -199,9 +199,6 @@ def intrinsic_magnification_objective(
 # Nelder-Mead settings as the plain PSPL fit)
 # ============================================================
 
-PIE_BOUND = 40.0
-
-
 class _ShiftedParallaxEvaluator:
     """
     PSPL + parallax evaluated on t + offset (JD) while the fit works in the
@@ -242,8 +239,6 @@ def intrinsic_parallax_objective(
     if (
         not np.all(np.isfinite(fit_params))
         or tE <= 0.0
-        or abs(piEN) > PIE_BOUND
-        or abs(piEE) > PIE_BOUND
     ):
         return 1e100
 
@@ -1703,7 +1698,6 @@ def run_grid_and_save_npz_kepler(
             BEST_T0U0TE_PIEN_PIEE=BEST_PI,
             PI_NESTED=PI_NESTED,
             SUCCESS_PI=SUCCESS_PI,
-            pie_bound=np.float64(PIE_BOUND),
             parallax_time_offset=np.float64(parallax_time_offset),
             parallax_ephemerides_path=np.array(eph_path),
             parallax_ephemerides_sha256=np.array(eph_sha256),

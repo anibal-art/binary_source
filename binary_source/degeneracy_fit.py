@@ -337,10 +337,13 @@ def fit_pspl_parallax(
     )
 
     # Tolerances relative to the scale of the problem: S ~ S_plain, and
-    # 1e-9 relative in S is far below what D needs (D ~ sqrt(S)).
+    # 1e-9 relative in S is far below what D needs (D ~ sqrt(S)). maxfev
+    # caps the rare long runs; every start is restarted once and there are
+    # seven starts, so a capped run does not decide the result alone.
     options = dict(
         maxiter=5000,
-        xatol=1e-8,
+        maxfev=3000,
+        xatol=1e-6,
         fatol=1e-9 * max(S_plain, 1e-300),
     )
 

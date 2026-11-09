@@ -6,6 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 import numpy as np
 from pyLIMA.models import PSPL_model
+from pyLIMA.parallax.parallax import compute_parallax_curvature
+from pyLIMA.magnification.magnification_PSPL import magnification_PSPL
 from binary_source.analysis import intrinsic_fit_tools as base
 THIS_FILE = Path(__file__).resolve()
 # Canonical Roman ephemeris of roman_rubin (provenance in
@@ -111,8 +113,26 @@ class PSPLParallaxEvaluator:
         self.event, self.telescope, self.ephemerides_path = build_roman_parallax_event(self.t, ephemerides_path=ephemerides_path, name='Roman_PSPL_parallax')
         self.model = PSPL_model.PSPLmodel(self.event, blend_flux_parameter='ftotal', parallax=['Full', self.t0_reference], double_source=['None', self.t0_reference])
         self.model.define_model_parameters()
+        # Observer positions projected by pyLIMA once (define_model_parameters
+        # computes the Full parallax for the telescope); reused at every call.
+        self._time = np.asarray(self.telescope.lightcurve['time'].value, dtype=float)
+        self._deltas = np.asarray(self.telescope.deltas_positions['photometry'], dtype=float)
 
     def magnification(self, t0, u0, tE, piEN, piEE):
+        """
+        PSPL + parallax with pyLIMA's own functions (compute_parallax_curvature
+        and magnification_PSPL) on the precomputed observer positions: the same
+        steps as PSPLmodel.sources_trajectory/model_magnification for a PSPL
+        without lens orbital motion (alpha = 0), without pyLIMA's per-call
+        overhead. Equal to magnification_pylima to machine precision.
+        """
+        tau = (self._time - float(t0)) / float(tE)
+        dtau, dbeta = compute_parallax_curvature([float(piEN), float(piEE)], self._deltas)
+        A = magnification_PSPL(-(tau + dtau), -(float(u0) + dbeta))
+        return _check_magnification(A, 'PSPL+parallax')
+
+    def magnification_pylima(self, t0, u0, tE, piEN, piEE):
+        """Reference evaluation through the full pyLIMA model."""
         params = [float(t0), float(u0), float(tE), float(piEN), float(piEE), 1.0, 1.0]
         py_params = self.model.compute_pyLIMA_parameters(params)
         A = self.model.model_magnification(self.telescope, py_params)

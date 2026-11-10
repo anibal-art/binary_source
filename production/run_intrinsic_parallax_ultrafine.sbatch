@@ -55,7 +55,8 @@ echo "workers       = ${SLURM_CPUS_PER_TASK}"
 echo "============================================================"
 
 time python -u \
-    decision_tests/scan_intrinsic_xallarap_vs_pspl_parallax_ultrafine.py \
+    decision_tests/scan_intrinsic_xallarap_vs_pspl_parallax.py \
+    --config configs/scan_intrinsic_xallarap_vs_pspl_parallax/tE30_ultrafine_u0_10.json \
     --workers "${SLURM_CPUS_PER_TASK}"
 
 echo

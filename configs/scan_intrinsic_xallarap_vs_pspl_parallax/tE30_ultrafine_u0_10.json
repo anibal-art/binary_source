@@ -1,0 +1,25 @@
+{
+  "run_name": "tE30_ultrafine_u0_10",
+  "description": "Ultrafine grid: 200 u0 nodes per decade (1e-2...10), 60 P nodes per decade (10...1e5 d).",
+  "output_dir": "results/intrinsic_xallarap_vs_pspl_parallax_tE30_ultrafine_u0_10",
+  "smoke_output_dir": "results/intrinsic_xallarap_vs_pspl_parallax_tE30_ultrafine_u0_10_smoke",
+  "u0_grid": {
+    "log10_min": -2.0,
+    "log10_max": 1.0,
+    "n": 601,
+    "u0_max": null
+  },
+  "P_grid": {
+    "log10_min": 1.0,
+    "log10_max": 5.0,
+    "n": 241
+  },
+  "smoke": {
+    "u0_indices": {
+      "linspace": 5
+    },
+    "P_indices": {
+      "linspace": 7
+    }
+  }
+}

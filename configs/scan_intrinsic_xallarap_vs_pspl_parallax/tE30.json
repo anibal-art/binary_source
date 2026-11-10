@@ -1,0 +1,33 @@
+{
+  "run_name": "tE30",
+  "description": "Manuscript grid: plain-PSPL D column feeds the Roman/intrinsic comparison figure through run_roman_bspl_asimov.py --intrinsic-grid.",
+  "output_dir": "results/intrinsic_xallarap_vs_pspl_parallax_tE30",
+  "smoke_output_dir": "results/intrinsic_xallarap_vs_pspl_parallax_tE30_smoke",
+  "u0_grid": {
+    "log10_min": -2.0,
+    "log10_max": 1.0,
+    "n": 200,
+    "u0_max": 1.0
+  },
+  "P_grid": {
+    "log10_min": 1.0,
+    "log10_max": 5.0,
+    "n": 60
+  },
+  "smoke": {
+    "u0_indices": [
+      0,
+      40,
+      80,
+      -1
+    ],
+    "P_indices": [
+      0,
+      10,
+      20,
+      30,
+      40,
+      59
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-import sys
+import json
 import inspect
 import multiprocessing as mp
 import traceback
@@ -37,48 +37,58 @@ EPHEMERIS_PATH = Path(
     "ephemerides/Roman_positions.npy"
 )
 
-OUTPUT_DIR = (
-    Path("results")
-    / (
-        "intrinsic_xallarap_vs_pspl_parallax_tE30_smoke"
-        if "--smoke" in sys.argv
-        else "intrinsic_xallarap_vs_pspl_parallax_tE30"
-    )
+CONFIG_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "configs"
+    / "scan_intrinsic_xallarap_vs_pspl_parallax"
 )
+
+# Grid, output directory and smoke subset of each run live in
+# configs/scan_intrinsic_xallarap_vs_pspl_parallax/<run>.json:
+#   tE30.json                 manuscript grid (Roman comparison figure)
+#   tE30_fine_u0_10.json      fine grid
+#   tE30_ultrafine_u0_10.json ultrafine grid
+
+
+def load_config(path):
+    with open(path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    for key in ("run_name", "output_dir", "smoke_output_dir",
+                "u0_grid", "P_grid", "smoke"):
+        if key not in cfg:
+            raise KeyError(f"{path}: missing {key!r}")
+    return cfg
 
 
 # ============================================================
 # Exact draft grids
 # ============================================================
 
-def make_full_grids():
+def make_full_grids(cfg):
+    """
+    u0: logspace(log10_min, log10_max, n), optionally keeping u0 <= u0_max
+        (the manuscript grid: 200 nodes in 1e-2...10, 133 kept).
+    P : logspace(log10_min, log10_max, n) days.
+    """
+    gu = cfg["u0_grid"]
+    u0_grid = np.logspace(gu["log10_min"], gu["log10_max"], int(gu["n"]))
+    if gu.get("u0_max") is not None:
+        u0_grid = u0_grid[u0_grid <= float(gu["u0_max"])]
 
-    # Original intrinsic u0 grid:
-    # 200 logarithmic nodes from 1e-2 to 10.
-    # Roman/detection comparison retained u0 <= 1,
-    # which gives 133 nodes.
-    u0_all = np.logspace(
-        -2.0,
-        1.0,
-        200,
-    )
-
-    u0_grid = u0_all[
-        u0_all <= 1.0
-    ]
-
-    # Original period grid:
-    # 60 logarithmic nodes, P = 10 ... 1e5 d.
-    P_days = np.logspace(
-        1.0,
-        5.0,
-        60,
-    )
+    gp = cfg["P_grid"]
+    P_days = np.logspace(gp["log10_min"], gp["log10_max"], int(gp["n"]))
 
     return (
         np.asarray(u0_grid, dtype=float),
         np.asarray(P_days, dtype=float),
     )
+
+
+def smoke_indices(spec, n):
+    """Explicit index list, or {"linspace": k} evenly spaced incl. ends."""
+    if isinstance(spec, dict):
+        return np.unique(np.linspace(0, n - 1, int(spec["linspace"]), dtype=int))
+    return np.array([n - 1 if int(i) == -1 else int(i) for i in spec])
 
 
 # ============================================================
@@ -1655,21 +1665,36 @@ def main():
     )
 
     parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help=(
+            "Run configuration, e.g. "
+            "configs/scan_intrinsic_xallarap_vs_pspl_parallax/tE30.json"
+        ),
+    )
+
+    parser.add_argument(
         "--smoke",
         action="store_true",
-        help=(
-            "Use a small 4 x 6 grid "
-            "for validation."
-        ),
+        help="Use the small validation subset defined in the config.",
     )
 
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=OUTPUT_DIR,
+        default=None,
+        help="Override the config output directory.",
     )
 
     args = parser.parse_args()
+
+    cfg = load_config(args.config)
+
+    if args.output_dir is None:
+        args.output_dir = Path(
+            cfg["smoke_output_dir"] if args.smoke else cfg["output_dir"]
+        )
 
     if not EPHEMERIS_PATH.exists():
         raise FileNotFoundError(
@@ -1677,44 +1702,20 @@ def main():
         )
 
     u0_grid, P_days_grid = (
-        make_full_grids()
+        make_full_grids(cfg)
     )
 
     n_time = N_TIME_FULL
 
     if args.smoke:
 
-        u0_indices = np.array(
-            [
-                0,
-                40,
-                80,
-                len(u0_grid) - 1,
-            ]
-        )
+        u0_grid = u0_grid[
+            smoke_indices(cfg["smoke"]["u0_indices"], len(u0_grid))
+        ]
 
-        P_indices = np.array(
-            [
-                0,
-                10,
-                20,
-                30,
-                40,
-                59,
-            ]
-        )
-
-        u0_grid = (
-            u0_grid[
-                u0_indices
-            ]
-        )
-
-        P_days_grid = (
-            P_days_grid[
-                P_indices
-            ]
-        )
+        P_days_grid = P_days_grid[
+            smoke_indices(cfg["smoke"]["P_indices"], len(P_days_grid))
+        ]
 
         n_time = 3000
 
@@ -1855,6 +1856,15 @@ def main():
         parents=True,
         exist_ok=True,
     )
+
+    # Provenance: the exact configuration used for this run.
+    with open(args.output_dir / "run_config.json", "w", encoding="utf-8") as f:
+        json.dump(
+            dict(cfg, config_path=str(args.config), smoke=bool(args.smoke),
+                 smoke_subset=cfg["smoke"]),
+            f, indent=2,
+        )
+        f.write("\n")
 
     try:
         context = (

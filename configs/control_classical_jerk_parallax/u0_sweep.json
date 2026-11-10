@@ -1,0 +1,12 @@
+{
+  "run_name": "u0_sweep",
+  "u0_values": [
+    0.1,
+    0.03,
+    0.01,
+    0.003,
+    0.001
+  ],
+  "n_time": 20001,
+  "outdir": "/tmp/classical_jerk_parallax_u0_sweep"
+}

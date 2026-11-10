@@ -1,0 +1,9 @@
+{
+  "run_name": "base",
+  "u0_values": [
+    0.01,
+    0.1
+  ],
+  "n_time": 5000,
+  "outdir": "/tmp/classical_jerk_parallax_control"
+}

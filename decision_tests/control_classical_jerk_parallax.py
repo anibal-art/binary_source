@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
+"""
+Classical PSPL+parallax control for the jerk-parallax branches.
+One script; each run is a JSON in configs/control_classical_jerk_parallax/:
 
+    base.json      u0 = 0.01, 0.10;          N_TIME = 5000
+    u0_sweep.json  u0 = 0.1 ... 0.001;       N_TIME = 20001 (odd: t0 on grid)
+
+Usage:
+    python decision_tests/control_classical_jerk_parallax.py \
+        --config configs/control_classical_jerk_parallax/base.json
+"""
+
+import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -20,12 +33,15 @@ TE_TRUE = 30.0
 PIEN_TRUE = -0.24
 PIEE_TRUE = +0.02
 
-U0_VALUES = [
-    0.01,   # near Gould u0 -> 0 limit
-    0.10,   # same scale as BSPL experiment
-]
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--config", type=Path, required=True)
+_args = _parser.parse_args()
+with open(_args.config, "r", encoding="utf-8") as _f:
+    CONFIG = json.load(_f)
 
-N_TIME = 5000
+U0_VALUES = [float(u) for u in CONFIG["u0_values"]]
+
+N_TIME = int(CONFIG["n_time"])
 PIE_BOUND = 40.0
 
 RADII = [
@@ -40,9 +56,7 @@ RADII = [
 
 N_ANGLES = 8
 
-OUTDIR = Path(
-    "/tmp/classical_jerk_parallax_control"
-)
+OUTDIR = Path(CONFIG["outdir"])
 
 
 def geometry(

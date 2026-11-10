@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
 """
+LEGACY -- superseded, not used by the manuscript.
+
+Delta chi2 here is computed against the TRUE BSPL model, a lower bound of
+the likelihood-ratio statistic, without a calibrated null. The Roman
+detectability analysis now uses
+    binary_source/analysis/roman_bspl_lrt_catalog_runner.py
+(PSPL, PSPL+parallax and BSPL fits to the same data, H0 calibrated by
+Monte Carlo). Kept only so that earlier outputs remain reproducible.
+
 Roman F146 maps in the (xi_E, P/t_E) plane for one luminous source,
 with PSPL and PSPL+parallax fits to the SAME simulated light curve.
 

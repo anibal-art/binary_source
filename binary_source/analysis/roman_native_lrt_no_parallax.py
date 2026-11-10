@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 
 """
+LEGACY -- superseded, do not use for calibration or power.
+
+The canonical Roman LRT is
+    binary_source/analysis/roman_bspl_lrt_catalog_runner.py
+with data-derived start banks from
+    binary_source/analysis/roman_lrt_start_bank.py
+This script (3 BSPL starts at one fixed period) is kept only so that
+earlier outputs remain reproducible.
+
 One-realization Roman LRT:
 
     H0 fit: PSPL
@@ -1840,6 +1849,14 @@ def run_one_lrt(
 # ============================================================================
 
 def main():
+    import warnings
+    warnings.warn(
+        "roman_native_lrt_no_parallax.py is LEGACY; use "
+        "roman_bspl_lrt_catalog_runner.py with a data_derived fit policy.",
+        DeprecationWarning,
+        stacklevel=1,
+    )
+
     parser = (
         argparse.ArgumentParser()
     )

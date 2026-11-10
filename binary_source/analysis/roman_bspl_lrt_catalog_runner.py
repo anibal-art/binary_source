@@ -35,6 +35,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
@@ -59,6 +60,7 @@ from binary_source.analysis.lrt_catalog_io import (  # noqa: E402
     check_truth_kind,
     row_identity,
 )
+from binary_source.analysis import roman_lrt_start_bank as start_bank  # noqa: E402
 import fit_lc  # noqa: E402
 import functions_roman_rubin as frr  # noqa: E402
 
@@ -152,8 +154,37 @@ def require_current_api() -> None:
 
 
 def load_policy(path: Path) -> dict:
+    """
+    Two policy modes.
+
+    start_mode == "fixed"        : fit_reference and starts are written in the
+                                   JSON (integration smoke tests only).
+    start_mode == "data_derived" : fit_reference and starts are built for each
+                                   dataset by roman_lrt_start_bank from the
+                                   observed light curve and the best observed
+                                   PSPL; the JSON holds only the rules.
+    """
     with path.open("r", encoding="utf-8") as f:
         policy = json.load(f)
+
+    mode = policy.setdefault("start_mode", "fixed")
+    if mode not in ("fixed", "data_derived"):
+        raise ValueError(f"Unknown start_mode {mode!r}")
+
+    missing = [key for key in FIT_KEYS if key not in policy]
+    if missing:
+        raise KeyError(
+            "Fit policy is missing required model blocks: "
+            f"{missing}"
+        )
+
+    if mode == "data_derived":
+        if "features" not in policy:
+            raise KeyError("data_derived policy needs a features block")
+        for key in ("PSPL", "BSPL"):
+            if "start_rule" not in policy[key]:
+                raise KeyError(f"data_derived policy: {key} lacks start_rule")
+        return policy
 
     fit_reference = policy.get("fit_reference")
     if not isinstance(fit_reference, dict):
@@ -163,13 +194,6 @@ def load_policy(path: Path) -> dict:
         if name not in fit_reference:
             raise KeyError(f"fit_reference missing {name!r}")
         fit_reference[name] = float(fit_reference[name])
-
-    missing = [key for key in FIT_KEYS if key not in policy]
-    if missing:
-        raise KeyError(
-            "Fit policy is missing required model blocks: "
-            f"{missing}"
-        )
 
     for key in FIT_KEYS:
         starts = policy[key].get("starts", [])
@@ -400,6 +424,7 @@ def run_fit_bank(
     results = []
 
     for start in spec["starts"]:
+        t_start = time.perf_counter()
         try:
             row = run_one_fit(
                 source_id=source_id,
@@ -420,6 +445,7 @@ def run_fit_bank(
                 "error": repr(exc),
             }
 
+        row["wall_seconds"] = float(time.perf_counter() - t_start)
         results.append(row)
 
     successful = [
@@ -457,7 +483,7 @@ def run_catalog_event(args) -> dict:
         )
 
     policy = load_policy(args.fit_policy)
-    fit_reference = dict(policy["fit_reference"])
+    derived = policy["start_mode"] == "data_derived"
 
     event = load_event_from_catalog(
         catalog_path=args.catalog,
@@ -509,10 +535,37 @@ def run_catalog_event(args) -> dict:
 
     fit_keys = FIT_KEYS_BY_TRUTH[args.truth_kind]
 
+    if derived:
+        if "PSPL_PI" in fit_keys:
+            raise NotImplementedError(
+                "data_derived starts for PSPL_PI are not defined yet; "
+                "only --truth-kind h0a is supported in this mode."
+            )
+        features = start_bank.light_curve_features(
+            data["W149"], **policy["features"]
+        )
+        fit_reference = start_bank.fit_reference_from_features(features)
+    else:
+        features = None
+        fit_reference = dict(policy["fit_reference"])
+
     # Every fit required by this truth kind sees the same exact
     # numerical dataset.
     for fit_key in fit_keys:
         before_hash = sha256_array(data["W149"])
+
+        spec = dict(policy[fit_key])
+        if derived and fit_key == "PSPL":
+            spec["starts"] = start_bank.pspl_starts(
+                features, spec["start_rule"], spec["bounds"]
+            )
+        elif derived and fit_key == "BSPL":
+            # PSPL precedes BSPL in FIT_KEYS_BY_TRUTH["h0a"] and ["h1"].
+            spec["starts"] = start_bank.bspl_starts(
+                fits["PSPL"]["best"]["best_model"],
+                spec["start_rule"],
+                spec["bounds"],
+            )
 
         fits[fit_key] = run_fit_bank(
             source_id=simulation_seed,
@@ -520,7 +573,7 @@ def run_catalog_event(args) -> dict:
             ra=ra,
             dec=dec,
             fit_key=fit_key,
-            spec=policy[fit_key],
+            spec=spec,
             fit_reference=fit_reference,
             optimizer_options=optimizer_options,
         )
@@ -578,6 +631,8 @@ def run_catalog_event(args) -> dict:
         "n_roman_points": int(len(data["W149"])),
         "data_sha256": data_hash,
         "fit_reference": fit_reference,
+        "start_mode": policy["start_mode"],
+        "light_curve_features": features,
         "fits": fits,
         "statistics": {
             "chi2_PSPL": chi2_pspl,

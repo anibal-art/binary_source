@@ -1,0 +1,120 @@
+{
+  "schema_version": "roman_bspl_lrt_fit_policy_derived_v1",
+  "start_mode": "data_derived",
+  "production_ready": false,
+  "note": "Test A (h0a/h1) start rules. Starts are built per dataset from the observed W149 light curve and the best observed PSPL (roman_lrt_start_bank). production_ready stays False until the H0 pilot shows that T_A saturates with the size of the BSPL bank; freeze before the full calibration.",
+  "optimizer_options": {
+    "xtol": 1e-08,
+    "ftol": 1e-08,
+    "gtol": 1e-08,
+    "max_nfev": 10000,
+    "x_scale": "jac"
+  },
+  "features": {
+    "bin_days": 0.25,
+    "min_points_per_bin": 3,
+    "tE_fallback": 30.0
+  },
+  "PSPL": {
+    "fit_parallax": false,
+    "fit_double_source": false,
+    "bounds": {
+      "t0": [
+        2461700.0,
+        2462000.0
+      ],
+      "u0": [
+        -3.0,
+        3.0
+      ],
+      "tE": [
+        1.0,
+        300.0
+      ]
+    },
+    "start_rule": {
+      "u0_factors": [
+        0.3333333333333333,
+        1.0,
+        3.0
+      ],
+      "tE_factors": [
+        0.5,
+        1.0,
+        2.0
+      ]
+    }
+  },
+  "PSPL_PI": {
+    "fit_parallax": true,
+    "fit_double_source": false,
+    "note": "data_derived PSPL_PI starts not defined yet (Test B)."
+  },
+  "BSPL": {
+    "fit_parallax": false,
+    "fit_double_source": true,
+    "bounds": {
+      "t0": [
+        2461700.0,
+        2462000.0
+      ],
+      "u0": [
+        -3.0,
+        3.0
+      ],
+      "tE": [
+        1.0,
+        300.0
+      ],
+      "xi_para": [
+        -100.0,
+        100.0
+      ],
+      "xi_perp": [
+        -100.0,
+        100.0
+      ],
+      "xi_angular_velocity": [
+        6.283185307179586e-05,
+        0.6283185307179586
+      ],
+      "xi_phase": [
+        -3.141592653589793,
+        9.42477796076938
+      ],
+      "xi_inclination": [
+        -1.5707963267948966,
+        1.5707963267948966
+      ],
+      "xi_mass_ratio": [
+        0.0001,
+        100.0
+      ],
+      "q_flux_W149": [
+        0.0,
+        100.0
+      ]
+    },
+    "start_rule": {
+      "period_min_days": 10.0,
+      "period_max_days": 10000.0,
+      "n_periods": 16,
+      "phases": [
+        0.0,
+        1.5707963267948966,
+        3.141592653589793,
+        4.71238898038469
+      ],
+      "delta_u": [
+        0.003,
+        0.03
+      ],
+      "xi_cap": 50.0,
+      "nested_start": true,
+      "nested_xi": 0.0001,
+      "xi_inclination": 1.0,
+      "xi_mass_ratio": 0.5,
+      "q_flux": 0.001
+    }
+  }
+}

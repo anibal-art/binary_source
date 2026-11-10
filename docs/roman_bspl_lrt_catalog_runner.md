@@ -212,10 +212,29 @@ binary_source/
     └── roman_bspl_lrt_catalog_runner.md
 ```
 
-The existing `roman_native_lrt_no_parallax.py` remains useful as the lower-level
-BSPL/native-fit validation driver. This catalog runner documents the
-production-facing orchestration: one catalog realization, three fits, two test
-statistics.
+`roman_native_lrt_no_parallax.py` is LEGACY (three BSPL starts at a single
+fixed period) and must not be used for calibration or power. This catalog
+runner is the only production orchestration: one catalog realization, three
+fits, two test statistics.
+
+## Data-derived start mode
+
+A policy with `"start_mode": "data_derived"` (for example
+`catalogs/roman_bspl_lrt_v1/fit_policy_test_a_derived_v1.json`) holds rules,
+not numbers. For each dataset `roman_lrt_start_bank` builds:
+
+1. light-curve features from the observed W149 data (binned peak time, peak
+   magnification assuming no blending, half-maximum duration), which give the
+   common `fit_reference`;
+2. a PSPL start grid (u0 and tE factors around those guesses);
+3. a BSPL bank on the best observed PSPL: a log grid of periods, a set of
+   phases, two amplitudes scaled with P/tE, and one nested start
+   (xi = 1e-4 at the PSPL optimum) so that chi2_BSPL <= chi2_PSPL up to
+   optimizer failure. q_flux is free.
+
+The same rules apply to H0 and H1. Every start's chi2 and wall time are saved,
+so smaller (nested) banks can be evaluated offline from one run. Currently only
+`--truth-kind h0a` is supported in this mode (PSPL_PI rules are pending).
 
 ## Example invocation
 

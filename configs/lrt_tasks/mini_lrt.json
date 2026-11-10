@@ -1,0 +1,55 @@
+{
+  "run_name": "mini_lrt",
+  "description": "Pipeline smoke test (ex mini_lrt_tasks.py): H0-A pi_E=0 run as h0a and h0b, H0-B |pi_E|=0.17 dir 0, three H1 cells (P nearest 30 d, 1 yr, 1e4 d).",
+  "outdir": "/tmp/mini_lrt",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a",
+        "h0b"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0": 0.1,
+        "tE": 30.0,
+        "source_mag_F146_AB": 21.0
+      },
+      "n_per_config": 40,
+      "expect_n_configs": 1
+    },
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0b"
+      ],
+      "where": {
+        "u0": 0.1,
+        "tE": 30.0,
+        "source_mag_F146_AB": 21.0,
+        "piE_radius_nominal": 0.17,
+        "piE_direction_index": 0
+      },
+      "n_per_config": 40,
+      "expect_n_configs": 1
+    },
+    {
+      "catalog": "h1",
+      "kinds": [
+        "h1"
+      ],
+      "where": {
+        "scan_family": "one_luminous_u0_P",
+        "u0": 0.1,
+        "source_mag_F146_AB": 21.0
+      },
+      "P_days_closest": [
+        30.0,
+        365.25,
+        10000.0
+      ],
+      "n_per_config": 10,
+      "expect_n_configs": 3
+    }
+  ]
+}

@@ -236,6 +236,27 @@ The same rules apply to H0 and H1. Every start's chi2 and wall time are saved,
 so smaller (nested) banks can be evaluated offline from one run. Currently only
 `--truth-kind h0a` is supported in this mode (PSPL_PI rules are pending).
 
+## Runs: task files, batch execution, analysis
+
+A run is a JSON in `configs/lrt_tasks/` (for example `mini_lrt.json`, the
+pipeline smoke test, and `test_a_pilot_v1.json`, the Test A H0 pilot):
+
+```bash
+python catalogs/roman_bspl_lrt_v1/lrt_tasks.py \
+  --config configs/lrt_tasks/test_a_pilot_v1.json --h0 /path/to/h0_catalog.parquet
+sbatch catalogs/roman_bspl_lrt_v1/run_lrt_tasks.slurm \
+  results/roman_lrt/test_a_pilot_v1/tasks.txt \
+  catalogs/roman_bspl_lrt_v1/fit_policy_test_a_derived_v1.json
+python catalogs/roman_bspl_lrt_v1/lrt_bank_saturation.py \
+  --tasks results/roman_lrt/test_a_pilot_v1/tasks.txt
+```
+
+`lrt_tasks.py` writes the task file and the configuration it used;
+`run_lrt_tasks.slurm` runs the catalog runner on every line (skipping existing
+outputs); `lrt_bank_saturation.py` evaluates T_A on nested sub-banks of the
+saved BSPL starts; `mini_lrt_analyze.py` runs the pipeline checks, order
+statistic thresholds and power.
+
 ## Example invocation
 
 Once a fit-policy JSON exists:

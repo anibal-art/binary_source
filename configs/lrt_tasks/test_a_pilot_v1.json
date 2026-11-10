@@ -1,0 +1,25 @@
+{
+  "run_name": "test_a_pilot_v1",
+  "description": "Test A H0 pilot: pi_E=0 PSPL truths, u0 nodes 1, 3, 5 (0.0136, 0.1, 0.737), tE=30 d, F146=21, 20 realizations each. Measures saturation of T_A with the BSPL start bank and the cost per event.",
+  "outdir": "results/roman_lrt/test_a_pilot_v1",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0_grid_index": [
+          1,
+          3,
+          5
+        ],
+        "tE": 30.0,
+        "source_mag_F146_AB": 21.0
+      },
+      "n_per_config": 20,
+      "expect_n_configs": 3
+    }
+  ]
+}

@@ -99,7 +99,7 @@ The runner preserves the tested integration pattern:
 1. Read a materialized catalog event with
    `catalog.event_reader.load_event_from_catalog`.
 2. Simulate exactly once with
-   `functions_roman_rubin.simulate_event_for_fit`.
+   `functions_roman_rubin.sim_event` (roman_rubin branch `bspl-on-main`).
 3. Extract the numerical Roman light curve once with
    `functions_roman_rubin.extract_lightcurves_for_fit`.
 4. Fit copies of that same numerical array through

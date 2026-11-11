@@ -119,7 +119,7 @@ def as_float(x) -> float:
 
 
 def require_current_api() -> None:
-    sim_sig = inspect.signature(frr.simulate_event_for_fit)
+    sim_sig = inspect.signature(frr.sim_event)
     fit_sig = inspect.signature(fit_lc.fit_rubin_roman)
 
     required_sim = {
@@ -142,7 +142,7 @@ def require_current_api() -> None:
 
     if missing_sim:
         raise RuntimeError(
-            "roman_rubin simulate_event_for_fit API is too old; "
+            "roman_rubin sim_event API is too old (needs bspl-on-main); "
             f"missing={sorted(missing_sim)}"
         )
 
@@ -505,9 +505,11 @@ def run_catalog_event(args) -> dict:
 
     np.random.seed(simulation_seed)
 
-    true_model, true_params, decision = frr.simulate_event_for_fit(
+    # roman_rubin sim_event (simulate_event_for_fit was a thin wrapper around
+    # it and has been removed). It seeds the noise with i itself.
+    true_model, true_params, decision = frr.sim_event(
         i=simulation_seed,
-        event_params=event,
+        data=dict(event),
         path_ephemerides=str(EPHEMERIDES),
         model="PSPL",
         time_window=None,

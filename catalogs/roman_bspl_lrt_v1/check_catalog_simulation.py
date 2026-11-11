@@ -48,9 +48,9 @@ def simulate(catalog, index, truth_kind, noise=True):
     tp, tds = runner.truth_switches(truth_kind)
     seed = int(event["simulation_seed"])
     np.random.seed(seed)
-    model, params, decision = runner.frr.simulate_event_for_fit(
+    model, params, decision = runner.frr.sim_event(
         i=seed,
-        event_params=copy.deepcopy(event),
+        data=copy.deepcopy(event),
         path_ephemerides=str(runner.EPHEMERIDES),
         model="PSPL",
         time_window=None,

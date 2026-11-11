@@ -99,7 +99,7 @@ def sha256_file(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--output", type=Path,
-                    default=Path("catalogs/roman_bspl_lrt_v1/h0_candidate_v3.parquet"))
+                    default=Path("catalogs/roman_bspl_lrt_v1/h0_candidate_v4.parquet"))
     ap.add_argument("--n-realizations", type=int, default=DEFAULT_N_REALIZATIONS)
     ap.add_argument("--strata", nargs="+", choices=["30", "150"], default=["30"])
     ap.add_argument("--direction-offset-deg", type=float, default=0.0)

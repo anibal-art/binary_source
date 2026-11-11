@@ -32,8 +32,6 @@ import argparse
 import hashlib
 import inspect
 import json
-import os
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -41,25 +39,17 @@ from pathlib import Path
 import numpy as np
 
 
-ROMAN_RUBIN_REPO = Path(
-    os.environ.get(
-        "ROMAN_RUBIN_REPO",
-        "/share/storage3/rubin/microlensing/romanrubin/roman_rubin",
-    )
-).resolve()
-
-if not ROMAN_RUBIN_REPO.exists():
-    raise RuntimeError(
-        f"roman_rubin repository not found: {ROMAN_RUBIN_REPO}"
-    )
-
-sys.path.insert(0, str(ROMAN_RUBIN_REPO))
-
 from binary_source.analysis.lrt_catalog_io import (  # noqa: E402
     load_event_from_catalog,
     check_truth_kind,
+    roman_rubin_commit,
+    roman_rubin_repo,
     row_identity,
 )
+
+# Inserts the roman_rubin checkout (env ROMAN_RUBIN_REPO) in sys.path.
+ROMAN_RUBIN_REPO = roman_rubin_repo()
+
 from binary_source.analysis import roman_lrt_start_bank as start_bank  # noqa: E402
 import fit_lc  # noqa: E402
 import functions_roman_rubin as frr  # noqa: E402
@@ -628,6 +618,8 @@ def run_catalog_event(args) -> dict:
         "decision": bool(decision),
         "event_ra_deg": float(ra),
         "event_dec_deg": float(dec),
+        "roman_rubin_repo": str(ROMAN_RUBIN_REPO),
+        "roman_rubin_commit": roman_rubin_commit(ROMAN_RUBIN_REPO),
         "ephemeris_path": str(EPHEMERIDES),
         "ephemeris_sha256": ephem_sha,
         "n_roman_points": int(len(data["W149"])),

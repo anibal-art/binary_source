@@ -443,7 +443,7 @@ def sha256_file(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--output", type=Path,
-                    default=Path("catalogs/roman_bspl_lrt_v1/h1_bspl_candidate_v3.parquet"))
+                    default=Path("catalogs/roman_bspl_lrt_v1/h1_bspl_candidate_v4.parquet"))
     ap.add_argument("--manifest", type=Path, default=None)
     ap.add_argument("--n-realizations", type=int, default=DEFAULT_N_REALIZATIONS)
     ap.add_argument("--geometry-seed", type=int, default=DEFAULT_GEOMETRY_SEED)

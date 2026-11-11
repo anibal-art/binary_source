@@ -18,6 +18,8 @@ CLI:
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -30,7 +32,7 @@ import pyarrow.parquet as pq
 # Frozen conventions shared by every catalogue
 # =============================================================================
 
-SCHEMA_VERSION = "roman_bspl_lrt_catalog_v3"
+SCHEMA_VERSION = "roman_bspl_lrt_catalog_v4"
 
 T0_SEASON3 = 2461849.0
 RA_FIELD = 267.92497054815516          # fit_lc.RA_FIELD in roman_rubin
@@ -39,6 +41,8 @@ F146_AB_MINUS_VEGA = 1.0364436822930514
 
 EPHEMERIS_NAME = "Roman_positions_2027_2032_periodic_v1.npy"
 EPHEMERIS_SHA256 = "eeb7bcf5300d2f3d4be3595898170975b9da20b5d47a26791af0c5258f307d58"
+
+ROMAN_RUBIN_REPO_DEFAULT = "/share/storage3/rubin/microlensing/romanrubin/roman_rubin"
 
 # Disjoint noise-seed blocks (all < 2**32).
 SEED_BASE = {"h1": 2_000_000_000, "h0": 3_000_000_000}
@@ -59,6 +63,8 @@ COMMON_COLUMNS = [
     # photometry (F146 AB = total unresolved source; W149 = Vega for backend)
     "source_mag_F146_AB", "source_mag_F146_Vega", "W149",
     "blend_ratio_W149", "blend_ratio_F146",
+    # materialized W149 fluxes required by roman_rubin sim_event (v4)
+    "flux_zero_point_W149", "fsource_W149", "ftotal_W149",
     # provenance
     "ephemeris_name", "ephemeris_sha256",
     # truth switch fixed by the catalogue kind
@@ -76,6 +82,36 @@ BACKEND_UNUSED_BANDS = ("u", "g", "r", "i", "z", "Y")
 # =============================================================================
 # Row helpers for the builders
 # =============================================================================
+
+def roman_rubin_repo():
+    """The roman_rubin checkout used by every LRT script (env ROMAN_RUBIN_REPO)."""
+    repo = Path(os.environ.get("ROMAN_RUBIN_REPO", ROMAN_RUBIN_REPO_DEFAULT)).resolve()
+    if not repo.exists():
+        raise RuntimeError(f"roman_rubin repository not found: {repo}")
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    return repo
+
+
+def roman_rubin_commit(repo=None):
+    """HEAD commit of the roman_rubin checkout ('unknown' if git is unavailable)."""
+    repo = roman_rubin_repo() if repo is None else Path(repo)
+    try:
+        return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def w149_zero_point():
+    """roman_rubin simulation zero point of W149 (fluxes are materialized with it)."""
+    roman_rubin_repo()
+    from photometry.constants import SIMULATION_BAND_ZERO_POINTS
+    return float(SIMULATION_BAND_ZERO_POINTS["W149"])
+
+
+_ZP_W149 = None
+
 
 def l_b_of_field():
     from astropy.coordinates import SkyCoord
@@ -98,9 +134,11 @@ def common_fields(*, catalog_kind, config_id, realization_id, scan_family,
     baseline 0.753 mag brighter than W149), i.e. W149 is the magnitude of
     source 1.  Hence W149 = total Vega magnitude + 2.5 log10(1 + q_flux).
     """
-    global _LB
+    global _LB, _ZP_W149
     if _LB is None:
         _LB = l_b_of_field()
+    if _ZP_W149 is None:
+        _ZP_W149 = w149_zero_point()
     piE = float(np.hypot(piEN, piEE))
     vega = float(f146_ab) - F146_AB_MINUS_VEGA                  # total, Vega
     w149 = vega + 2.5 * np.log10(1.0 + float(q_flux))           # source 1, Vega
@@ -126,6 +164,11 @@ def common_fields(*, catalog_kind, config_id, realization_id, scan_family,
         "W149_semantics": "source-1 Vega magnitude (backend total = W149 flux x (1+q_flux))",
         "blend_ratio_W149": 0.0,
         "blend_ratio_F146": 0.0,
+        # roman_rubin convention: fsource = source-1 flux, ftotal = fsource (1 + g);
+        # pyLIMA baseline = ftotal + q_flux fsource (= total source flux for g = 0).
+        "flux_zero_point_W149": _ZP_W149,
+        "fsource_W149": 10.0 ** ((_ZP_W149 - w149) / 2.5),
+        "ftotal_W149": 10.0 ** ((_ZP_W149 - w149) / 2.5),
         "ephemeris_name": EPHEMERIS_NAME,
         "ephemeris_sha256": EPHEMERIS_SHA256,
         "truth_double_source": bool(truth_double_source),
@@ -195,6 +238,14 @@ def validate_catalog(df: pd.DataFrame, catalog_kind: str) -> dict:
              "W149 != total Vega + 2.5 log10(1+q_flux) (source-1 magnitude)")
     _require((df["blend_ratio_W149"] == 0).all() and (df["blend_ratio_F146"] == 0).all(),
              "non-zero blending")
+    _require(np.allclose(df["fsource_W149"],
+                         10.0 ** ((df["flux_zero_point_W149"] - df["W149"]) / 2.5),
+                         rtol=1e-12, atol=0),
+             "fsource_W149 != 10**((ZP - W149)/2.5)")
+    _require(np.allclose(df["ftotal_W149"],
+                         df["fsource_W149"] * (1.0 + df["blend_ratio_W149"]),
+                         rtol=1e-12, atol=0),
+             "ftotal_W149 != fsource_W149 (1 + blend_ratio_W149)")
     _require((df["ephemeris_name"] == EPHEMERIS_NAME).all()
              and (df["ephemeris_sha256"] == EPHEMERIS_SHA256).all(),
              "ephemeris provenance mismatch")

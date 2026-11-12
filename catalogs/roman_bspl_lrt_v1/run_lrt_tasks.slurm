@@ -17,6 +17,8 @@
 #   sbatch catalogs/roman_bspl_lrt_v1/run_lrt_tasks.slurm <tasks.txt> <fit_policy.json> [workers]
 # Events whose output JSON already exists are skipped (safe to resubmit).
 # One log per event next to its JSON (<output>.log).
+# With SAVE_ARRAYS=1 in the environment each event also writes <output>.npz
+# (fitted light curve and noiseless truth) for plots.
 
 TASKS=$1
 POLICY=$2
@@ -38,17 +40,20 @@ echo "[env] host=$(hostname) python=$PY workers=$WORKERS"
 echo "[env] binary_source HEAD: $(git rev-parse --short=12 HEAD 2>&1)"
 echo "[env] tasks=$TASKS ($(grep -c . "$TASKS") lines) policy=$POLICY"
 echo "[env] policy sha256: $(sha256sum "$POLICY" | cut -d' ' -f1)"
+echo "[env] save arrays: ${SAVE_ARRAYS:-no}"
 
 run_one() {
     read -r cat idx kind out <<< "$1"
     [ -s "$out" ] && return 0
+    extra=()
+    [ -n "$SAVE_ARRAYS" ] && extra=(--save-arrays "${out%.json}.npz")
     "$PY" -u binary_source/analysis/roman_bspl_lrt_catalog_runner.py \
         --catalog "$cat" --catalog-event-index "$idx" --truth-kind "$kind" \
-        --fit-policy "$POLICY" --output "$out" > "$out.log" 2>&1 \
+        --fit-policy "$POLICY" --output "$out" "${extra[@]}" > "$out.log" 2>&1 \
         && echo "[ok]   $kind $idx" || echo "[FAIL] $kind $idx (see $out.log)"
 }
 export -f run_one
-export PY POLICY
+export PY POLICY SAVE_ARRAYS
 
 start=$(date +%s)
 grep . "$TASKS" | xargs -P "$WORKERS" -I{} bash -c 'run_one "$@"' _ {}

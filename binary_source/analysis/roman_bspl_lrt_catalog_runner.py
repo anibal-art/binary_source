@@ -232,6 +232,88 @@ def extract_fit_data(true_model) -> dict:
     }
 
 
+def save_event_arrays(path: Path, lc: np.ndarray, true_model) -> None:
+    """The fitted W149 light curve and the noiseless truth ('mag_model')."""
+    out = {"time": lc[:, 0], "mag": lc[:, 1], "err_mag": lc[:, 2]}
+    for telo in true_model.event.telescopes:
+        if telo.name == "W149" and "mag_model" in telo.lightcurve.colnames:
+            out["truth_time"] = np.asarray(
+                getattr(telo.lightcurve["time"], "value", telo.lightcurve["time"]),
+                dtype=float)
+            out["truth_mag"] = np.asarray(telo.lightcurve["mag_model"], dtype=float)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, **out)
+
+
+def build_fit_model(lc, ra, dec, fit_reference, fit_double_source):
+    """
+    The pyLIMA model that fit_lc.fit_rubin_roman fits, built with the same
+    roman_rubin builders (create_fit_event, build_fit_pyLIMA_model) but
+    without fitting. Used to evaluate stored best-fit vectors.
+    """
+    from fitting.fit_event import create_fit_event
+    from fitting.fit_parameters import build_fit_pyLIMA_model
+    event = create_fit_event(
+        0, str(EPHEMERIDES), np.asarray(lc, dtype=float),
+        {b: [] for b in ("u", "g", "r", "i", "z", "y")},
+        ra=float(ra), dec=float(dec), roman_name="Roman")
+    return build_fit_pyLIMA_model(
+        event, "PSPL", {k: float(v) for k, v in fit_reference.items()},
+        Origin=None, fit_parallax=False, fit_double_source=bool(fit_double_source))
+
+
+def model_parameter_names(model) -> list:
+    return sorted(model.model_dictionnary, key=model.model_dictionnary.get)
+
+
+def model_magnitude(model, vector) -> np.ndarray:
+    """Model magnitude at the data epochs for a full parameter vector."""
+    from pyLIMA.toolbox import brightness_transformation
+    vector = np.asarray(vector, dtype=float)
+    if len(vector) != len(model.model_dictionnary):
+        raise ValueError(f"vector has {len(vector)} entries, model "
+                         f"{len(model.model_dictionnary)}")
+    params = model.compute_pyLIMA_parameters(vector)
+    flux = model.compute_the_microlensing_model(
+        model.event.telescopes[0], params)["photometry"]
+    return brightness_transformation.flux_to_magnitude(np.asarray(flux, dtype=float))
+
+
+def magnitude_jacobian(model, vector, rel_step=1e-6, t0_step=1e-5):
+    """Central differences dm/dp for every model parameter (t0 step in days)."""
+    vector = np.asarray(vector, dtype=float)
+    names = model_parameter_names(model)
+    cols = []
+    for k, name in enumerate(names):
+        h = t0_step if name == "t0" else rel_step * max(abs(vector[k]), 1e-3)
+        vp, vm = vector.copy(), vector.copy()
+        vp[k] += h
+        vm[k] -= h
+        cols.append((model_magnitude(model, vp) - model_magnitude(model, vm)) / (2 * h))
+    return np.column_stack(cols), names
+
+
+def chi2_linear_fluxes(model, guess: dict) -> float:
+    """
+    pyLIMA's chi2 (flux residuals, err_flux) of the model with the non-flux
+    parameters of `guess` and fsource, fblend re-solved by weighted linear
+    least squares, as roman_rubin does before the TRF.
+    """
+    tel = model.event.telescopes[0]
+    names = model_parameter_names(model)
+    vec = [guess.get(n, 1.0) for n in names]          # fluxes: placeholders
+    params = model.compute_pyLIMA_parameters(np.asarray(vec, dtype=float))
+    A = np.asarray(model.model_magnification(tel, params), dtype=float)
+    f = np.asarray(tel.lightcurve["flux"].value, dtype=float)
+    w = 1.0 / np.asarray(tel.lightcurve["err_flux"].value, dtype=float)
+    (fs, fb), *_ = np.linalg.lstsq(np.c_[A, np.ones_like(A)] * w[:, None], f * w, rcond=None)
+    return float(np.sum(((f - fs * A - fb) * w) ** 2))
+
+
+def _as_list(x):
+    return None if x is None else np.asarray(x, dtype=float).tolist()
+
+
 def get_event_coordinates(true_model) -> tuple[float, float]:
     return float(true_model.event.ra), float(true_model.event.dec)
 
@@ -397,6 +479,11 @@ def run_one_fit(
         "optimizer_status": fit_results.get("optimizer_status"),
         "optimizer_message": fit_results.get("optimizer_message"),
         "optimizer_nfev": fit_results.get("optimizer_nfev"),
+        "fit_parameter_names": list(fit.fit_parameters.keys()),
+        "covariance_matrix": _as_list(fit_results.get("covariance_matrix")),
+        "best_model_physical": _as_list(fit_results.get("best_model_physical")),
+        "covariance_matrix_physical": _as_list(
+            fit_results.get("covariance_matrix_physical")),
     }
 
 
@@ -541,6 +628,8 @@ def run_catalog_event(args) -> dict:
         features = None
         fit_reference = dict(policy["fit_reference"])
 
+    periodogram = None
+
     # Every fit required by this truth kind sees the same exact
     # numerical dataset.
     for fit_key in fit_keys:
@@ -553,11 +642,36 @@ def run_catalog_event(args) -> dict:
             )
         elif derived and fit_key == "BSPL":
             # PSPL precedes BSPL in FIT_KEYS_BY_TRUTH["h0a"] and ["h1"].
-            spec["starts"] = start_bank.bspl_starts(
-                fits["PSPL"]["best"]["best_model"],
-                spec["start_rule"],
-                spec["bounds"],
-            )
+            rule = spec["start_rule"]
+            pspl = fits["PSPL"]["best"]
+            if rule.get("mode", "grid") == "linearized_periodogram":
+                lc = data["W149"]
+                model = build_fit_model(lc, ra, dec, fit_reference, False)
+                jac, names = magnitude_jacobian(model, pspl["best_model"])
+                if names != pspl["fit_parameter_names"]:
+                    raise RuntimeError(f"PSPL parameter order {names} != "
+                                       f"{pspl['fit_parameter_names']}")
+                m_pspl = model_magnitude(model, pspl["best_model"])
+                if len(m_pspl) != len(lc):
+                    raise RuntimeError("PSPL model and data lengths differ")
+                candidates, periodogram = start_bank.bspl_start_candidates(
+                    lc[:, 0], lc[:, 1] - m_pspl, lc[:, 2], jac, names,
+                    pspl["best_model"], fit_reference["t0"], rule, spec["bounds"])
+                # Full-model check of each candidate; the best one is the start.
+                bspl_model = build_fit_model(lc, ra, dec, fit_reference, True)
+                for cand in candidates:
+                    cand["chi2_linear_fluxes"] = chi2_linear_fluxes(
+                        bspl_model, cand["initial_guess"])
+                    cand["improvement_over_pspl"] = pspl["chi2"] - cand["chi2_linear_fluxes"]
+                periodogram["candidates"] = [
+                    {k: c[k] for k in ("label", "alpha", "chi2_linear_fluxes",
+                                       "improvement_over_pspl")} for c in candidates]
+                best = min(candidates, key=lambda c: c["chi2_linear_fluxes"])
+                spec["starts"] = [{"label": best["label"],
+                                   "initial_guess": best["initial_guess"]}]
+            else:
+                spec["starts"] = start_bank.bspl_starts(
+                    pspl["best_model"], rule, spec["bounds"])
 
         fits[fit_key] = run_fit_bank(
             source_id=simulation_seed,
@@ -605,6 +719,9 @@ def run_catalog_event(args) -> dict:
     else:
         t_b = None
 
+    if args.save_arrays is not None:
+        save_event_arrays(args.save_arrays, data["W149"], true_model)
+
     return {
         "runner_schema_version": "roman_bspl_lrt_catalog_runner_v2",
         "catalog_path": str(args.catalog),
@@ -627,6 +744,7 @@ def run_catalog_event(args) -> dict:
         "fit_reference": fit_reference,
         "start_mode": policy["start_mode"],
         "light_curve_features": features,
+        "bspl_start_periodogram": periodogram,
         "fits": fits,
         "statistics": {
             "chi2_PSPL": chi2_pspl,
@@ -686,6 +804,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument(
+        "--save-arrays", type=Path, default=None,
+        help="Optional .npz with the fitted light curve and the noiseless truth.")
 
     return p
 

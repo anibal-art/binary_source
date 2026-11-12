@@ -1,0 +1,21 @@
+{
+  "run_name": "gv_pilot_v1",
+  "description": "Gross-Vitells check of the Test A null: pi_E=0 PSPL truths, ONE configuration (u0 node 1 = 0.0136, tE=30 d, F146=21, same configuration as event 118900), 50 realizations. Run the runner with SAVE_ARRAYS=1, then lrt_omega_profile.py on every event, then lrt_gross_vitells.py.",
+  "outdir": "results/roman_lrt/gv_pilot_v1",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0_grid_index": 1,
+        "tE": 30.0,
+        "source_mag_F146_AB": 21.0
+      },
+      "n_per_config": 50,
+      "expect_n_configs": 1
+    }
+  ]
+}

@@ -164,3 +164,195 @@ def bspl_starts(pspl_best, rule, bounds):
                     "initial_guess": g,
                 })
     return starts
+
+
+# =============================================================================
+# One data-derived BSPL start: linearized xallarap periodogram
+# =============================================================================
+#
+# pyLIMA circular xallarap (pyLIMA.xallarap.xallarap and
+# ML_model.xallarap_trajectory_shifts) moves source 1 by
+#
+#   (dtau, dbeta) = [[xi_para, xi_perp], [-xi_perp, xi_para]]
+#                   . m1 (cos W - cos phi, sin(i) (sin W - sin phi)),
+#   W = omega (t - t0_xi) + phi,   m1 = q_M / (1 + q_M),
+#
+# with t0_xi = the t0 of the fit reference (roman_rubin build_fit_pyLIMA_model).
+# To first order in xi the magnitude changes by dm = G_tau dtau + G_beta dbeta,
+# G_tau = dm/dtau = -tE dm/dt0 and G_beta = dm/du0 of the best PSPL. For each
+# omega the time-dependent part is linear in four coefficients,
+#
+#   dtau  = c1 cos x + c2 sin x,   dbeta = c3 cos x + c4 sin x,   x = omega (t - t0_xi),
+#
+# and the constant part is absorbed by the PSPL parameters (nuisance). The
+# chi2 reduction Delta chi2(omega) is the BSPL likelihood in the small-xi limit.
+# At the peak C = [[c1, c2], [c3, c4]] = m1 xi Rot(-theta) diag(1, sin i) Rot(phi),
+# so its SVD gives xi, theta (xi_para = xi cos theta, xi_perp = xi sin theta),
+# the inclination and the phase.
+
+
+def _rot(a):
+    return np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+
+
+def linearized_xallarap_periodogram(t, resid, err, jac, i_t0, i_u0, tE, t0_xi,
+                                    omegas, window_tE=3.0):
+    """
+    Delta chi2(omega) of the four xallarap basis functions on top of the PSPL
+    Jacobian `jac` (N x K, dm/dp for every fitted PSPL parameter).
+
+    Returns (dchi2, coefficients): coefficients[j] = (c1, c2, c3, c4) at omegas[j].
+    """
+    sel = np.abs(t - t0_xi) < window_tE * abs(tE)
+    t, r, w = t[sel], resid[sel], 1.0 / err[sel] ** 2
+    J = jac[sel]
+    g_tau = -abs(tE) * J[:, i_t0]
+    g_beta = J[:, i_u0]
+    sw = np.sqrt(w)
+
+    # Whiten and project out the PSPL directions (nuisance).
+    Jw = J * sw[:, None]
+    Q, _ = np.linalg.qr(Jw)
+    rw = r * sw
+    rw = rw - Q @ (Q.T @ rw)
+
+    dchi2 = np.empty(len(omegas))
+    coef = np.empty((len(omegas), 4))
+    for j, om in enumerate(omegas):
+        x = om * (t - t0_xi)
+        c, s = np.cos(x), np.sin(x)
+        X = np.column_stack([g_tau * c, g_tau * s, g_beta * c, g_beta * s]) * sw[:, None]
+        X = X - Q @ (Q.T @ X)
+        b, *_ = np.linalg.lstsq(X, rw, rcond=None)
+        fit = X @ b
+        dchi2[j] = 2.0 * rw @ fit - fit @ fit
+        coef[j] = b
+    return dchi2, coef
+
+
+def xallarap_from_coefficients(coef, mass_ratio):
+    """(c1, c2, c3, c4) -> pyLIMA xi_para, xi_perp, xi_phase, xi_inclination."""
+    C = np.array([[coef[0], coef[1]], [coef[2], coef[3]]])
+    U, S, Vt = np.linalg.svd(C)
+    S = np.array(S, dtype=float)
+    if np.linalg.det(U) < 0:
+        U[:, 1] *= -1.0
+        S[1] *= -1.0
+    if np.linalg.det(Vt) < 0:
+        Vt[1, :] *= -1.0
+        S[1] *= -1.0
+    m1 = mass_ratio / (1.0 + mass_ratio)
+    xi = S[0] / m1
+    sin_i = S[1] / S[0] if S[0] > 0 else 0.0
+    theta = np.arctan2(U[0, 1], U[0, 0])        # U = Rot(-theta)
+    phi = np.arctan2(Vt[1, 0], Vt[0, 0])        # Vt = Rot(phi)
+    return {
+        "xi_para": float(xi * np.cos(theta)),
+        "xi_perp": float(xi * np.sin(theta)),
+        "xi_phase": float(phi),
+        "xi_inclination": float(np.arcsin(np.clip(sin_i, -1.0, 1.0))),
+    }
+
+
+def joint_coefficients(t, resid, err, jac, i_t0, i_u0, tE, t0_xi, omega, window_tE=3.0):
+    """
+    Weighted least squares of the residuals on [jac, xallarap basis] at one omega.
+    Returns (a, c): corrections to every PSPL parameter (columns of jac) and the
+    four xallarap coefficients. The PSPL corrections are part of the linear
+    optimum: along nearly degenerate directions (e.g. dbeta oscillating slowly
+    across a narrow peak, which looks like a change of u0) the solution pairs a
+    large orbit with an opposite change of u0, t0 or tE.
+    """
+    sel = np.abs(t - t0_xi) < window_tE * abs(tE)
+    t, r, sw = t[sel], resid[sel], 1.0 / err[sel]
+    J = jac[sel]
+    x = omega * (t - t0_xi)
+    g_tau, g_beta = -abs(tE) * J[:, i_t0], J[:, i_u0]
+    X = np.column_stack([J, g_tau * np.cos(x), g_tau * np.sin(x),
+                         g_beta * np.cos(x), g_beta * np.sin(x)])
+    sol, *_ = np.linalg.lstsq(X * sw[:, None], r * sw, rcond=None)
+    return sol[:J.shape[1]], sol[J.shape[1]:]
+
+
+def candidates_at_omega(names, pspl_best, a, c, omega, rule, bounds):
+    """
+    BSPL starts on the linear-optimum direction at one omega (PSPL corrections
+    a, xallarap coefficients c from joint_coefficients), scaled by
+    rule["amplitude_scales"]. pyLIMA's shift is L(t) - L(t0_xi), with
+    L(t0_xi) = (c1, c3); the start that reproduces the linear trajectory is
+    tE' = tE + a_tE,  t0' = t0 + a_t0 - tE' c1,  u0' = u0 + a_u0 + c3.
+    """
+    i_t0, i_u0, i_tE = names.index("t0"), names.index("u0"), names.index("tE")
+    tE = float(pspl_best[i_tE])
+    q = float(rule["xi_mass_ratio"])
+    candidates = []
+    for alpha in rule.get("amplitude_scales", [1.0]):
+        xi = xallarap_from_coefficients(alpha * c, q)
+        tE_start = tE + alpha * a[i_tE]
+        t0_start = pspl_best[i_t0] + alpha * a[i_t0] - tE_start * alpha * c[0]
+        u0_start = pspl_best[i_u0] + alpha * a[i_u0] + alpha * c[2]
+        guess = {
+            "t0": clip_to_bounds(t0_start, bounds["t0"]),
+            "u0": clip_to_bounds(u0_start, bounds["u0"]),
+            "tE": clip_to_bounds(tE_start, bounds["tE"]),
+            "xi_para": clip_to_bounds(xi["xi_para"], bounds["xi_para"]),
+            "xi_perp": clip_to_bounds(xi["xi_perp"], bounds["xi_perp"]),
+            "xi_angular_velocity": clip_to_bounds(omega, bounds["xi_angular_velocity"]),
+            "xi_phase": clip_to_bounds(xi["xi_phase"], bounds["xi_phase"]),
+            "xi_inclination": clip_to_bounds(xi["xi_inclination"], bounds["xi_inclination"]),
+            "xi_mass_ratio": clip_to_bounds(q, bounds["xi_mass_ratio"]),
+            "q_flux_W149": clip_to_bounds(rule["q_flux"], bounds["q_flux_W149"]),
+        }
+        candidates.append({
+            "label": f"bspl_periodogram_P{2 * np.pi / omega:.4g}_a{alpha:g}",
+            "alpha": float(alpha),
+            "initial_guess": guess,
+        })
+    return candidates
+
+
+def bspl_start_candidates(t, resid, err, jac, names, pspl_best, t0_xi, rule, bounds):
+    """
+    Linearized periodogram, then BSPL start candidates at its peak.
+
+    The frequency grid is uniform in f = 1/P on [1/P_max, 1/P_min] with
+    df = 1 / (oversample * 2 * window_tE * tE): `oversample` nodes per
+    independent frequency of the data window around the peak.
+
+    pyLIMA's shift is L(t) - L(t0_xi), with L the four-coefficient basis and
+    L(t0_xi) = (c1, c3); the linear fit puts that constant into the PSPL
+    corrections a. The start that reproduces the linear trajectory exactly is
+
+        tE' = tE + a_tE,   t0' = t0 + a_t0 - tE' c1,   u0' = u0 + a_u0 + c3.
+
+    Candidate k scales the linear optimum by alpha_k (rule["amplitude_scales"]):
+    orbit coefficients and PSPL corrections (t0, u0, tE) are multiplied by
+    alpha_k together, so every candidate lies on the linear-optimum direction.
+    The caller evaluates the full model on each candidate and keeps the best;
+    this guards against orbits too large for the linear approximation.
+    Returns (candidates, periodogram).
+    """
+    i_t0, i_u0, i_tE = names.index("t0"), names.index("u0"), names.index("tE")
+    tE = float(pspl_best[i_tE])
+    window = float(rule.get("window_tE", 3.0))
+    df = 1.0 / (float(rule["oversample"]) * 2.0 * window * abs(tE))
+    f = np.arange(1.0 / rule["period_max_days"], 1.0 / rule["period_min_days"] + df, df)
+    omegas = 2.0 * np.pi * f
+
+    dchi2, _ = linearized_xallarap_periodogram(
+        t, resid, err, jac, i_t0, i_u0, tE, t0_xi, omegas, window)
+    k = int(np.argmax(dchi2))
+    a, c = joint_coefficients(t, resid, err, jac, i_t0, i_u0, tE, t0_xi, omegas[k], window)
+    q = float(rule["xi_mass_ratio"])
+
+    candidates = candidates_at_omega(names, pspl_best, a, c, omegas[k], rule, bounds)
+    periodogram = {
+        "period_days": (2.0 * np.pi / omegas).tolist(),
+        "delta_chi2": dchi2.tolist(),
+        "peak_period_days": float(2.0 * np.pi / omegas[k]),
+        "peak_delta_chi2": float(dchi2[k]),
+        "peak_coefficients": c.tolist(),
+        "peak_pspl_corrections": dict(zip(names, a.tolist())),
+        "t0_xi": float(t0_xi),
+    }
+    return candidates, periodogram

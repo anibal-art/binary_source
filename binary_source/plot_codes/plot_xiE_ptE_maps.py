@@ -28,8 +28,23 @@ Roche lobe (Eggleton 1983); shorter periods correspond to Roche-lobe overflow.
 Open diamonds: rho = R/rEhat >= u0/2, where finite-source effects (not in the
 point-source map) are important.
 
+With --biases, a figure of the best-fitting PSPL parameter offsets over the
+random orientations (PSPL_biases_one_luminous), replacing the reference-geometry
+bias figures of plot_intrinsic_biases_paper.py (legacy). A PSPL fit absorbs the
+almost constant orbital velocity of the luminous star during the event: the
+trajectory stays straight, with another speed and direction. With
+A = 2 pi xi_E tE/P (orbital speed in theta_E per tE) and v_par, v_perp the
+projected unit-velocity components along and across the motion, to first order
+    |Delta tE/tE| = A |v_par|,  |Delta t0/tE| = u0 A |v_perp|,  Delta u0/u0 = O(A^2),
+so Delta tE/(tE A) and Delta t0/(tE u0 A) lie in [-1, 1] (uniform for isotropic
+orbits). Panels: (a) median |Delta tE/tE| over orientations at u0 = U0_BIAS_MAP,
+only where the median D < BIAS_D_MAX, with lines of constant A; (b) for each
+orientation, the median of Delta tE/(tE A) and Delta t0/(tE u0 A) over the
+first-order cells (A <= BIAS_A_MAX, P/tE >= BIAS_PTE_MIN, D < BIAS_D_MAX, all
+u0), ranked, against the uniform distribution; (c) median |Delta u0/u0| against A.
+
 Usage:
-    python binary_source/plot_codes/plot_xiE_ptE_maps.py [--summary PATH]
+    python binary_source/plot_codes/plot_xiE_ptE_maps.py [--summary PATH] [--biases]
 """
 
 import argparse
@@ -45,7 +60,8 @@ from matplotlib.ticker import LogLocator, NullFormatter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from paper_style import (apply_paper_style, fig_width, heatmap, panel_label,  # noqa: E402
                          save_figure, d_norm, halo,
-                         D_CMAP, D_LABEL, FS_ANNOT, LW_MAIN, LW_THIN)
+                         D_CMAP, D_LABEL, FS_ANNOT, LW_MAIN, LW_THIN,
+                         C_BLACK, C_BLUE, C_VERMILION)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 YEAR_D = 365.25
@@ -72,6 +88,14 @@ RSUN_AU = 1.0 / 215.032
 
 D_LEVELS = (1e-3, 1e-2)
 U0_SINGLE = 0.1
+
+# PSPL bias figure (--biases)
+U0_BIAS_MAP = 0.3
+BIAS_D_MAX = 1e-2          # biases only where the PSPL fit is acceptable
+BIAS_A_MAX = 0.1           # first-order (constant-velocity) regime
+BIAS_PTE_MIN = 10.0
+BIAS_CMAP = "magma"
+A_LINES = (1e-3, 1e-2, 1e-1)
 
 PANEL_W = fig_width(0.48)          # same printed size as Fig. 2a
 PANEL_H = 2.75
@@ -225,6 +249,8 @@ def main():
     ap.add_argument("--no-usetex", action="store_true")
     ap.add_argument("--interacting", action="store_true",
                     help="also draw the u0=0.1 figure with a giant-donor family")
+    ap.add_argument("--biases", action="store_true",
+                    help="also draw the PSPL parameter-offset figure over orientations")
     args = ap.parse_args()
     apply_paper_style(usetex=not args.no_usetex)
 
@@ -266,6 +292,8 @@ def main():
     outs = [*out3, *out1]
     if args.interacting:
         outs += single_panel(xi, pte, Dmed[k], u0s[k], args.out, interacting=True)
+    if args.biases:
+        outs += bias_figure(S, args.out)
     print("saved:", *outs)
 
 
@@ -317,6 +345,149 @@ def single_panel(xi, pte, Dmed, u0, outdir, interacting=False):
         leg.set_zorder(30)
     top_colorbar(fig, cax, pcm, D_LABEL)
     out = save_figure(fig, os.path.join(outdir, stem))
+    plt.close(fig)
+    return out
+
+
+def velocity_amplitude(xi, pte, factor=1.0):
+    """A = 2 pi factor xi tE/P on the (xi, P/tE) grid (factor = |B - beta| for xi_rel)."""
+    return 2.0 * np.pi * factor * np.asarray(xi)[:, None] / np.asarray(pte)[None, :]
+
+
+def bias_cells(S, xi, pte, factor=1.0, d_max=BIAS_D_MAX, a_max=BIAS_A_MAX,
+               pte_min=BIAS_PTE_MIN):
+    """
+    Offsets over the random orientations (geometry 0, the reference one, is
+    excluded), as arrays (u0, xi, orientation, P/tE): r_tE = Delta tE/(tE A),
+    r_t0 = Delta t0/(tE u0 A), |Delta u0/u0|, A, and the mask of first-order
+    cells (finite offsets, D < d_max, 0 < A <= a_max, P/tE >= pte_min).
+    """
+    u0 = S["u0"]
+    A = velocity_amplitude(xi, pte, factor)[None, :, None, :]
+    D = S["D_all"][:, :, 1:, :]
+    dte = S["dtE_over_tE_all"][:, :, 1:, :]
+    dt0 = S["dt0_over_tE_all"][:, :, 1:, :]
+    du0 = S["du0_over_u0_all"][:, :, 1:, :]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        r_tE = dte / A
+        r_t0 = dt0 / (u0[:, None, None, None] * A)
+    ok = (np.isfinite(dte) & np.isfinite(dt0) & np.isfinite(du0) & (D < d_max)
+          & (A > 0) & (A <= a_max) & (np.asarray(pte)[None, None, None, :] >= pte_min))
+    return dict(r_tE=r_tE, r_t0=r_t0, du0=np.abs(du0),
+                A=np.broadcast_to(A, dte.shape), ok=ok)
+
+
+def ranked_orientation_medians(r, ok):
+    """Per orientation: median and 16-84 percentiles of r over the valid cells, ranked."""
+    n_geo = r.shape[2]
+    med, lo, hi = (np.full(n_geo, np.nan) for _ in range(3))
+    for g in range(n_geo):
+        v = r[:, :, g, :][ok[:, :, g, :]]
+        if v.size:
+            lo[g], med[g], hi[g] = np.percentile(v, [16, 50, 84])
+    order = np.argsort(med)
+    return med[order], lo[order], hi[order]
+
+
+def bias_figure(S, outdir):
+    from matplotlib.colors import LogNorm
+    xi, pte, u0s = S["xi_E"], S["P_over_tE"], S["u0"]
+    B = bias_cells(S, xi, pte)
+    n_geo = B["r_tE"].shape[2]
+    fig = plt.figure(figsize=(fig_width(1.0), 2.75))
+    ax_a = fig.add_axes([0.075, 0.15, 0.27, 0.62])
+    cax = fig.add_axes([0.075, 0.845, 0.27, 0.028])
+    ax_b = fig.add_axes([0.435, 0.15, 0.235, 0.70])
+    ax_c = fig.add_axes([0.755, 0.15, 0.215, 0.70])
+
+    # (a) median |Delta tE/tE| at one u0, where the PSPL fit is acceptable
+    k = int(np.argmin(np.abs(np.log(u0s / U0_BIAS_MAP))))
+    D = S["D_all"][k, :, 1:, :]
+    dte = np.abs(S["dtE_over_tE_all"][k, :, 1:, :])
+    dte = np.where(D < BIAS_D_MAX, dte, np.nan)
+    import warnings
+    with warnings.catch_warnings():                       # all-NaN cells stay NaN
+        warnings.simplefilter("ignore", RuntimeWarning)
+        med = 100.0 * np.nanmedian(dte, axis=1)          # percent, (xi, P/tE)
+    Dmed = S["D_p16_p50_p84"][k, 1]
+    med = np.where(Dmed < BIAS_D_MAX, med, np.nan)
+    ax_a.set_facecolor("0.82")
+    pcm = heatmap(ax_a, log_edges(xi), log_edges(pte), np.ma.masked_invalid(med).T,
+                  norm=LogNorm(1e-3, 10.0), cmap=BIAS_CMAP)
+    X, Y = np.meshgrid(xi, pte, indexing="ij")
+    ax_a.contour(X, Y, np.log10(Dmed), levels=[np.log10(BIAS_D_MAX)], colors="crimson",
+                 linewidths=LW_MAIN, linestyles="-", zorder=10)
+    x_line = np.logspace(np.log10(xi[0]), np.log10(xi[-1]), 50)
+    for a_val in A_LINES:
+        y_line = 2.0 * np.pi * x_line / a_val
+        ax_a.plot(x_line, y_line, color="white", lw=LW_THIN, ls="--", zorder=11)
+        x_at = np.clip(a_val * 300.0 / (2.0 * np.pi), xi[2], xi[-8])   # label near P/tE ~ 300
+        label_on_curve(ax_a, x_line, y_line, x_at, rf"$A={a_val:g}$", "white",
+                       above=True, dark=True)
+    ax_a.set_xscale("log"); ax_a.set_yscale("log")
+    ax_a.set_xlim(log_edges(xi)[0], log_edges(xi)[-1])
+    ax_a.set_ylim(log_edges(pte)[0], log_edges(pte)[-1])
+    ax_a.set_xlabel(r"$\xi_E$"); ax_a.set_ylabel(r"$P/t_E$")
+    ax_a.text(0.96, 0.05, rf"$u_0={u0s[k]:g}$", transform=ax_a.transAxes, ha="right",
+              va="bottom", color="white", fontsize=FS_ANNOT, zorder=30,
+              path_effects=halo(1.5, "black"))
+    panel_label(ax_a, "a", color="white")
+    cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal")
+    cbar.ax.xaxis.set_ticks_position("top"); cbar.ax.xaxis.set_label_position("top")
+    cbar.ax.tick_params(which="both", direction="in", pad=1.5)
+    cbar.set_label(r"median $|\Delta t_E|/t_E$ (\%)", labelpad=3)
+
+    # (b) ranked per-orientation medians against the uniform distribution
+    cdf = (np.arange(n_geo) + 0.5) / n_geo
+    rline = np.linspace(-1.0, 1.0, 2)
+    ax_b.plot(rline, 0.5 * (rline + 1.0), color="0.5", lw=LW_THIN, ls="--", zorder=1,
+              label=r"uniform in $[-1,1]$")
+    spreads = {}
+    for key, col, lab, mk in (("r_tE", C_BLUE, r"$\Delta t_E/(t_E A)$", "o"),
+                              ("r_t0", C_VERMILION, r"$\Delta t_0/(t_E u_0 A)$", "s")):
+        m, lo, hi = ranked_orientation_medians(B[key], B["ok"])
+        ax_b.errorbar(m, cdf, xerr=[m - lo, hi - m], fmt=mk, ms=3.0, color=col, mfc=col,
+                      elinewidth=0.6, capsize=0, zorder=3, label=lab)
+        spreads[key] = np.nanmax(hi - lo)
+    ax_b.set_xlim(-1.15, 1.15); ax_b.set_ylim(0, 1)
+    ax_b.set_xlabel("offset / first-order amplitude")
+    ax_b.set_ylabel("fraction of orientations")
+    ax_b.legend(loc="upper left", fontsize=FS_ANNOT - 1.5, handlelength=1.4)
+    panel_label(ax_b, "b", x=0.88, y=0.12)
+
+    # (c) |Delta u0/u0| against A: second order
+    edges = np.logspace(np.log10(BIAS_A_MAX) - 3.0, np.log10(BIAS_A_MAX), 13)
+    mid = np.sqrt(edges[1:] * edges[:-1])
+    colours = (C_BLACK, C_BLUE, C_VERMILION)
+    for iu, u0 in enumerate(u0s):
+        a = B["A"][iu][B["ok"][iu]]
+        v = B["du0"][iu][B["ok"][iu]]
+        y = np.full(len(mid), np.nan)
+        for j in range(len(mid)):
+            sel = (a >= edges[j]) & (a < edges[j + 1])
+            if sel.sum() >= 10:
+                y[j] = np.median(v[sel])
+        ax_c.plot(mid, y, "o-", ms=3.0, lw=LW_THIN, color=colours[iu % 3],
+                  label=rf"$u_0={u0:g}$")
+    ax_c.plot(mid, mid, color="0.5", lw=LW_THIN, ls=":", label=r"$\propto A$")
+    ref = np.nanmedian([np.nanmedian(B["du0"][iu][B["ok"][iu] & (B["A"][iu] > 0.03)])
+                        for iu in range(len(u0s))])
+    ax_c.plot(mid, ref * (mid / 0.05) ** 2, color="0.5", lw=LW_THIN, ls="--",
+              label=r"$\propto A^2$")
+    ax_c.set_xscale("log"); ax_c.set_yscale("log")
+    ax_c.set_xlabel(r"$A = 2\pi\,\xi_E\,t_E/P$")
+    ax_c.set_ylabel(r"median $|\Delta u_0|/u_0$")
+    ax_c.legend(loc="upper left", fontsize=FS_ANNOT - 1.5, handlelength=1.4)
+    panel_label(ax_c, "c", x=0.88, y=0.12)
+
+    print(f"biases: {int(B['ok'].sum())} first-order cells over {n_geo} orientations; "
+          f"largest 16-84 spread of a per-orientation median: r_tE {spreads['r_tE']:.3f}, "
+          f"r_t0 {spreads['r_t0']:.3f}")
+    for key in ("r_tE", "r_t0"):
+        v = B[key][B["ok"]]
+        print(f"  {key}: min {v.min():+.3f} max {v.max():+.3f} "
+              f"median |.| {np.median(np.abs(v)):.3f} (uniform: 0.5)")
+    out = save_figure(fig, os.path.join(outdir, "PSPL_biases_one_luminous"))
     plt.close(fig)
     return out
 

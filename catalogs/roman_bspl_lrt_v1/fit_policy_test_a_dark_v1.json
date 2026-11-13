@@ -1,0 +1,111 @@
+{
+ "schema_version": "roman_bspl_lrt_fit_policy_derived_v1",
+ "start_mode": "data_derived",
+ "production_ready": false,
+ "note": "Test A, original design (2026-11-05): dark companion. q_flux_W149 = 0 and xi_mass_ratio = 1 are held fixed by narrow bounds (roman_rubin cannot fix a parameter); with q_flux = 0 the light curve depends only on xi * q/(1+q), so xi_mass_ratio = 1 loses no generality. H1 adds xi_para, xi_perp, xi_angular_velocity, xi_phase, xi_inclination to the PSPL. Everything else as fit_policy_test_a_data_start_v1.json: PSPL start from light-curve features; BSPL start from the linearized periodogram; xtol = 1e-15.",
+ "optimizer_options": {
+  "xtol": 1e-15,
+  "ftol": 1e-08,
+  "gtol": 1e-08,
+  "max_nfev": 10000,
+  "x_scale": "jac"
+ },
+ "features": {
+  "bin_days": 0.25,
+  "min_points_per_bin": 3,
+  "tE_fallback": 30.0
+ },
+ "PSPL": {
+  "fit_parallax": false,
+  "fit_double_source": false,
+  "bounds": {
+   "t0": [
+    2461700.0,
+    2462000.0
+   ],
+   "u0": [
+    -3.0,
+    3.0
+   ],
+   "tE": [
+    1.0,
+    300.0
+   ]
+  },
+  "start_rule": {
+   "u0_factors": [
+    1.0
+   ],
+   "tE_factors": [
+    1.0
+   ]
+  }
+ },
+ "PSPL_PI": {
+  "fit_parallax": true,
+  "fit_double_source": false,
+  "note": "data_derived PSPL_PI starts not defined yet (Test B)."
+ },
+ "BSPL": {
+  "fit_parallax": false,
+  "fit_double_source": true,
+  "bounds": {
+   "t0": [
+    2461700.0,
+    2462000.0
+   ],
+   "u0": [
+    -3.0,
+    3.0
+   ],
+   "tE": [
+    1.0,
+    300.0
+   ],
+   "xi_para": [
+    -100.0,
+    100.0
+   ],
+   "xi_perp": [
+    -100.0,
+    100.0
+   ],
+   "xi_angular_velocity": [
+    6.283185307179586e-05,
+    0.6283185307179586
+   ],
+   "xi_phase": [
+    -3.141592653589793,
+    9.42477796076938
+   ],
+   "xi_inclination": [
+    -1.5707963267948966,
+    1.5707963267948966
+   ],
+   "xi_mass_ratio": [
+    0.999999999,
+    1.000000001
+   ],
+   "q_flux_W149": [
+    0.0,
+    1e-10
+   ]
+  },
+  "start_rule": {
+   "mode": "linearized_periodogram",
+   "period_min_days": 10.0,
+   "period_max_days": 10000.0,
+   "oversample": 10,
+   "window_tE": 3.0,
+   "xi_mass_ratio": 1.0,
+   "q_flux": 5e-11,
+   "amplitude_scales": [
+    1.0,
+    0.5,
+    0.25,
+    0.1,
+    0.05
+   ]
+  }
+ }
+}

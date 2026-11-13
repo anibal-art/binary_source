@@ -26,18 +26,16 @@ Single event (plot):
         --json results/roman_lrt/explore/h0a_118900_identity.json \
         --fit-policy catalogs/roman_bspl_lrt_v1/fit_policy_test_a_data_start_v1.json \
         --out results/roman_lrt/explore/h0a_118900_omega_profile --check-top 3
-Many events (runner JSONs of a task run, <json>.npz next to each):
-    python binary_source/analysis/lrt_omega_profile.py \
-        --json results/roman_lrt/gv_pilot_v1/json/*.json \
-        --fit-policy catalogs/roman_bspl_lrt_v1/fit_policy_test_a_data_start_v1.json \
-        --out-dir results/roman_lrt/gv_pilot_v1/omega_profile --workers 40 --no-plot
+Many events (runner JSONs of a task run, <json>.npz next to each) are done one
+after the other; on the cluster catalogs/roman_bspl_lrt_v1/run_omega_profiles.slurm
+runs one process per event. No multiprocessing.Pool here: every pyLIMA fit starts
+a multiprocessing Manager, which a daemonic Pool worker is not allowed to do.
 Events whose output JSON exists are skipped.
 """
 
 import argparse
 import json
 import time
-from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
@@ -135,9 +133,11 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
 
     def show(k, rec, n_starts, seconds, prefix=""):
         dchi2 = np.nan if rec["delta_chi2"] is None else rec["delta_chi2"]
+        errors = [t["error"] for t in rec["starts"] if t.get("error")]
+        note = f"  ({len(errors)} failed: {errors[0][:200]})" if errors else ""
         print(f"{tag}{prefix}[{k + 1:3d}/{len(omegas)}] P = {rec['period_days']:9.3f} d  "
               f"starts {n_starts}  Delta chi2 = {dchi2:8.3f}  best start "
-              f"{rec['start_label']}  {seconds:.1f} s", flush=True)
+              f"{rec['start_label']}  {seconds:.1f} s{note}", flush=True)
 
     # omegas ascending = periods descending: the sweep goes from long to short P.
     profile, rows, prev = [], [], None
@@ -287,7 +287,6 @@ def main():
                     help="with --search sweep, a second pass from short to long P")
     ap.add_argument("--no-refine", action="store_true")
     ap.add_argument("--no-plot", action="store_true")
-    ap.add_argument("--workers", type=int, default=1)
     args = ap.parse_args()
 
     inputs = [p for p in args.json if not p.name.endswith("_omega_profile.json")]
@@ -306,13 +305,9 @@ def main():
         else:
             prefix = (args.out_dir or p.parent) / f"{p.stem}_omega_profile"
         jobs.append((p, arrays, prefix, kw, not args.no_plot))
-    print(f"{len(jobs)} events, {args.workers} workers", flush=True)
-    if args.workers > 1:
-        with Pool(args.workers) as pool:
-            pool.map(_run, jobs, chunksize=1)
-    else:
-        for job in jobs:
-            _run(job)
+    print(f"{len(jobs)} events", flush=True)
+    for job in jobs:
+        _run(job)
 
 
 if __name__ == "__main__":

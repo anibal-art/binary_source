@@ -36,10 +36,27 @@ export PYTHONPATH="$SLURM_SUBMIT_DIR:$PYTHONPATH"
 
 echo "[env] host=$(hostname) python=$PY"
 echo "[env] binary_source HEAD: $(git rev-parse --short=12 HEAD 2>&1)"
-echo "[env] run=$RUN policy=$POLICY extra=$*"
+echo "[env] run=$RUN policy=$POLICY extra=$* workers=${SLURM_CPUS_PER_TASK:-40}"
+
+WORKERS=${SLURM_CPUS_PER_TASK:-40}
+EXTRA="$*"
+mkdir -p "$RUN/omega_profile"
+
+# One independent process per event (no multiprocessing.Pool: every pyLIMA fit
+# starts a multiprocessing Manager, which Pool workers are not allowed to do).
+run_one() {
+    json=$1
+    name=$(basename "${json%.json}")
+    out="$RUN/omega_profile/${name}_omega_profile.json"
+    [ -s "$out" ] && return 0
+    "$PY" -u binary_source/analysis/lrt_omega_profile.py \
+        --json "$json" --fit-policy "$POLICY" --out-dir "$RUN/omega_profile" --no-plot $EXTRA \
+        > "$RUN/omega_profile/${name}.log" 2>&1 \
+        && [ -s "$out" ] && echo "[ok]   $name" || echo "[FAIL] $name (see $RUN/omega_profile/${name}.log)"
+}
+export -f run_one
+export PY POLICY RUN EXTRA
 
 start=$(date +%s)
-"$PY" -u binary_source/analysis/lrt_omega_profile.py \
-    --json "$RUN"/json/*.json --fit-policy "$POLICY" \
-    --out-dir "$RUN/omega_profile" --workers "${SLURM_CPUS_PER_TASK:-40}" --no-plot "$@"
+ls "$RUN"/json/*.json | grep -v '_omega_profile.json$' | xargs -P "$WORKERS" -I{} bash -c 'run_one "$@"' _ {}
 echo "[done] $(ls "$RUN"/omega_profile/*_omega_profile.json 2>/dev/null | wc -l) profiles in $(( ($(date +%s) - start) / 60 )) min"

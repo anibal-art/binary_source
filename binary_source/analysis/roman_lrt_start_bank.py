@@ -195,6 +195,30 @@ def _rot(a):
     return np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
 
 
+def xallarap_design(t, err, jac, i_t0, i_u0, tE, t0_xi, window_tE=3.0):
+    """
+    Ingredients of the linearized xallarap model inside |t - t0_xi| < window_tE tE:
+    selection mask, whitening weights sw = 1/|err|, orthonormal basis Q of the
+    whitened PSPL Jacobian (nuisance directions), and the two PSPL derivative
+    columns g_tau = -tE dm/dt0, g_beta = dm/du0 that the orbit modulates.
+    """
+    sel = np.abs(t - t0_xi) < window_tE * abs(tE)
+    J = jac[sel]
+    sw = np.sqrt(1.0 / err[sel] ** 2)          # as before the refactor (bitwise identical)
+    Q, _ = np.linalg.qr(J * sw[:, None])
+    return {"sel": sel, "t": t[sel] - t0_xi, "sw": sw, "Q": Q,
+            "g_tau": -abs(tE) * J[:, i_t0], "g_beta": J[:, i_u0]}
+
+
+def xallarap_columns(design, omega):
+    """Whitened xallarap basis at omega with the PSPL directions projected out (n x 4)."""
+    x = omega * design["t"]
+    c, s = np.cos(x), np.sin(x)
+    g_tau, g_beta, Q = design["g_tau"], design["g_beta"], design["Q"]
+    X = np.column_stack([g_tau * c, g_tau * s, g_beta * c, g_beta * s]) * design["sw"][:, None]
+    return X - Q @ (Q.T @ X)
+
+
 def linearized_xallarap_periodogram(t, resid, err, jac, i_t0, i_u0, tE, t0_xi,
                                     omegas, window_tE=3.0):
     """
@@ -203,26 +227,16 @@ def linearized_xallarap_periodogram(t, resid, err, jac, i_t0, i_u0, tE, t0_xi,
 
     Returns (dchi2, coefficients): coefficients[j] = (c1, c2, c3, c4) at omegas[j].
     """
-    sel = np.abs(t - t0_xi) < window_tE * abs(tE)
-    t, r, w = t[sel], resid[sel], 1.0 / err[sel] ** 2
-    J = jac[sel]
-    g_tau = -abs(tE) * J[:, i_t0]
-    g_beta = J[:, i_u0]
-    sw = np.sqrt(w)
-
+    design = xallarap_design(t, err, jac, i_t0, i_u0, tE, t0_xi, window_tE)
+    Q = design["Q"]
     # Whiten and project out the PSPL directions (nuisance).
-    Jw = J * sw[:, None]
-    Q, _ = np.linalg.qr(Jw)
-    rw = r * sw
+    rw = resid[design["sel"]] * design["sw"]
     rw = rw - Q @ (Q.T @ rw)
 
     dchi2 = np.empty(len(omegas))
     coef = np.empty((len(omegas), 4))
     for j, om in enumerate(omegas):
-        x = om * (t - t0_xi)
-        c, s = np.cos(x), np.sin(x)
-        X = np.column_stack([g_tau * c, g_tau * s, g_beta * c, g_beta * s]) * sw[:, None]
-        X = X - Q @ (Q.T @ X)
+        X = xallarap_columns(design, om)
         b, *_ = np.linalg.lstsq(X, rw, rcond=None)
         fit = X @ b
         dchi2[j] = 2.0 * rw @ fit - fit @ fit

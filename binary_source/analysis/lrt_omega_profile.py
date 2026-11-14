@@ -70,6 +70,28 @@ def code_commits():
             "roman_rubin_commit": roman_rubin_commit(runner.ROMAN_RUBIN_REPO)}
 
 
+def pspl_start_guess(pspl_best, pspl_names, bounds, rule, omega, base=None):
+    """
+    BSPL start at the best PSPL: t0, u0, tE of the PSPL, xi_para = xi_perp =
+    XI_PSPL_START, omega fixed. Other keys from base (a start-bank guess) or, without
+    base, phase = inclination = 0 and mass ratio / q_flux from the policy start_rule.
+    """
+    if base is not None:
+        g = dict(base)
+    else:
+        g = {"xi_phase": start_bank.clip_to_bounds(0.0, bounds["xi_phase"]),
+             "xi_inclination": start_bank.clip_to_bounds(0.0, bounds["xi_inclination"]),
+             "xi_mass_ratio": start_bank.clip_to_bounds(float(rule["xi_mass_ratio"]),
+                                                       bounds["xi_mass_ratio"]),
+             "q_flux_W149": start_bank.clip_to_bounds(float(rule["q_flux"]),
+                                                     bounds["q_flux_W149"])}
+    for n in ("t0", "u0", "tE"):
+        g[n] = start_bank.clip_to_bounds(float(pspl_best[pspl_names.index(n)]), bounds[n])
+    g["xi_para"] = g["xi_perp"] = XI_PSPL_START
+    g["xi_angular_velocity"] = float(omega)
+    return g
+
+
 def omega_grid(tE, window_tE, oversample, period_min, period_max):
     df = 1.0 / (oversample * 2.0 * window_tE * abs(tE))
     f = np.arange(1.0 / period_max, 1.0 / period_min + 0.5 * df, df)
@@ -161,12 +183,7 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
 
     def pspl_start(omega, base):
         """Best PSPL, xi_para = xi_perp = XI_PSPL_START; other keys from base."""
-        p = pspl["best_model"]
-        g = dict(base)
-        for n in ("t0", "u0", "tE"):
-            g[n] = start_bank.clip_to_bounds(float(p[names.index(n)]), bounds[n])
-        g["xi_para"] = g["xi_perp"] = XI_PSPL_START
-        g["xi_angular_velocity"] = float(omega)
+        g = pspl_start_guess(pspl["best_model"], names, bounds, rule, omega, base=base)
         return {"label": "pspl_xi0", "alpha": None, "initial_guess": g}
 
     def fit_node(omega, cands, use):

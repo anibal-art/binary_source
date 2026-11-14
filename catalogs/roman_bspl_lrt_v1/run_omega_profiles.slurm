@@ -17,6 +17,8 @@
 #   sbatch catalogs/roman_bspl_lrt_v1/run_omega_profiles.slurm <run_outdir> <fit_policy.json> [extra args]
 # Outputs <run_outdir>/omega_profile/<event>_omega_profile.json; existing ones
 # are skipped (safe to resubmit). Extra args go to lrt_omega_profile.py.
+# With --repair among the extra args, existing profiles are NOT skipped: only
+# their nodes with q < -repair_tol are re-fitted (log: <event>.repair.log).
 
 RUN=$1
 POLICY=$2
@@ -40,6 +42,8 @@ echo "[env] run=$RUN policy=$POLICY extra=$* workers=${SLURM_CPUS_PER_TASK:-40}"
 
 WORKERS=${SLURM_CPUS_PER_TASK:-40}
 EXTRA="$*"
+REPAIR=0
+case " $EXTRA " in *" --repair "*) REPAIR=1 ;; esac
 mkdir -p "$RUN/omega_profile"
 
 # One independent process per event (no multiprocessing.Pool: every pyLIMA fit
@@ -48,14 +52,20 @@ run_one() {
     json=$1
     name=$(basename "${json%.json}")
     out="$RUN/omega_profile/${name}_omega_profile.json"
-    [ -s "$out" ] && return 0
+    log="$RUN/omega_profile/${name}.log"
+    if [ "$REPAIR" = 1 ]; then
+        [ -s "$out" ] || return 0
+        log="$RUN/omega_profile/${name}.repair.log"
+    else
+        [ -s "$out" ] && return 0
+    fi
     "$PY" -u binary_source/analysis/lrt_omega_profile.py \
         --json "$json" --fit-policy "$POLICY" --out-dir "$RUN/omega_profile" --no-plot $EXTRA \
-        > "$RUN/omega_profile/${name}.log" 2>&1 \
-        && [ -s "$out" ] && echo "[ok]   $name" || echo "[FAIL] $name (see $RUN/omega_profile/${name}.log)"
+        > "$log" 2>&1 \
+        && [ -s "$out" ] && echo "[ok]   $name" || echo "[FAIL] $name (see $log)"
 }
 export -f run_one
-export PY POLICY RUN EXTRA
+export PY POLICY RUN EXTRA REPAIR
 
 start=$(date +%s)
 ls "$RUN"/json/*.json | grep -v '_omega_profile.json$' | xargs -P "$WORKERS" -I{} bash -c 'run_one "$@"' _ {}

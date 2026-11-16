@@ -17,23 +17,29 @@ T = 2 window_tE tE, the width of one profile peak divided by oversample):
     longest-P node, close to the PSPL limit, fits every amplitude candidate);
     --sweep-back adds a pass from short to long P with the same continuation;
   * the TRF fit is the runner's run_one_fit (same roman_rubin fitter);
-  * PSPL fallback: if the best start of a node ends with
-    q < -PSPL_FALLBACK_TOL (impossible for nested models; it happens at long P,
-    where the orbit is degenerate with (t0, u0, tE) and TRF runs to the xi
-    bounds), the node is fitted again from the best PSPL with
-    xi_para = xi_perp = XI_PSPL_START and the better result is kept. TRF only
-    accepts steps that lower chi2, so this start gives q >= ~0.
+  * a node is BAD if its best fit is stuck (reached the policy max_nfev; in the
+    dark pilot such fits never moved from their start) or has
+    q < -BAD_Q_TOL (impossible for nested models; it happens at long P, where
+    the orbit is degenerate with (t0, u0, tE) and TRF runs to the xi bounds).
+    A bad node is fitted again from the next N_FALLBACK_STARTS start-bank
+    candidates and the best result is kept.
+    (Until 2026-11-15 the fallback was the best PSPL with xi = 1e-4: those fits
+    stayed at their start, and xi = 1e-4 is ~1% of u0 for u0 ~ 0.01, so it did
+    not even reproduce chi2_PSPL. Removed.)
 q(omega) = chi2_PSPL - min chi2_BSPL(omega). The grid maximum is refined by one
 TRF with omega free between the two neighbouring nodes:
     T_profile = max(max_k q(omega_k), q_refined).
-Each node records xi_at_bound (|xi_para| or |xi_perp| at the policy bound).
+Each node records stuck and xi_at_bound (|xi_para| or |xi_perp| at the bound).
 
---repair re-fits, in existing *_omega_profile.json files, only the nodes with
-q < -repair_tol or no result, from the PSPL start and from the solutions of the
-two neighbouring nodes; a node is replaced only if chi2 improves. The grid is
-taken from the stored file (oversample, period range); the refinement is redone
-if the grid maximum moved or its node was re-fitted. The original file is kept
-as *_omega_profile.prerepair.json and the output gets a "repair" block.
+--repair re-fits, in existing *_omega_profile.json files, only the bad nodes
+(no result, q < -repair_tol, or nfev >= the max_nfev of the policy that made
+the stored file), from the first 1 + N_FALLBACK_STARTS start-bank candidates
+and the solutions of the two neighbouring good nodes, with the --fit-policy
+given now; a node is replaced only if chi2 improves. The grid is taken from the
+stored file; the refinement is redone if the grid maximum moved or its node was
+re-fitted. Before each repair the file is copied to
+*_omega_profile.prerepair.json (then .prerepair2.json, ...); every repair is
+appended to "repair_history".
 
 Single event (plot):
     python binary_source/analysis/lrt_omega_profile.py \
@@ -59,8 +65,10 @@ from binary_source.analysis import roman_lrt_start_bank as start_bank
 from binary_source.analysis.lrt_catalog_io import roman_rubin_commit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PSPL_FALLBACK_TOL = 0.1   # q below -tol at a node triggers the PSPL start
-XI_PSPL_START = 1e-4      # xi_para = xi_perp of the PSPL start
+BAD_Q_TOL = 0.1           # q below -tol makes a node bad
+PSPL_FALLBACK_TOL = BAD_Q_TOL   # old name, kept for lrt_pspl_limit_check / stored files
+N_FALLBACK_STARTS = 2     # extra start-bank candidates tried at a bad node
+XI_PSPL_START = 1e-4      # xi_para = xi_perp of pspl_start_guess (lrt_pspl_limit_check)
 XI_BOUND_RTOL = 1e-3      # xi within this fraction of its bound -> xi_at_bound
 
 
@@ -111,6 +119,7 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
     a = np.load(arrays_path)
     lc = np.column_stack([a["time"], a["mag"], a["err_mag"]])
     policy = runner.load_policy(Path(policy_path))
+    max_nfev = int(policy["optimizer_options"]["max_nfev"])
     spec = dict(policy["BSPL"])
     rule, bounds = spec["start_rule"], spec["bounds"]
     ra, dec, ref = d["event_ra_deg"], d["event_dec_deg"], d["fit_reference"]
@@ -181,16 +190,19 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
         g["xi_angular_velocity"] = float(omega)
         return g
 
-    def pspl_start(omega, base):
-        """Best PSPL, xi_para = xi_perp = XI_PSPL_START; other keys from base."""
-        g = pspl_start_guess(pspl["best_model"], names, bounds, rule, omega, base=base)
-        return {"label": "pspl_xi0", "alpha": None, "initial_guess": g}
+    def is_stuck(nfev, limit):
+        return nfev is not None and limit is not None and int(nfev) >= int(limit)
+
+    def is_bad(dchi2, nfev, limit, tol=BAD_Q_TOL):
+        return dchi2 is None or dchi2 < -tol or is_stuck(nfev, limit)
 
     def fit_node(omega, cands, use):
-        """fit_fixed on use; PSPL start if the result is below -PSPL_FALLBACK_TOL."""
+        """fit_fixed on use; if the node is bad, the next N_FALLBACK_STARTS candidates."""
         row, tried = fit_fixed(omega, use)
-        if row is None or chi2_pspl - float(row["chi2"]) < -PSPL_FALLBACK_TOL:
-            row2, tried2 = fit_fixed(omega, [pspl_start(omega, cands[0]["initial_guess"])])
+        if row is None or is_bad(chi2_pspl - float(row["chi2"]), row.get("optimizer_nfev"), max_nfev):
+            done = {t["label"] for t in tried}
+            extra = [c for c in cands if c["label"] not in done][:N_FALLBACK_STARTS]
+            row2, tried2 = fit_fixed(omega, extra)
             tried = tried + tried2
             if row2 is not None and (row is None or row2["chi2"] < row["chi2"]):
                 row = row2
@@ -215,6 +227,8 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
             "start_alpha": None if row is None else row["start_alpha"],
             "start_label": None if row is None else row["start_label"],
             "nfev": None if row is None else row.get("optimizer_nfev"),
+            "stuck": None if row is None else is_stuck(row.get("optimizer_nfev"), max_nfev),
+            "nfev_limit": max_nfev,
             "best_model": None if row is None else row["best_model"],
             "fit_parameter_names": None if row is None else row["fit_parameter_names"]}
 
@@ -233,7 +247,11 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
             raise RuntimeError("repair: omega grid differs from the stored profile")
         profile = [dict(p) for p in repair_from["profile"]]
         rows = [None] * len(omegas)
-        good = [p["delta_chi2"] is not None and p["delta_chi2"] >= -repair_tol for p in profile]
+        # max_nfev of the policy that produced the stored nodes (stuck = reached it)
+        stored_max_nfev = int(runner.load_policy(Path(repair_from["fit_policy"]))
+                              ["optimizer_options"]["max_nfev"])
+        good = [not is_bad(p["delta_chi2"], p.get("nfev"), p.get("nfev_limit", stored_max_nfev),
+                           repair_tol) for p in profile]
         n_refit = n_improved = 0
         for k, om in enumerate(omegas):
             if good[k]:
@@ -241,7 +259,7 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
             n_refit += 1
             cands = candidates(om)
             base = cands[0]["initial_guess"]
-            use = [pspl_start(om, base)]
+            use = list(cands[:1 + N_FALLBACK_STARTS])
             for kk, lab in ((k - 1, "neighbour_longP"), (k + 1, "neighbour_shortP")):
                 if 0 <= kk < len(omegas) and good[kk]:
                     use.append({"label": lab, "alpha": None,
@@ -255,11 +273,15 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
                 n_improved += 1
             else:
                 profile[k]["starts"] = old["starts"] + tried
+                profile[k].setdefault("nfev_limit", stored_max_nfev)
             profile[k]["repaired"] = True
             show(k, profile[k], len(tried), time.perf_counter() - t_node, prefix="repair ")
-        repair_info = {**code_commits(), "repair_tol": repair_tol,
-                       "n_nodes_refit": n_refit, "n_nodes_improved": n_improved,
-                       "T_profile_before": repair_from["T_profile"]}
+        for p in profile:                              # limit that applies to each stored node
+            p.setdefault("nfev_limit", stored_max_nfev)
+            p["stuck"] = is_stuck(p.get("nfev"), p["nfev_limit"])
+        repair_info = {**code_commits(), "fit_policy": str(policy_path), "repair_tol": repair_tol,
+                       "max_nfev": max_nfev, "n_nodes_refit": n_refit,
+                       "n_nodes_improved": n_improved, "T_profile_before": repair_from["T_profile"]}
     else:
         # omegas ascending = periods descending: the sweep goes from long to short P.
         profile, rows, prev = [], [], None
@@ -337,17 +359,24 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
     for p in profile:
         p["xi_at_bound"] = xi_at_bound(p)
     n_bound = sum(bool(p["xi_at_bound"]) for p in profile)
-    n_neg = int(np.sum(q < -PSPL_FALLBACK_TOL))
+    n_neg = int(np.sum(q < -BAD_Q_TOL))
+    n_stuck = sum(bool(p.get("stuck")) for p in profile)
     print(f"{tag}T_profile = {T_profile:.3f}  (grid max {q[j]:.3f} at P = "
           f"{profile[j]['period_days']:.3f} d; runner T_A = {d['statistics']['T_A']:.3f}; "
-          f"nodes with xi at bound {n_bound}, with q < -{PSPL_FALLBACK_TOL} {n_neg})",
+          f"nodes with xi at bound {n_bound}, with q < -{BAD_Q_TOL} {n_neg}, stuck {n_stuck})",
           flush=True)
+    # A repaired file keeps the commits and policy of its original run; each repair
+    # records its own in "repair" / "repair_history".
     commits = code_commits() if repair_from is None else {
         "code_commit": repair_from.get("code_commit"),
         "roman_rubin_commit": repair_from.get("roman_rubin_commit")}
-    out = {"event_json": str(json_path), "fit_policy": str(policy_path), **commits,
-            "pspl_fallback_tol": PSPL_FALLBACK_TOL if repair_from is None
+    out = {"event_json": str(json_path),
+            "fit_policy": str(policy_path) if repair_from is None else repair_from["fit_policy"],
+            **commits,
+            "pspl_fallback_tol": BAD_Q_TOL if repair_from is None
             else repair_from.get("pspl_fallback_tol"),
+            "max_nfev": max_nfev if repair_from is None
+            else repair_from.get("max_nfev", stored_max_nfev),
             "config_id": d.get("catalog_row", {}).get("config_id"),
             "simulation_seed": d["simulation_seed"], "truth_kind": d.get("truth_kind"),
             "tE_PSPL": tE, "window_tE": window, "oversample": oversample,
@@ -358,9 +387,16 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
             "T_profile": T_profile, "grid_max_delta_chi2": float(q[j]),
             "grid_max_period_days": profile[j]["period_days"], "refined": refined,
             "n_nodes_xi_at_bound": n_bound, "n_nodes_negative": n_neg,
+            "n_nodes_stuck": n_stuck,
             "profile": profile, "checks": checks}
     if repair_info is not None:
+        history = list(repair_from.get("repair_history", []))
+        if not history and repair_from.get("repair"):       # first repair (2026-11-14) format
+            history = [repair_from["repair"]]
+        repair_info["T_profile_after"] = T_profile
+        repair_info["n_nodes_stuck_after"] = n_stuck
         out["repair"] = repair_info
+        out["repair_history"] = history + [repair_info]
     return out
 
 
@@ -399,7 +435,7 @@ def _run(job):
         old = json.loads(out_json.read_text())
         if Path(old["fit_policy"]).resolve() != Path(kw["policy_path"]).resolve():
             print(f"[warn] {out_json}: stored policy {old['fit_policy']} differs from "
-                  f"--fit-policy {kw['policy_path']}", flush=True)
+                  f"--fit-policy {kw['policy_path']} (the re-fits use --fit-policy)", flush=True)
     elif out_json.exists():
         print(f"[skip] {out_json} exists", flush=True)
         return
@@ -409,10 +445,13 @@ def _run(job):
     except Exception as exc:
         print(f"[FAIL] {json_path}: {exc!r}", flush=True)
         return
-    if repair:
+    if repair:                         # .prerepair.json, then .prerepair2.json, ...
+        n = 1
         backup = Path(str(out_prefix) + ".prerepair.json")
-        if not backup.exists():
-            backup.write_text(json.dumps(old, indent=2) + "\n")
+        while backup.exists():
+            n += 1
+            backup = Path(str(out_prefix) + f".prerepair{n}.json")
+        backup.write_text(json.dumps(old, indent=2) + "\n")
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(out, indent=2) + "\n")
     if plot:
@@ -447,9 +486,10 @@ def main():
     ap.add_argument("--no-refine", action="store_true")
     ap.add_argument("--no-plot", action="store_true")
     ap.add_argument("--repair", action="store_true",
-                    help="re-fit only the nodes with q < -repair-tol in existing profile JSONs "
+                    help="re-fit only the bad nodes (q < -repair-tol, no result, or stuck at the "
+                         "max_nfev of the stored policy) of existing profile JSONs with --fit-policy "
                          "(grid and search settings are taken from the stored file)")
-    ap.add_argument("--repair-tol", type=float, default=PSPL_FALLBACK_TOL)
+    ap.add_argument("--repair-tol", type=float, default=BAD_Q_TOL)
     args = ap.parse_args()
 
     inputs = [p for p in args.json if not p.name.endswith("_omega_profile.json")]

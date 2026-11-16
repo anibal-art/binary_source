@@ -1,0 +1,21 @@
+{
+  "run_name": "gv_axes_v1_tE20",
+  "description": "Gross-Vitells check of the Test A null along one axis from the pilot (gv_pilot_v1: u0 node 1 = 0.0136, tE = 30 d, F146 = 21): tE = 20 d, other parameters as in the pilot; pi_E = 0 PSPL truths, 20 realizations. Run the runner with SAVE_ARRAYS=1 and fit_policy_test_a_dark_v2.json, then lrt_omega_profile.py on every event with the same policy, then lrt_gross_vitells.py.",
+  "outdir": "results/roman_lrt/gv_axes_v1_tE20",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0_grid_index": 1,
+        "tE": 20.0,
+        "source_mag_F146_AB": 21.0
+      },
+      "n_per_config": 20,
+      "expect_n_configs": 1
+    }
+  ]
+}

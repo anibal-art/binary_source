@@ -6,8 +6,8 @@ the .npz written with --save-arrays).
 
 For every omega_k of a grid uniform in f = 1/P (step 1/(oversample * T),
 T = 2 window_tE tE, the width of one profile peak divided by oversample):
-  * omega is fixed (TRF bounds omega_k (1 +/- 1e-9); roman_rubin cannot fix a
-    parameter), all other BSPL parameters are free within the policy bounds;
+  * omega is fixed (TRF bounds omega_k (1 +/- OMEGA_FIX_RTOL); roman_rubin cannot
+    fix a parameter), all other BSPL parameters are free within the policy bounds;
   * the start is the linear optimum at omega_k (joint_coefficients +
     candidates_at_omega), the amplitude candidate with the lowest full-model
     chi2; for P > --all-starts-above-days every amplitude candidate is fitted
@@ -41,6 +41,13 @@ re-fitted. Before each repair the file is copied to
 *_omega_profile.prerepair.json (then .prerepair2.json, ...); every repair is
 appended to "repair_history".
 
+--diagnose-stuck N refits, for existing profiles, the N shortest-period stuck nodes
+that started from the start bank, from that same start, with each entry of
+STUCK_VARIANTS (policy; x_scale = 1; wider bounds on the parameters fixed by
+bounds; both), and writes *_omega_profile.stuckdiag.json. The profile is not
+changed. Run it directly (not through run_omega_profiles.slurm, which skips
+existing profiles).
+
 Single event (plot):
     python binary_source/analysis/lrt_omega_profile.py \
         --json results/roman_lrt/explore/h0a_118900_identity.json \
@@ -69,6 +76,14 @@ BAD_Q_TOL = 0.1           # q below -tol makes a node bad
 PSPL_FALLBACK_TOL = BAD_Q_TOL   # old name, kept for lrt_pspl_limit_check / stored files
 N_FALLBACK_STARTS = 2     # extra start-bank candidates tried at a bad node
 XI_PSPL_START = 1e-4      # xi_para = xi_perp of pspl_start_guess (lrt_pspl_limit_check)
+# omega is "fixed" at a node through TRF bounds omega (1 +/- OMEGA_FIX_RTOL)
+# (roman_rubin cannot remove a parameter from the fit). Until 2026-11-16 this was
+# 1e-9: together with the 1e-9 / 1e-10 bounds of xi_mass_ratio and q_flux in the
+# v1/v2 policies, TRF then accepted no step at all in up to 59% of the nodes
+# (--diagnose-stuck: from the same start, policy -> 500 nfev and no change;
+# bounds 1e-6 / 1e-8 -> converged in 4-7 nfev). 1e-6 shifts the orbital phase by
+# < 2e-3 rad over the Roman baseline at P = 10 d.
+OMEGA_FIX_RTOL = 1e-6
 XI_BOUND_RTOL = 1e-3      # xi within this fraction of its bound -> xi_at_bound
 
 
@@ -100,6 +115,74 @@ def pspl_start_guess(pspl_best, pspl_names, bounds, rule, omega, base=None):
     return g
 
 
+# --diagnose-stuck: the same start of a stuck node refitted with these changes.
+# The base fit reproduces the v1/v2 setting: omega, xi_mass_ratio and q_flux
+# "fixed" through bounds of relative width 1e-9 (omega, mass ratio) or 1e-10
+# (q_flux); "wide_fixed" opens them to 1e-6 / 1e-8 (the v3 setting), still
+# negligible for the light curve.
+def _wide_fixed(omega):
+    return {"xi_angular_velocity": [omega * (1 - OMEGA_FIX_RTOL), omega * (1 + OMEGA_FIX_RTOL)],
+            "xi_mass_ratio": [1 - 1e-6, 1 + 1e-6], "q_flux_W149": [0.0, 1e-8]}
+
+
+STUCK_VARIANTS = (
+    ("policy", {}, None),
+    ("x_scale_1", {"x_scale": 1.0}, None),
+    ("wide_fixed", {}, _wide_fixed),
+    ("x_scale_1_wide_fixed", {"x_scale": 1.0}, _wide_fixed),
+)
+_MOVE_KEYS = ("t0", "u0", "tE", "xi_para", "xi_perp", "xi_phase", "xi_inclination")
+
+
+def diagnose_stuck_nodes(stored, omegas, candidates, fit, bspl_model, chi2_pspl,
+                         max_nfev, n_nodes, tag=""):
+    """
+    Refit up to n_nodes stuck nodes of a stored profile, from the start-bank start
+    that produced them (matched by label), with every STUCK_VARIANTS entry. Reports
+    the chi2 at the start (fluxes by linear LS), chi2 and nfev at the end, and the
+    largest change of the nonlinear parameters. Nothing in the profile is changed.
+    """
+    nodes = []
+    for k, p in enumerate(stored["profile"]):
+        lab = p.get("start_label") or ""
+        if p.get("stuck") and lab.startswith("bspl_periodogram"):
+            nodes.append(k)
+    nodes = sorted(nodes, key=lambda k: stored["profile"][k]["period_days"])[:n_nodes]
+    out = []
+    for k in nodes:
+        om, rec = omegas[k], stored["profile"][k]
+        cand = [c for c in candidates(om) if c["label"] == rec["start_label"]]
+        if not cand:
+            print(f"{tag}node {k}: start {rec['start_label']} not rebuilt, skipped", flush=True)
+            continue
+        g = dict(cand[0]["initial_guess"], xi_angular_velocity=float(om))
+        chi2_start = runner.chi2_linear_fluxes(bspl_model, g)
+        res = {"node": k, "period_days": rec["period_days"], "start_label": rec["start_label"],
+               "stored_delta_chi2": rec["delta_chi2"], "stored_nfev": rec.get("nfev"),
+               "q_start": chi2_pspl - chi2_start, "variants": []}
+        for name, opts, bover in STUCK_VARIANTS:
+            try:
+                row = fit(om * (1 - 1e-9), om * (1 + 1e-9), g, f"diag_{name}",
+                          optimizer_options=opts, bound_overrides=bover(om) if bover else None)
+            except Exception as exc:
+                res["variants"].append({"variant": name, "error": repr(exc)})
+                print(f"{tag}P={rec['period_days']:8.2f} d  {name:22s} ERROR {exc!r}", flush=True)
+                continue
+            best = dict(zip(row["fit_parameter_names"], row["best_model"]))
+            move = max(abs(best[n] - g[n]) / max(abs(g[n]), 1e-12) for n in _MOVE_KEYS if n in g)
+            v = {"variant": name, "q_end": chi2_pspl - float(row["chi2"]),
+                 "nfev": row.get("optimizer_nfev"), "max_rel_change": float(move),
+                 "seconds": row["wall_seconds"]}
+            res["variants"].append(v)
+            print(f"{tag}P={rec['period_days']:8.2f} d  {name:22s} q_start={res['q_start']:9.3f}  "
+                  f"q_end={v['q_end']:9.3f}  nfev={v['nfev']}  max_rel_change={move:.2e}  "
+                  f"{v['seconds']:.1f} s", flush=True)
+        out.append(res)
+    return {"event_json": stored["event_json"], "stored_fit_policy": stored["fit_policy"],
+            "max_nfev": max_nfev, "variants": [v[0] for v in STUCK_VARIANTS],
+            **code_commits(), "nodes": out}
+
+
 def omega_grid(tE, window_tE, oversample, period_min, period_max):
     df = 1.0 / (oversample * 2.0 * window_tE * abs(tE))
     f = np.arange(1.0 / period_max, 1.0 / period_min + 0.5 * df, df)
@@ -109,7 +192,7 @@ def omega_grid(tE, window_tE, oversample, period_min, period_max):
 def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
                   period_min=None, period_max=None, all_starts_above_days=None,
                   check_top=0, refine=True, search="grid", sweep_back=False, tag="",
-                  repair_from=None, repair_tol=PSPL_FALLBACK_TOL):
+                  repair_from=None, repair_tol=PSPL_FALLBACK_TOL, diagnose_stuck=0):
     if repair_from is not None:                        # grid of the stored profile
         oversample = repair_from["oversample"]
         period_min, period_max = repair_from["period_min_days"], repair_from["period_max_days"]
@@ -140,14 +223,16 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
     print(f"{tag}{len(omegas)} omega nodes, P = {2 * np.pi / omegas.max():.4g} ... "
           f"{2 * np.pi / omegas.min():.4g} d", flush=True)
 
-    def fit(lo, hi, guess, label):
+    def fit(lo, hi, guess, label, optimizer_options=None, bound_overrides=None):
         s = dict(spec)
         s["bounds"] = dict(bounds, xi_angular_velocity=[lo, hi])
+        s["bounds"].update(bound_overrides or {})     # may replace the omega bounds
+        opts = dict(policy.get("optimizer_options") or {}, **(optimizer_options or {}))
         t_start = time.perf_counter()
         row = runner.run_one_fit(
             source_id=int(d["simulation_seed"]), data={"W149": lc}, ra=ra, dec=dec,
             fit_key="BSPL", spec=s, start={"label": label, "initial_guess": guess},
-            fit_reference=ref, optimizer_options=policy.get("optimizer_options"))
+            fit_reference=ref, optimizer_options=opts)
         row["wall_seconds"] = time.perf_counter() - t_start
         return row
 
@@ -165,7 +250,7 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
         for c in cands:
             g = dict(c["initial_guess"], xi_angular_velocity=omega)
             try:
-                row = fit(omega * (1 - 1e-9), omega * (1 + 1e-9), g, c["label"])
+                row = fit(omega * (1 - OMEGA_FIX_RTOL), omega * (1 + OMEGA_FIX_RTOL), g, c["label"])
             except Exception as exc:                   # keep the node, mark it
                 tried.append({"label": c["label"], "alpha": c["alpha"], "chi2": None,
                               "error": repr(exc)})
@@ -239,6 +324,10 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
         print(f"{tag}{prefix}[{k + 1:3d}/{len(omegas)}] P = {rec['period_days']:9.3f} d  "
               f"starts {n_starts}  Delta chi2 = {dchi2:8.3f}  best start "
               f"{rec['start_label']}  {seconds:.1f} s{note}", flush=True)
+
+    if diagnose_stuck:
+        return diagnose_stuck_nodes(repair_from, omegas, candidates, fit, bspl_model, chi2_pspl,
+                                    max_nfev, diagnose_stuck, tag)
 
     repair_info = None
     if repair_from is not None:
@@ -325,8 +414,8 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
         if refined and refined.get("delta_chi2") is not None:
             T_profile = max(T_profile, refined["delta_chi2"])
     elif refine:
-        lo = omegas[j - 1] if j > 0 else omegas[j] * (1 - 1e-9)
-        hi = omegas[j + 1] if j < len(omegas) - 1 else omegas[j] * (1 + 1e-9)
+        lo = omegas[j - 1] if j > 0 else omegas[j] * (1 - OMEGA_FIX_RTOL)
+        hi = omegas[j + 1] if j < len(omegas) - 1 else omegas[j] * (1 + OMEGA_FIX_RTOL)
         if rows[j] is not None:
             g = dict(rows[j]["start_guess"])
             g.update({n: v for n, v in zip(rows[j]["fit_parameter_names"], rows[j]["best_model"])
@@ -387,7 +476,7 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
             "T_profile": T_profile, "grid_max_delta_chi2": float(q[j]),
             "grid_max_period_days": profile[j]["period_days"], "refined": refined,
             "n_nodes_xi_at_bound": n_bound, "n_nodes_negative": n_neg,
-            "n_nodes_stuck": n_stuck,
+            "n_nodes_stuck": n_stuck, "omega_fix_rtol": OMEGA_FIX_RTOL,
             "profile": profile, "checks": checks}
     if repair_info is not None:
         history = list(repair_from.get("repair_history", []))
@@ -428,7 +517,8 @@ def _run(job):
     json_path, arrays_path, out_prefix, kw, plot, repair = job
     out_json = Path(str(out_prefix) + ".json")
     old = None
-    if repair:
+    diag = kw.get("diagnose_stuck", 0)
+    if repair or diag:
         if not out_json.exists():
             print(f"[skip] {out_json} does not exist (nothing to repair)", flush=True)
             return
@@ -444,6 +534,11 @@ def _run(job):
                             repair_from=old, **kw)
     except Exception as exc:
         print(f"[FAIL] {json_path}: {exc!r}", flush=True)
+        return
+    if diag:                           # diagnosis only: the profile is not touched
+        p = Path(str(out_prefix) + ".stuckdiag.json")
+        p.write_text(json.dumps(out, indent=2) + "\n")
+        print(f"[ok]   {p}", flush=True)
         return
     if repair:                         # .prerepair.json, then .prerepair2.json, ...
         n = 1
@@ -490,6 +585,10 @@ def main():
                          "max_nfev of the stored policy) of existing profile JSONs with --fit-policy "
                          "(grid and search settings are taken from the stored file)")
     ap.add_argument("--repair-tol", type=float, default=BAD_Q_TOL)
+    ap.add_argument("--diagnose-stuck", type=int, default=0, metavar="N",
+                    help="diagnostic: refit the N shortest-period stuck nodes of existing profile "
+                         "JSONs (start-bank starts only) with the variants in STUCK_VARIANTS; "
+                         "writes <profile>.stuckdiag.json, the profile is not changed")
     args = ap.parse_args()
 
     inputs = [p for p in args.json if not p.name.endswith("_omega_profile.json")]
@@ -502,6 +601,8 @@ def main():
               search=args.search, sweep_back=args.sweep_back)
     if args.repair:
         kw["repair_tol"] = args.repair_tol
+    if args.diagnose_stuck:
+        kw["diagnose_stuck"] = args.diagnose_stuck
     jobs = []
     for p in inputs:
         arrays = args.arrays or p.with_suffix(".npz")

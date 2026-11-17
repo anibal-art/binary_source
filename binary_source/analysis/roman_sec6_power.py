@@ -47,6 +47,18 @@ Usage (from the repository root, PYTHONPATH=$PWD):
         --gv-summary results/roman_lrt/gv_sec6_h0_v1/gross_vitells_summary.json \
         --asimov results/roman_sec6_asimov_v1/roman_sec6_asimov.npz \
         --out results/roman_sec6_asimov_v1/sec6_power --no-usetex
+
+Validation of the noncentral chi2 power with noisy H1 realizations
+    1. --select-validation CELLS.json [--n-cells 12 --n-validation 100]
+       picks isotropic-geometry cells with lambda spread over the transition
+       (targets 6 ... 45), cycling over g and F146, and stores for each its
+       truth, lambda, k_local, c_alpha and predicted power;
+    2. build_h1_bspl_catalog.py --sec6-validation CELLS.json -> H1 parquet,
+       runner with --truth-kind h1a and the H0 fit policy, lrt_omega_profile.py
+       (identical to the H0 calibration);
+    3. --validate CELLS.json --profiles .../omega_profile/*_omega_profile.json
+       compares, per cell, the measured fraction T > c_alpha (Wilson 68%) with
+       the prediction, and the mean of T with k + lambda.
 """
 
 import argparse
@@ -122,14 +134,110 @@ def longest_period(pw_med, P):
     return float(P[ok].max()) if ok.any() else np.nan
 
 
+VALIDATION_LAMBDA_TARGETS = (6.0, 10.0, 15.0, 22.0, 32.0, 45.0)
+VALIDATION_SEED = 20261117
+
+
+def select_validation(args, lam, I, A, blend, mags, u0, P):
+    """Cells of the isotropic geometries with lambda near the targets."""
+    rng = np.random.default_rng(VALIDATION_SEED)
+    geo = np.asarray(A["geometry"], float)
+    cells = []
+    for j in range(args.n_cells):
+        ib, im = j % len(blend), (j // len(blend)) % len(mags)
+        target = VALIDATION_LAMBDA_TARGETS[j % len(VALIDATION_LAMBDA_TARGETS)]
+        sub = lam[1:, ib, im]                                   # isotropic rows only
+        dist = np.abs(np.log(np.maximum(sub, 1e-12) / target))
+        cand = np.argwhere(dist <= np.log(1.1))                 # within 10% of the target
+        if len(cand) == 0:
+            cand = np.argwhere(dist == np.nanmin(dist))
+        ig1, iu, ip = cand[rng.integers(len(cand))]
+        ig = int(ig1) + 1
+        th, ph, inc = geo[ig]
+        k, c05, c3s = (float(I[key][ib, im, iu]) for key in ("k", "c05", "c3s"))
+        lv = float(lam[ig, ib, im, iu, ip])
+        cells.append({
+            "config_id": f"sec6_validation:c{j:02d}", "geometry_index": ig,
+            "theta": float(th), "phi": float(ph), "inclination": float(inc),
+            "u0": float(u0[iu]), "u0_index": int(iu), "P_days": float(P[ip]), "P_index": int(ip),
+            "F146": float(mags[im]), "blend_ratio": float(blend[ib]),
+            "lambda": lv, "lambda_target": target, "k_local": k,
+            "c_alpha05": c05, "c_3sigma": c3s,
+            "power05_pred": float(stats.ncx2.sf(c05, k, lv)),
+            "power3s_pred": float(stats.ncx2.sf(c3s, k, lv))})
+    spec = {"n_realizations": args.n_validation, "tE": float(A["tE"]), "t0": float(A["t0"]),
+            "q_mass": float(A["q_mass"]),
+            "Mtot_Msun": 3.0,                     # M1 + M2 of roman_bspl_roman_rubin (2 + 1)
+            "rEhat_AU": float(A["rEhat_AU"]),
+            "asimov": str(args.asimov), "gv_summary": str(args.gv_summary),
+            "seed": VALIDATION_SEED, "cells": cells}
+    args.select_validation.parent.mkdir(parents=True, exist_ok=True)
+    args.select_validation.write_text(json.dumps(spec, indent=2) + "\n")
+    print(f"{'cell':>18} {'g':>2} {'F146':>4} {'u0':>8} {'P[d]':>8} {'geo':>3} "
+          f"{'lambda':>7} {'k':>5} {'c05':>6} {'pow05':>6} {'pow3s':>6}")
+    for c in cells:
+        print(f"{c['config_id']:>18} {c['blend_ratio']:2g} {c['F146']:4g} {c['u0']:8.4g} "
+              f"{c['P_days']:8.1f} {c['geometry_index']:3d} {c['lambda']:7.2f} {c['k_local']:5.2f} "
+              f"{c['c_alpha05']:6.2f} {c['power05_pred']:6.3f} {c['power3s_pred']:6.3f}")
+    print(f"saved {args.select_validation}  ({len(cells)} cells x {args.n_validation} realizations)")
+
+
+def validate(args):
+    from binary_source.analysis.lrt_gross_vitells import wilson
+    spec = json.loads(args.validate.read_text())
+    cells = {c["config_id"]: c for c in spec["cells"]}
+    T = {cid: [] for cid in cells}
+    for f in args.profiles:
+        d = json.loads(Path(f).read_text())
+        if d.get("config_id") in T:
+            T[d["config_id"]].append(float(d["T_profile"]))
+    lines = ["config_id,n,lambda,k_local,c_alpha05,power05_pred,power05_meas,power05_lo,power05_hi,"
+             "power3s_pred,power3s_meas,mean_T,k_plus_lambda,median_T,median_T_pred"]
+    print(f"{'cell':>18} {'n':>4} {'lambda':>7} | {'pow05 pred':>10} {'meas [68%]':>20} | "
+          f"{'pow3s pred':>10} {'meas':>6} | {'<T>':>7} {'k+lam':>7}")
+    for cid, c in cells.items():
+        t = np.asarray(T[cid])
+        n = len(t)
+        if n == 0:
+            print(f"{cid:>18}    0  (no profiles)")
+            continue
+        n05, n3s = int((t > c["c_alpha05"]).sum()), int((t > c["c_3sigma"]).sum())
+        lo, hi = wilson(n05, n)
+        med_pred = float(stats.ncx2.ppf(0.5, c["k_local"], c["lambda"]))
+        print(f"{cid:>18} {n:4d} {c['lambda']:7.2f} | {c['power05_pred']:10.3f} "
+              f"{n05 / n:6.3f} [{lo:.3f}, {hi:.3f}] | {c['power3s_pred']:10.3f} {n3s / n:6.3f} | "
+              f"{t.mean():7.2f} {c['k_local'] + c['lambda']:7.2f}")
+        lines.append(f"{cid},{n},{c['lambda']:.4f},{c['k_local']:.4f},{c['c_alpha05']:.4f},"
+                     f"{c['power05_pred']:.4f},{n05 / n:.4f},{lo:.4f},{hi:.4f},"
+                     f"{c['power3s_pred']:.4f},{n3s / n:.4f},{t.mean():.4f},"
+                     f"{c['k_local'] + c['lambda']:.4f},{np.median(t):.4f},{med_pred:.4f}")
+    out = args.validate.with_name(args.validate.stem + "_result.csv")
+    out.write_text("\n".join(lines) + "\n")
+    print("saved", out)
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gv-summary", type=Path, required=True)
-    ap.add_argument("--asimov", type=Path, required=True)
-    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--gv-summary", type=Path)
+    ap.add_argument("--asimov", type=Path)
+    ap.add_argument("--out", type=Path)
     ap.add_argument("--no-plot", action="store_true")
     ap.add_argument("--no-usetex", action="store_true")
+    ap.add_argument("--select-validation", type=Path, default=None,
+                    help="write the validation cells JSON and stop")
+    ap.add_argument("--n-cells", type=int, default=12)
+    ap.add_argument("--n-validation", type=int, default=100)
+    ap.add_argument("--validate", type=Path, default=None,
+                    help="cells JSON: compare predicted and measured power (needs --profiles)")
+    ap.add_argument("--profiles", nargs="*", default=[])
     args = ap.parse_args()
+
+    if args.validate is not None:
+        validate(args)
+        return
+    if args.gv_summary is None or args.asimov is None or (
+            args.out is None and args.select_validation is None):
+        ap.error("--gv-summary, --asimov and --out (or --select-validation) are required")
 
     summary = json.loads(args.gv_summary.read_text())
     c0 = float(summary["c0"])
@@ -142,6 +250,9 @@ def main():
 
     nodes, u0_nodes = node_tables(summary, blend, mags)
     I = {k: interp_log_u0(v, u0_nodes, u0) for k, v in nodes.items()}
+    if args.select_validation is not None:
+        select_validation(args, lam, I, A, blend, mags, u0, P)
+        return
 
     def b(x):                                                 # (g, F146, u0) -> broadcast
         return x[None, :, :, :, None]

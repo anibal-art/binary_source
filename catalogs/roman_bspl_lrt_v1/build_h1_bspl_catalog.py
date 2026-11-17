@@ -19,6 +19,12 @@ one_luminous_qM_P           (qM, P), u0=0.1, qf=0, fiducial geometry, F146=21
 two_luminous_qM_qf          (qM, qf) at three periods, u0=0.1, fiducial geometry, F146=21
 one_luminous_u0_P_tE150     optional (--include-te150), tE=150 d, F146=21,
                             marginalized geometry (needs its own H0 calibration)
+sec6_validation             only with --sec6-validation CELLS_JSON (and then the
+                            only family): cells of the Section 6 Asimov grid
+                            chosen by roman_sec6_power.py --select-validation,
+                            each with its own geometry, u0, P, F146 and blend
+                            ratio; n noise realizations per cell at that fixed
+                            geometry (validation of the noncentral chi2 power)
 
 Conventions (verified against pyLIMA, see check_t0_u0.py)
 ----------------------------------------------------------
@@ -201,7 +207,7 @@ def marginalized_geometries(n, geometry_seed):
 def make_row(*, scan_family, power_cell_id, realization_id, u0, period_days,
              te_days, q_mass, q_flux, f146_ab, geometry,
              u0_grid_index=-1, period_grid_index=-1, qM_grid_index=-1,
-             qf_grid_index=-1, ptE_grid_index=-1, config_name=""):
+             qf_grid_index=-1, ptE_grid_index=-1, config_name="", blend_ratio=0.0):
 
     m1, m2 = binary_component_masses(q_mass)
     a_rel = kepler_a_rel_au(period_days, MTOT_SOURCE_MSUN)
@@ -221,7 +227,7 @@ def make_row(*, scan_family, power_cell_id, realization_id, u0, period_days,
         catalog_kind="h1", config_id=power_cell_id, realization_id=realization_id,
         scan_family=scan_family, system_type="BSPL", u0=u0, tE=te_days,
         f146_ab=f146_ab, piEN=PIEN, piEE=PIEE, t0=T0, truth_double_source=True,
-        q_flux=q_flux)
+        q_flux=q_flux, blend_ratio=blend_ratio)
 
     row.update({
         "config_name": config_name,
@@ -282,8 +288,33 @@ def make_row(*, scan_family, power_cell_id, realization_id, u0, period_days,
 # CATALOGUE
 # =============================================================================
 
+def sec6_validation_rows(cells_json):
+    """
+    Rows of the sec6_validation family. The Section 6 Asimov geometry
+    (theta, phi, inclination) of roman_bspl_roman_rubin maps one to one onto
+    (orbit_alpha_rad, xi_phase, xi_inclination): xi_para = xi_rel cos(theta),
+    xi_perp = xi_rel sin(theta); the masses (Mtot = 3, q = 0.5), rEhat = 5 AU,
+    t0 and tE are the same constants.
+    """
+    spec = json.loads(Path(cells_json).read_text())
+    n = int(spec["n_realizations"])
+    rows = []
+    for c in spec["cells"]:
+        geometry = {"geometry_id": int(c["geometry_index"]), "geometry_kind": "sec6_asimov",
+                    "orbit_alpha_rad": float(c["theta"]), "xi_phase": float(c["phi"]),
+                    "xi_inclination": float(c["inclination"])}
+        for r in range(n):
+            rows.append(make_row(
+                scan_family="sec6_validation", power_cell_id=c["config_id"],
+                realization_id=r, u0=float(c["u0"]), period_days=float(c["P_days"]),
+                te_days=float(spec["tE"]), q_mass=float(spec["q_mass"]), q_flux=0.0,
+                f146_ab=float(c["F146"]), geometry=geometry,
+                blend_ratio=float(c["blend_ratio"]), config_name=c["config_id"]))
+    return rows
+
+
 def build_catalog(*, n_real, geometry_seed, smoke, include_te150,
-                  two_luminous_cut):
+                  two_luminous_cut, sec6_cells=None):
 
     if smoke:
         u0_grid = np.array([0.01, 0.1, 0.977124])
@@ -307,6 +338,18 @@ def build_catalog(*, n_real, geometry_seed, smoke, include_te150,
     fid = fiducial_geometry()
     geoms = marginalized_geometries(n_real, geometry_seed)
     rows = []
+
+    if sec6_cells is not None:
+        spec = json.loads(Path(sec6_cells).read_text())
+        if (abs(float(spec["tE"]) - TE_MAIN_DAYS) > 1e-12
+                or abs(float(spec["q_mass"]) - Q_MASS_MAIN) > 1e-12
+                or abs(float(spec["Mtot_Msun"]) - MTOT_SOURCE_MSUN) > 1e-12
+                or abs(float(spec["rEhat_AU"]) - REHAT_AU) > 1e-12
+                or abs(float(spec["t0"]) - T0) > 1e-9):
+            raise SystemExit("sec6 cells: tE, q_mass, Mtot, rEhat or t0 differ from this builder")
+        rows = sec6_validation_rows(sec6_cells)
+        u0_grid, period_grid = np.array([]), np.array([])
+        qM_grid, qf_grid, mags_main = np.array([]), np.array([]), np.array([])
 
     # A. one luminous source, (u0, P), all magnitudes, MARGINALIZED geometry --
     #    realization r uses geometry_id = r (same set in every cell) and its
@@ -453,6 +496,9 @@ def main():
     ap.add_argument("--include-te150", action="store_true",
                     help="add the tE=150 d table (needs its own H0 calibration)")
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--sec6-validation", type=Path, default=None,
+                    help="cells JSON of roman_sec6_power.py --select-validation; builds "
+                         "ONLY the sec6_validation family")
     args = ap.parse_args()
 
     if args.n_realizations <= 0:
@@ -469,6 +515,7 @@ def main():
         smoke=args.smoke,
         include_te150=args.include_te150,
         two_luminous_cut=args.two_luminous_short_cut,
+        sec6_cells=args.sec6_validation,
     )
 
     df.to_parquet(output, index=False, compression="zstd")
@@ -500,6 +547,7 @@ def main():
                              int(df["simulation_seed"].max())],
         "two_luminous_short_cut": args.two_luminous_short_cut,
         "include_te150": bool(args.include_te150),
+        "sec6_validation_cells": (str(args.sec6_validation) if args.sec6_validation else None),
         "t0": T0,
         "tE_main_days": TE_MAIN_DAYS,
         "Mtot_source_Msun": MTOT_SOURCE_MSUN,

@@ -77,10 +77,14 @@ FIT_KEYS = ("PSPL", "PSPL_PI", "BSPL")
 #
 # h1: BSPL truth measures the power of both tests on the same dataset:
 #     PSPL vs BSPL and PSPL+parallax vs BSPL
+#
+# h1a: BSPL truth, power of Test A only (PSPL vs BSPL), with the same fits
+#      as h0a (data-derived starts support PSPL and BSPL only)
 FIT_KEYS_BY_TRUTH = {
     "h0a": ("PSPL", "BSPL"),
     "h0b": ("PSPL_PI", "BSPL"),
     "h1": ("PSPL", "PSPL_PI", "BSPL"),
+    "h1a": ("PSPL", "BSPL"),
 }
 
 
@@ -205,6 +209,7 @@ def truth_switches(truth_kind: str) -> tuple[bool, bool]:
         "h0a": (False, False),
         "h0b": (True, False),
         "h1": (False, True),
+        "h1a": (False, True),
     }
     return mapping[truth_kind]
 
@@ -707,7 +712,7 @@ def run_catalog_event(args) -> dict:
         fits["BSPL"]["best"]["chi2"]
     )
 
-    if args.truth_kind in ("h0a", "h1"):
+    if args.truth_kind in ("h0a", "h1", "h1a"):
         raw_a = chi2_pspl - chi2_bspl
         t_a = max(0.0, raw_a)
     else:
@@ -778,12 +783,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--catalog-event-index", type=int, required=True)
     p.add_argument(
         "--truth-kind",
-        choices=("h0a", "h0b", "h1"),
+        choices=("h0a", "h0b", "h1", "h1a"),
         required=True,
         help=(
             "h0a=PSPL/no-parallax; "
             "h0b=PSPL+parallax; "
-            "h1=BSPL/no-parallax"
+            "h1=BSPL/no-parallax; "
+            "h1a=BSPL/no-parallax, Test A fits only"
         ),
     )
     p.add_argument(

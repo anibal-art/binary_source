@@ -1,0 +1,18 @@
+{
+  "run_name": "sec6_h1_validation_v1",
+  "description": "Validation of the Section 6 noncentral chi2 power: H1 (dark-companion BSPL) truths at 12 cells of the Asimov grid chosen by roman_sec6_power.py --select-validation (lambda 6-45, isotropic geometries, cycling over g and F146), 100 noise realizations each at the cell geometry. Catalog: build_h1_bspl_catalog.py --sec6-validation. Runner with --truth-kind h1a (Test A fits only), SAVE_ARRAYS=1 and fit_policy_test_a_dark_v4.json, then lrt_omega_profile.py with the same policy (one start), as the H0 calibration gv_sec6_h0_v1. Compare with roman_sec6_power.py --validate.",
+  "outdir": "results/roman_lrt/sec6_h1_validation_v1",
+  "selections": [
+    {
+      "catalog": "h1",
+      "kinds": [
+        "h1a"
+      ],
+      "where": {
+        "scan_family": "sec6_validation"
+      },
+      "n_per_config": 100,
+      "expect_n_configs": 12
+    }
+  ]
+}

@@ -363,9 +363,10 @@ def check_truth_kind(event: dict, truth_kind: str) -> None:
     h0a : PSPL truth without parallax  -> H0 row with pi_E = 0
     h0b : PSPL+parallax truth          -> any H0 row
     h1  : BSPL truth without parallax  -> H1 row
+    h1a : BSPL truth, Test A only      -> H1 row
     """
     kind = event["catalog_kind"]
-    if truth_kind == "h1":
+    if truth_kind in ("h1", "h1a"):
         ok = kind == "h1"
     elif truth_kind == "h0a":
         ok = kind == "h0" and bool(event["is_zero_parallax"])

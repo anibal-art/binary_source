@@ -15,6 +15,11 @@ Default grid = stage-1 (localization) design discussed for the protocol:
   tE   : stratum 30 d -> {20, 30, 45};  stratum 150 d -> {100, 150, 225}
   mag  : F146 AB {19, 21, 23} for the 30 d stratum, {21} for the 150 d stratum
   pi_E : 0  +  |pi_E| in {0.03, 0.07, 0.17, 0.41, 1.0} x 8 directions
+  blend: --blend-ratios, g = F_blend / F_source at fixed source magnitude
+         (default 0 only).  The g = 0 block comes first and is identical to
+         the catalogue built without blending (same rows, indices and seeds);
+         every further g appends a full copy of the grid with config_id
+         suffix ":g<g>".
 Directions are measured from North towards East (theta = atan2(piEE, piEN)),
 offset by --direction-offset-deg.  Aligning them with the observer
 acceleration axis at t0 is still pending (pass the offset when computed).
@@ -40,9 +45,10 @@ MAGS_STRATA = {"30": [19.0, 21.0, 23.0], "150": [21.0]}
 PIE_RADII = [0.03, 0.07, 0.17, 0.41, 1.0]
 N_DIRECTIONS = 8
 DEFAULT_N_REALIZATIONS = 100
+DEFAULT_BLEND_RATIOS = [0.0]
 
 
-def build(n_real, strata, direction_offset_deg, smoke):
+def build(n_real, strata, direction_offset_deg, smoke, blend_ratios=(0.0,)):
     if smoke:
         u0_nodes = np.array([0.01, 0.1, 1.0])
         te_strata = {"30": [30.0]}
@@ -56,35 +62,41 @@ def build(n_real, strata, direction_offset_deg, smoke):
         radii, n_dir = PIE_RADII, N_DIRECTIONS
 
     offset = np.radians(direction_offset_deg)
+    blend_ratios = [float(g) for g in blend_ratios]
+    if blend_ratios[0] != 0.0 or len(set(blend_ratios)) != len(blend_ratios):
+        raise SystemExit("--blend-ratios must start with 0 and have no repeats")
     rows = []
-    for stratum in strata:
-        for tE in te_strata[stratum]:
-            for mag in mags[stratum]:
-                for iu, u0 in enumerate(u0_nodes):
-                    # parallax vectors: zero once, then radius x direction
-                    vectors = [(0.0, 0.0, -1, -1)]
-                    for ir, r in enumerate(radii):
-                        for k in range(n_dir):
-                            th = offset + 2 * np.pi * k / n_dir
-                            vectors.append((r * np.cos(th), r * np.sin(th), ir, k))
-                    for piEN, piEE, ir, k in vectors:
-                        cfg = (f"h0:tE{stratum}:te{tE:g}:m{int(mag):02d}:u{iu:02d}:"
-                               + ("pi0" if ir < 0 else f"r{ir:02d}d{k:02d}"))
-                        for r in range(n_real):
-                            row = io.common_fields(
-                                catalog_kind="h0", config_id=cfg, realization_id=r,
-                                scan_family=f"h0_tE{stratum}", system_type="PSPL",
-                                u0=u0, tE=tE, f146_ab=mag, piEN=piEN, piEE=piEE,
-                                truth_double_source=False)
-                            row.update({
-                                "tE_stratum_days": float(stratum),
-                                "u0_grid_index": iu,
-                                "piE_radius_index": ir,
-                                "piE_radius_nominal": (0.0 if ir < 0 else float(radii[ir])),
-                                "piE_direction_index": k,
-                                "piE_direction_offset_deg": float(direction_offset_deg),
-                            })
-                            rows.append(row)
+    for ig, g in enumerate(blend_ratios):
+        for stratum in strata:
+            for tE in te_strata[stratum]:
+                for mag in mags[stratum]:
+                    for iu, u0 in enumerate(u0_nodes):
+                        # parallax vectors: zero once, then radius x direction
+                        vectors = [(0.0, 0.0, -1, -1)]
+                        for ir, r in enumerate(radii):
+                            for k in range(n_dir):
+                                th = offset + 2 * np.pi * k / n_dir
+                                vectors.append((r * np.cos(th), r * np.sin(th), ir, k))
+                        for piEN, piEE, ir, k in vectors:
+                            cfg = (f"h0:tE{stratum}:te{tE:g}:m{int(mag):02d}:u{iu:02d}:"
+                                   + ("pi0" if ir < 0 else f"r{ir:02d}d{k:02d}")
+                                   + ("" if g == 0.0 else f":g{g:g}"))
+                            for r in range(n_real):
+                                row = io.common_fields(
+                                    catalog_kind="h0", config_id=cfg, realization_id=r,
+                                    scan_family=f"h0_tE{stratum}", system_type="PSPL",
+                                    u0=u0, tE=tE, f146_ab=mag, piEN=piEN, piEE=piEE,
+                                    truth_double_source=False, blend_ratio=g)
+                                row.update({
+                                    "tE_stratum_days": float(stratum),
+                                    "u0_grid_index": iu,
+                                    "piE_radius_index": ir,
+                                    "piE_radius_nominal": (0.0 if ir < 0 else float(radii[ir])),
+                                    "piE_direction_index": k,
+                                    "piE_direction_offset_deg": float(direction_offset_deg),
+                                    "blend_grid_index": ig,
+                                })
+                                rows.append(row)
     return io.finalize_catalog(rows, "h0")
 
 
@@ -104,9 +116,12 @@ def main():
     ap.add_argument("--strata", nargs="+", choices=["30", "150"], default=["30"])
     ap.add_argument("--direction-offset-deg", type=float, default=0.0)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--blend-ratios", type=float, nargs="+", default=DEFAULT_BLEND_RATIOS,
+                    help="g = F_blend/F_source at fixed source magnitude; first must be 0")
     args = ap.parse_args()
 
-    df = build(args.n_realizations, args.strata, args.direction_offset_deg, args.smoke)
+    df = build(args.n_realizations, args.strata, args.direction_offset_deg, args.smoke,
+               args.blend_ratios)
     out = args.output.expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out, index=False, compression="zstd")
@@ -122,6 +137,7 @@ def main():
         "n_realizations": int(df["realization_id"].max() + 1),
         "strata": args.strata if not args.smoke else ["30"],
         "piE_direction_offset_deg": args.direction_offset_deg,
+        "blend_ratios": [float(g) for g in args.blend_ratios],
         "notes": [
             "Test A: rows with is_zero_parallax, --truth-kind h0a",
             "Test B: all rows, --truth-kind h0b",
@@ -141,7 +157,7 @@ def main():
     zero = df[df["is_zero_parallax"]]
     print(f"pi_E = 0 rows (Test A) = {len(zero)}  configs = {zero['config_id'].nunique()}")
     print(f"all rows (Test B)      = {len(df)}  configs = {df['config_id'].nunique()}")
-    for c in ("u0", "tE", "source_mag_F146_AB", "piE"):
+    for c in ("u0", "tE", "source_mag_F146_AB", "piE", "blend_ratio_W149"):
         print(f"{c:20s} {sorted(np.round(df[c].unique(), 6))}")
     print("CATALOG BUILD: PASS")
 

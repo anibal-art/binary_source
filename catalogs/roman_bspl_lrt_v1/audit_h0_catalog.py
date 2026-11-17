@@ -175,7 +175,11 @@ def main():
           f"dec={np.unique(df['dec'])[:3]}", level="warn")
     for c in ("blend_ratio_W149", "blend_ratio_F146"):
         if c in df:
-            check(np.allclose(df[c], 0.0), f"{c} == 0", f"{c} non-zero")
+            check(bool((df[c] >= 0).all()), f"{c} >= 0", f"{c} negative")
+            print(f"  {c} values: {sorted(np.unique(df[c]).tolist())}")
+    if {"blend_ratio_W149", "blend_ratio_F146"} <= set(df.columns):
+        check(bool((df["blend_ratio_W149"] == df["blend_ratio_F146"]).all()),
+              "blend_ratio_F146 == blend_ratio_W149", "blend ratios differ between bands")
     if "blend_ratio_W149" not in df:
         fail("blend_ratio_W149 missing: roman_rubin would draw blending at random")
     if {"source_mag_F146_AB", "W149"} <= set(df.columns):
@@ -197,7 +201,8 @@ def main():
     check((df["tE"] > 0).all(), "tE > 0", "tE <= 0 present")
 
     # Configurations = rows that differ only by the noise seed.
-    cfg_cols = [c for c in ("t0", "u0", "tE", "W149", "piEN", "piEE") if c in df]
+    cfg_cols = [c for c in ("t0", "u0", "tE", "W149", "piEN", "piEE", "blend_ratio_W149")
+                if c in df]
     cfg = df.groupby(cfg_cols, dropna=False).size().rename("n_real").reset_index()
     print(f"\n  physical configurations = {len(cfg)}")
     print("  realizations per configuration:",
@@ -205,7 +210,7 @@ def main():
 
     # pi_E = 0 must exist once per (t0,u0,tE,mag), not once per direction.
     zero = cfg[np.hypot(cfg["piEN"], cfg["piEE"]) == 0]
-    base_cols = [c for c in ("t0", "u0", "tE", "W149") if c in cfg]
+    base_cols = [c for c in ("t0", "u0", "tE", "W149", "blend_ratio_W149") if c in cfg]
     if len(zero):
         dup = zero.groupby(base_cols).size()
         check((dup == 1).all(), "pi_E = 0 materialized once per (t0,u0,tE,mag)",

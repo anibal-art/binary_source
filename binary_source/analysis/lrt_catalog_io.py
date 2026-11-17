@@ -125,9 +125,16 @@ _LB = None
 
 def common_fields(*, catalog_kind, config_id, realization_id, scan_family,
                   system_type, u0, tE, f146_ab, piEN=0.0, piEE=0.0,
-                  t0=T0_SEASON3, truth_double_source=False, q_flux=0.0):
+                  t0=T0_SEASON3, truth_double_source=False, q_flux=0.0,
+                  blend_ratio=0.0):
     """
     Canonical columns common to H0 and H1 (identity/seed added later).
+
+    blend_ratio g = F_blend / F_source (unrelated third light, same in W149 and
+    F146).  The source magnitude is kept fixed and the blend light is added:
+    fsource from W149, ftotal = fsource (1 + g) (roman_rubin convention; the
+    Roman noise is computed from the total observed flux, so the blend also
+    adds photon noise).  g = 0 gives the previous rows exactly.
 
     f146_ab is the TOTAL unresolved source magnitude (AB).  roman_rubin builds
     the baseline as F(W149) * (1 + q_flux) (verified with a q_flux = 1 smoke:
@@ -140,6 +147,9 @@ def common_fields(*, catalog_kind, config_id, realization_id, scan_family,
     if _ZP_W149 is None:
         _ZP_W149 = w149_zero_point()
     piE = float(np.hypot(piEN, piEE))
+    g = float(blend_ratio)
+    if not (np.isfinite(g) and g >= 0.0):
+        raise ValueError(f"blend_ratio must be finite and >= 0, got {blend_ratio!r}")
     vega = float(f146_ab) - F146_AB_MINUS_VEGA                  # total, Vega
     w149 = vega + 2.5 * np.log10(1.0 + float(q_flux))           # source 1, Vega
     row = {
@@ -162,13 +172,13 @@ def common_fields(*, catalog_kind, config_id, realization_id, scan_family,
         "source_mag_F146_Vega": vega,
         "W149": w149,
         "W149_semantics": "source-1 Vega magnitude (backend total = W149 flux x (1+q_flux))",
-        "blend_ratio_W149": 0.0,
-        "blend_ratio_F146": 0.0,
+        "blend_ratio_W149": g,
+        "blend_ratio_F146": g,
         # roman_rubin convention: fsource = source-1 flux, ftotal = fsource (1 + g);
         # pyLIMA baseline = ftotal + q_flux fsource (= total source flux for g = 0).
         "flux_zero_point_W149": _ZP_W149,
         "fsource_W149": 10.0 ** ((_ZP_W149 - w149) / 2.5),
-        "ftotal_W149": 10.0 ** ((_ZP_W149 - w149) / 2.5),
+        "ftotal_W149": 10.0 ** ((_ZP_W149 - w149) / 2.5) * (1.0 + g),
         "ephemeris_name": EPHEMERIS_NAME,
         "ephemeris_sha256": EPHEMERIS_SHA256,
         "truth_double_source": bool(truth_double_source),
@@ -236,8 +246,10 @@ def validate_catalog(df: pd.DataFrame, catalog_kind: str) -> dict:
              "source_mag_F146_Vega != F146_AB - (AB-Vega)")
     _require(np.allclose(df["W149"], df["source_mag_F146_Vega"] + 2.5 * np.log10(1.0 + qf)),
              "W149 != total Vega + 2.5 log10(1+q_flux) (source-1 magnitude)")
-    _require((df["blend_ratio_W149"] == 0).all() and (df["blend_ratio_F146"] == 0).all(),
-             "non-zero blending")
+    g = df["blend_ratio_W149"].to_numpy(float)
+    _require(np.isfinite(g).all() and (g >= 0).all(), "blend_ratio_W149 not finite or < 0")
+    _require((df["blend_ratio_F146"] == df["blend_ratio_W149"]).all(),
+             "blend_ratio_F146 != blend_ratio_W149")
     _require(np.allclose(df["fsource_W149"],
                          10.0 ** ((df["flux_zero_point_W149"] - df["W149"]) / 2.5),
                          rtol=1e-12, atol=0),
@@ -256,10 +268,10 @@ def validate_catalog(df: pd.DataFrame, catalog_kind: str) -> dict:
 
     # realizations of one configuration differ only by the seed (and, in H1,
     # by geometry for marginalized families)
-    phys = ["t0", "u0", "tE", "W149", "piEN", "piEE"]
+    phys = ["t0", "u0", "tE", "W149", "piEN", "piEE", "blend_ratio_W149"]
     per_cfg = df.groupby("config_id")[phys].nunique()
     _require((per_cfg <= 1).all().all(),
-             "rows sharing config_id differ in (t0,u0,tE,W149,piEN,piEE)")
+             "rows sharing config_id differ in (t0,u0,tE,W149,piEN,piEE,blend_ratio_W149)")
 
     if catalog_kind == "h0":
         _require((df["system_type"] == "PSPL").all(), "H0 system_type must be PSPL")
@@ -268,9 +280,9 @@ def validate_catalog(df: pd.DataFrame, catalog_kind: str) -> dict:
         present = [c for c in BSPL_COLUMNS if c in df.columns]
         _require(not present, f"H0 must not carry binary-source columns: {present}")
         zero = df[df["is_zero_parallax"]].groupby(
-            ["t0", "u0", "tE", "W149"])["config_id"].nunique()
+            ["t0", "u0", "tE", "W149", "blend_ratio_W149"])["config_id"].nunique()
         _require((zero <= 1).all(),
-                 "pi_E = 0 must be ONE configuration per (t0,u0,tE,mag)")
+                 "pi_E = 0 must be ONE configuration per (t0,u0,tE,mag,blend)")
     else:
         _require((df["system_type"] == "BSPL").all(), "H1 system_type must be BSPL")
         _require(df["truth_double_source"].astype(bool).all(),
@@ -332,8 +344,9 @@ def load_event_from_catalog(catalog_path, catalog_event_index, expected_kind=Non
     for key in ("ra", "dec", "t0", "u0", "tE", "W149", "piEN", "piEE"):
         if not np.isfinite(float(event[key])):
             raise CatalogError(f"non-finite {key}")
-    if float(event["blend_ratio_W149"]) != 0.0:
-        raise CatalogError("blend_ratio_W149 must be 0")
+    g = float(event["blend_ratio_W149"])
+    if not (np.isfinite(g) and g >= 0.0):
+        raise CatalogError(f"blend_ratio_W149 must be finite and >= 0, got {g}")
     if event["catalog_kind"] == "h0":
         present = [c for c in BSPL_COLUMNS if c in event]
         if present:
@@ -371,7 +384,7 @@ def row_identity(event: dict) -> dict:
     keys = ["catalog_schema_version", "catalog_kind", "catalog_event_index",
             "config_id", "truth_config_id", "realization_id", "scan_family",
             "simulation_seed", "t0", "u0", "tE", "piEN", "piEE",
-            "source_mag_F146_AB", "W149"]
+            "source_mag_F146_AB", "W149", "blend_ratio_W149"]
     out = {}
     for k in keys + [c for c in ("geometry_id", "P_days", "q_mass", "q_flux")
                      if c in event]:

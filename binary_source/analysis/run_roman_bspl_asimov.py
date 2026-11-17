@@ -274,7 +274,10 @@ def run_case(
     xi_rel=None,
     asimov=True,
     photometric_filter=False,
+    blend_ratio=0.0,
 ):
+    # fit_window_tE=None: whole Roman survey (as the LRT catalogue runner).
+    # blend_ratio: g = F_blend/F_source at fixed source magnitude.
     # photometric_filter=True applies roman_rubin's Roman F146 policy:
     # fully saturated, invalid and S/N < 5 points are removed (they carry
     # no usable measurement; with the filter off they are kept with NaN
@@ -292,14 +295,17 @@ def run_case(
             asimov=bool(asimov),
             truth_parallax=False,
             q_flux=0.0,
-            time_window_te=float(
-                fit_window_tE
+            time_window_te=(
+                None
+                if fit_window_tE is None
+                else float(fit_window_tE)
             ),
             phi=float(phi),
             inclination=float(inclination),
             theta=float(theta),
             xi_rel=xi_rel,
             apply_photometric_filter=bool(photometric_filter),
+            blend_ratio=float(blend_ratio),
         )
     )
 
@@ -515,6 +521,8 @@ def run_case(
 
         "photometric_filter":
             bool(photometric_filter),
+        "blend_ratio":
+            float(blend_ratio),
     }
 
 

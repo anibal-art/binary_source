@@ -309,7 +309,12 @@ def build_event_params(
     inclination=INCLINATION,
     theta=THETA,
     xi_rel=None,
+    blend_ratio=0.0,
 ):
+    g = float(blend_ratio)
+    if not (np.isfinite(g) and g >= 0.0):
+        raise ValueError(f"blend_ratio must be finite and >= 0, got {blend_ratio!r}")
+
     xal = xallarap_parameters(
         P_days=P_days,
         theta=theta,
@@ -369,9 +374,11 @@ def build_event_params(
                 roman_mag_vega
             ),
 
-        # Explicitly no unrelated third-light blending.
+        # Unrelated third light, g = F_blend / F_source (0: no blending).
+        # Same convention as the LRT catalogues (lrt_catalog_io): the source
+        # magnitude is fixed and the blend flux is added.
         "blend_ratio_W149":
-            0.0,
+            g,
 
         # Physical event coordinates (required by roman_rubin sim_event).
         "ra": float(EVENT_RA_DEG),
@@ -410,10 +417,17 @@ def simulate_roman_bspl(
     inclination=INCLINATION,
     theta=THETA,
     xi_rel=None,
+    blend_ratio=0.0,
 ):
     """
     Simulate a Roman BSPL/xallarap light curve entirely through
     roman_rubin.
+
+    blend_ratio: g = F_blend / F_source at fixed source magnitude
+    (fsource from W149, ftotal = fsource (1 + g)), as in the LRT catalogues.
+
+    time_window_te=None: the whole Roman survey (no time window), as in the
+    LRT catalogue runner; otherwise t0 +- time_window_te * tE.
 
     asimov=True:
         keep Roman/Pandeia uncertainties, but do not draw Gaussian noise.
@@ -440,19 +454,23 @@ def simulate_roman_bspl(
             inclination=inclination,
             theta=theta,
             xi_rel=xi_rel,
+            blend_ratio=blend_ratio,
         )
     )
 
     # roman_rubin main requires a materialized realization: fsource_<band>,
     # ftotal_<band> and blend_ratio_<band> (generating the fluxes from the
-    # magnitude at simulation time was removed). Same formula as the removed
-    # flux_parameters_from_blend_ratio: F = 10**((ZP - mag)/2.5),
-    # fsource = F/(1+g), ftotal = F, with g = blend_ratio_W149 and the
-    # simulation zero point of roman_rubin.
+    # magnitude at simulation time was removed). One convention for every
+    # Roman simulation of the project (lrt_catalog_io.common_fields):
+    # W149 is the SOURCE magnitude, fsource = 10**((ZP - W149)/2.5) and
+    # ftotal = fsource (1 + g), g = blend_ratio_W149, with the simulation
+    # zero point of roman_rubin. (Until 2026-11-17 this module used
+    # fsource = F/(1+g), ftotal = F, i.e. fixed baseline; identical for
+    # g = 0, the only value used before.)
     from photometry.constants import SIMULATION_BAND_ZERO_POINTS
 
     g_w149 = float(event_params["blend_ratio_W149"])
-    f_base = 10.0 ** (
+    f_source = 10.0 ** (
         (
             float(SIMULATION_BAND_ZERO_POINTS["W149"])
             - float(event_params["W149"])
@@ -462,23 +480,26 @@ def simulate_roman_bspl(
 
     event_params.setdefault(
         "fsource_W149",
-        f_base / (1.0 + g_w149),
+        f_source,
     )
 
     event_params.setdefault(
         "ftotal_W149",
-        f_base,
+        f_source * (1.0 + g_w149),
     )
 
-    half_window = (
-        float(time_window_te)
-        * float(tE)
-    )
+    if time_window_te is None:
+        time_window = None
+    else:
+        half_window = (
+            float(time_window_te)
+            * float(tE)
+        )
 
-    time_window = (
-        float(t0) - half_window,
-        float(t0) + half_window,
-    )
+        time_window = (
+            float(t0) - half_window,
+            float(t0) + half_window,
+        )
 
     ephemerides = (
         root

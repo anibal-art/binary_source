@@ -26,6 +26,12 @@ Usage:
     python binary_source/analysis/lrt_gross_vitells.py \
         --profiles results/roman_lrt/gv_pilot_v1/omega_profile/*_omega_profile.json \
         --out results/roman_lrt/gv_pilot_v1/gross_vitells
+
+--group-by-config analyses the profiles of every configuration_id separately
+(one run directory with several configurations), writes <out>_<config>.json /
+.png for each and <out>_summary.json / .csv with one row per configuration.
+--extra-alphas adds critical values at other levels (e.g. 0.0027 = 3 sigma),
+extrapolated with the same Gross-Vitells fit.
 """
 
 import argparse
@@ -91,7 +97,7 @@ def fit_levels(curves, levels, c0):
     return mean, sem, float(np.exp(lnN0)), float(2 * slope + 1)
 
 
-def analyse(curves, T, levels, c0, alpha):
+def analyse(curves, T, levels, c0, alpha, extra_alphas=()):
     pooled = np.concatenate(curves)
     k_local = float(pooled.mean())
     mean, sem, N0_fit, k_N = fit_levels(curves, levels, c0)
@@ -103,6 +109,9 @@ def analyse(curves, T, levels, c0, alpha):
         "c_crit_gv_klocal": gv_quantile(alpha, N0_c0, k_local, c0),
         "c_crit_gv_kN": gv_quantile(alpha, N0_fit, k_N, c0),
         "c_crit_empirical": float(np.quantile(T, 1 - alpha)),
+        "c_crit_extra": {f"{a:g}": {"gv_klocal": gv_quantile(a, N0_c0, k_local, c0),
+                                    "gv_kN": gv_quantile(a, N0_fit, k_N, c0)}
+                         for a in extra_alphas},
     }
 
 
@@ -112,6 +121,10 @@ def wilson(k, n, z=1.0):
     mid = (p + z ** 2 / (2 * n)) / den
     half = z * np.sqrt(p * (1 - p) / n + z ** 2 / (4 * n ** 2)) / den
     return mid - half, mid + half
+
+
+def config_of(path):
+    return json.loads(Path(path).read_text()).get("config_id")
 
 
 def main():
@@ -126,20 +139,72 @@ def main():
     ap.add_argument("--band-edges", type=float, nargs="+", default=[30.0, 150.0],
                     help="period band edges [d] for the mean of q per band")
     ap.add_argument("--n-boot", type=int, default=500)
+    ap.add_argument("--extra-alphas", type=float, nargs="*", default=[],
+                    help="further levels for the critical value, e.g. 0.0027 (3 sigma)")
+    ap.add_argument("--group-by-config", action="store_true",
+                    help="analyse each config_id of --profiles separately and write a summary")
     args = ap.parse_args()
 
-    curves, periods, T, config_id = load(args.profiles)
+    if not args.group_by_config:
+        run(args.profiles, args.out, args)
+        return
+    groups = {}
+    for p in args.profiles:
+        groups.setdefault(config_of(p), []).append(p)
+    rows = []
+    for cid in sorted(groups, key=str):
+        tag = str(cid).replace(":", "_").replace("/", "_")
+        print(f"\n==================== {cid}")
+        rows.append(run(groups[cid], Path(f"{args.out}_{tag}"), args))
+    keys = ["config_id", "n_realizations", "k_local", "N_c0", "c_crit_gv_klocal",
+            "c_crit_gv_klocal_16", "c_crit_gv_klocal_84", "c_crit_empirical", "c_crit_wilks"]
+    for a in args.extra_alphas:
+        keys += [f"c_crit_gv_klocal_alpha{a:g}", f"c_crit_gv_klocal_alpha{a:g}_16",
+                 f"c_crit_gv_klocal_alpha{a:g}_84"]
+    table = []
+    for o in rows:
+        r = {"config_id": o["config_id"], "n_realizations": o["n_realizations"],
+             "k_local": o["k_local"], "N_c0": o["N_c0"],
+             "c_crit_gv_klocal": o["c_crit_gv_klocal"],
+             "c_crit_gv_klocal_16": o["bootstrap_16_84"]["c_crit_gv_klocal"][0],
+             "c_crit_gv_klocal_84": o["bootstrap_16_84"]["c_crit_gv_klocal"][1],
+             "c_crit_empirical": o["c_crit_empirical"], "c_crit_wilks": o["c_crit_wilks"]}
+        for a in args.extra_alphas:
+            k_ = f"{a:g}"
+            r[f"c_crit_gv_klocal_alpha{k_}"] = o["c_crit_extra"][k_]["gv_klocal"]
+            r[f"c_crit_gv_klocal_alpha{k_}_16"], r[f"c_crit_gv_klocal_alpha{k_}_84"] = \
+                o["bootstrap_16_84"]["extra_klocal"][k_]
+        table.append(r)
+    Path(str(args.out) + "_summary.json").write_text(json.dumps(
+        {"alpha": args.alpha, "extra_alphas": args.extra_alphas, "c0": args.c0,
+         "rows": table}, indent=2) + "\n")
+    with open(str(args.out) + "_summary.csv", "w") as f:
+        f.write(",".join(keys) + "\n")
+        for r in table:
+            f.write(",".join(str(r[k]) for k in keys) + "\n")
+    print("\nsummary:")
+    for r in table:
+        print("  " + "  ".join(f"{k}={r[k]:.3g}" if isinstance(r[k], float) else f"{k}={r[k]}"
+                              for k in keys))
+    print("saved", str(args.out) + "_summary.json", str(args.out) + "_summary.csv")
+
+
+def run(profiles, out_prefix, args):
+    """Analyse the profiles of one configuration; returns the output dict."""
+    curves, periods, T, config_id = load(profiles)
     n = len(T)
     levels = np.array(args.levels, dtype=float)
-    res = analyse(curves, T, levels, args.c0, args.alpha)
+    res = analyse(curves, T, levels, args.c0, args.alpha, args.extra_alphas)
 
     rng = np.random.default_rng(0)
     boot = []
     for _ in range(args.n_boot):
         idx = rng.integers(0, n, n)
         try:
-            b = analyse([curves[i] for i in idx], T[idx], levels, args.c0, args.alpha)
-            boot.append([b["c_crit_gv_klocal"], b["c_crit_gv_kN"], b["k_local"], b["k_N"]])
+            b = analyse([curves[i] for i in idx], T[idx], levels, args.c0, args.alpha,
+                        args.extra_alphas)
+            boot.append([b["c_crit_gv_klocal"], b["c_crit_gv_kN"], b["k_local"], b["k_N"]]
+                        + [b["c_crit_extra"][f"{a:g}"]["gv_klocal"] for a in args.extra_alphas])
         except Exception:
             pass
     boot = np.array(boot)
@@ -184,6 +249,11 @@ def main():
     print(f"    empirical quantile     : {res['c_crit_empirical']:.2f}"
           f"   ({n} realizations: {int(round(args.alpha * n))} expected above)")
     print(f"    Wilks chi2_{args.k_wilks}         : {c_wilks:.2f}")
+    for j, a in enumerate(args.extra_alphas):
+        e = res["c_crit_extra"][f"{a:g}"]
+        print(f"  alpha = {a:g}: Gross-Vitells k_local {e['gv_klocal']:.2f} "
+              f"[{lo[4 + j]:.2f}, {hi[4 + j]:.2f}]   k_N {e['gv_kN']:.2f}   "
+              f"Wilks {stats.chi2.isf(a, args.k_wilks):.2f}")
     print(f"\nP(T > c):  c    n_above  empirical [1 sigma]     GV k_local  GV k_N   Wilks")
     for s in surv:
         print(f"        {s['c']:6.2f}  {s['n_above']:5d}   {s['empirical']:.3f} "
@@ -194,13 +264,17 @@ def main():
                levels=levels.tolist(), alpha=args.alpha, k_wilks=args.k_wilks,
                c_crit_wilks=c_wilks, bootstrap_16_84={
                    "c_crit_gv_klocal": [lo[0], hi[0]], "c_crit_gv_kN": [lo[1], hi[1]],
-                   "k_local": [lo[2], hi[2]], "k_N": [lo[3], hi[3]]},
+                   "k_local": [lo[2], hi[2]], "k_N": [lo[3], hi[3]],
+                   "extra_klocal": {f"{a:g}": [lo[4 + j], hi[4 + j]]
+                                    for j, a in enumerate(args.extra_alphas)}},
                bands=bands, survival=surv, T=T.tolist(),
-               profiles=[str(p) for p in args.profiles])
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    Path(str(args.out) + ".json").write_text(json.dumps(out, indent=2) + "\n")
-    plot(out, curves, periods, levels, args, str(args.out) + ".png")
-    print("saved", str(args.out) + ".json", str(args.out) + ".png")
+               profiles=[str(p) for p in profiles])
+    out_prefix = Path(out_prefix)
+    out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    Path(str(out_prefix) + ".json").write_text(json.dumps(out, indent=2) + "\n")
+    plot(out, curves, periods, levels, args, str(out_prefix) + ".png")
+    print("saved", str(out_prefix) + ".json", str(out_prefix) + ".png")
+    return out
 
 
 def plot(out, curves, periods, levels, args, png):

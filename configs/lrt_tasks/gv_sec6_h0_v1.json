@@ -1,0 +1,21 @@
+{
+  "run_name": "gv_sec6_h0_v1",
+  "description": "Test A null calibration for Section 6 (detectability with Roman): pi_E = 0 PSPL truths at tE = 30 d, u0 nodes 0-5 of the H0 catalog (0.005, 0.0136, 0.0368, 0.1, 0.271, 0.737) x F146 = 19, 21, 23 (18 configurations), 50 realizations each, Roman schedule gbtds_rotac2025_v2. Run the runner with SAVE_ARRAYS=1 and fit_policy_test_a_dark_v3.json, then lrt_omega_profile.py on every event with the same policy (one start), then lrt_gross_vitells.py --group-by-config --extra-alphas 0.0027.",
+  "outdir": "results/roman_lrt/gv_sec6_h0_v1",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0_grid_index": [0, 1, 2, 3, 4, 5],
+        "tE": 30.0,
+        "source_mag_F146_AB": [19.0, 21.0, 23.0]
+      },
+      "n_per_config": 50,
+      "expect_n_configs": 18
+    }
+  ]
+}

@@ -73,7 +73,8 @@ def upcrossings(q, c):
 def gv_sf(c, N0, k, c0):
     """P(T > c): Davies / Gross-Vitells, local chi2_k term plus upcrossings."""
     c = np.asarray(c, dtype=float)
-    k = max(float(k), 0.1)                               # guard a degenerate k_N fit
+    k = np.maximum(np.asarray(k, dtype=float), 0.1)      # guard a degenerate k_N fit
+    N0 = np.asarray(N0, dtype=float)                     # scalars or broadcastable arrays
     return stats.chi2.sf(c, k) + N0 * (c / c0) ** ((k - 1) / 2) * np.exp(-(c - c0) / 2)
 
 

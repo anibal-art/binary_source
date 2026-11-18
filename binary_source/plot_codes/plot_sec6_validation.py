@@ -65,6 +65,9 @@ def main():
     m3s = np.array([float(res[c]["power3s_meas"]) for c in ids])
     ci05 = np.array([wilson(int(round(m * k)), k) for m, k in zip(m05, n)])
     ci3s = np.array([wilson(int(round(m * k)), k) for m, k in zip(m3s, n)])
+    # Wilson limits equal to the measured value up to rounding at power 0 or 1
+    ci05 = np.column_stack([np.minimum(ci05[:, 0], m05), np.maximum(ci05[:, 1], m05)])
+    ci3s = np.column_stack([np.minimum(ci3s[:, 0], m3s), np.maximum(ci3s[:, 1], m3s)])
 
     fig, (ax, bx) = plt.subplots(1, 2, figsize=(fig_width(1.0), fig_width(0.42)),
                                  constrained_layout=True)

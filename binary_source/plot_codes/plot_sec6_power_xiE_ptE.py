@@ -302,8 +302,10 @@ def main():
         S = np.load(spath)
         if not np.allclose(S["geometries"], d["geometry"]):
             raise SystemExit(f"orientations of {spath} differ from the Roman grid")
-        if float(S["q_flux_used"]) != 0.0:
-            raise SystemExit(f"{spath} has two luminous sources (q_f > 0)")
+        # one luminous source: the xi axis is xi_E (two luminous sources: xi_rel);
+        # q_flux_used is not stored in older summaries
+        if "xi_E" not in S.files or ("q_flux_used" in S.files and float(S["q_flux_used"]) != 0.0):
+            raise SystemExit(f"{spath} is not a one-luminous-source summary (xi_E grid)")
         summaries.append((spath, S))
     iu = int(np.argmin(np.abs(np.log(d["u0_grid"] / args.u0))))
     ib = int(np.argmin(np.abs(d["blend_ratio"] - args.region_g)))

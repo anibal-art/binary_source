@@ -274,6 +274,100 @@ def fit_k_h1(cells, T, dest):
     print("saved", dest)
 
 
+def boundary_xi(pw, xi, level):
+    """
+    xi_E at which pw (..., xi, P) first reaches `level` from below along xi,
+    linear in log xi; NaN if never reached, xi[0] if already reached at xi[0].
+    Returns (..., P).
+    """
+    lx = np.log(xi)
+    out = np.full(pw.shape[:-2] + pw.shape[-1:], np.nan)
+    it = np.ndindex(*out.shape)
+    for idx in it:
+        y = pw[idx[:-1] + (slice(None), idx[-1])]
+        ok = np.flatnonzero(np.isfinite(y) & (y >= level))
+        if len(ok) == 0:
+            continue
+        j = ok[0]
+        if j == 0:
+            out[idx] = xi[0]
+            continue
+        y0, y1 = y[j - 1], y[j]
+        f = (level - y0) / (y1 - y0) if y1 != y0 else 1.0
+        out[idx] = float(np.exp(lx[j - 1] + f * (lx[j] - lx[j - 1])))
+    return out
+
+
+def power_xi(args, A, I, c0):
+    """
+    Power on the (P/tE, xi_E) grid (roman_sec6_asimov_cells.py --grid xiP):
+    LAMBDA (geo, g, F146, u0, xi_E, P).  Same model as the u0P grid; the
+    thresholds are interpolated at the three u0 of the grid.  Writes
+    <out>.npz with the power arrays and the boundary xi_E,min(P/tE) at which
+    the orientation-mean power reaches 0.5 and 0.9 (alpha = 5%) and 0.5
+    (3 sigma), and <out>_boundary.csv.
+    """
+    lam = np.asarray(A["DELTA_CHI2_PSPL"], float)
+    blend, mags, u0 = (np.asarray(A[k], float) for k in ("blend_ratio", "F146", "u0_grid"))
+    xi, pte = np.asarray(A["xiE_grid"], float), np.asarray(A["PtE_grid"], float)
+
+    def b(x):                                                 # (g, F146, u0) -> broadcast
+        return x[None, :, :, :, None, None]
+
+    k1 = b(I["k"]) if args.k_h1 is None else float(args.k_h1)
+    print(f"grid xiP; k under H1: {'H0 k_local per node' if args.k_h1 is None else args.k_h1}")
+    pw05 = power(b(I["c05"]), k1, lam)
+    pw3s = power(b(I["c3s"]), k1, lam)
+    pw05_lo = power(b(I["c05_hi"]), k1, lam)
+    pw05_hi = power(b(I["c05_lo"]), k1, lam)
+    lam_ok = np.where(np.isfinite(lam), np.maximum(lam, 0.0), np.nan)
+    t_med = stats.ncx2.ppf(0.5, np.broadcast_to(k1, lam.shape), lam_ok)
+    p_med = gv_sf(t_med, np.broadcast_to(b(I["N0"]), lam.shape),
+                  np.broadcast_to(b(I["k"]), lam.shape), c0)
+
+    iso = slice(1, lam.shape[0])                              # row 0 = reference geometry
+    mean05, mean3s = np.nanmean(pw05[iso], axis=0), np.nanmean(pw3s[iso], axis=0)
+    xb05_50, xb05_90 = boundary_xi(mean05, xi, 0.5), boundary_xi(mean05, xi, 0.9)
+    xb3s_50 = boundary_xi(mean3s, xi, 0.5)
+    xbref_50 = boundary_xi(pw05[0], xi, 0.5)
+
+    np.savez_compressed(
+        str(args.out) + ".npz",
+        POWER_ALPHA05=pw05, POWER_ALPHA05_LO=pw05_lo, POWER_ALPHA05_HI=pw05_hi,
+        POWER_3SIGMA=pw3s, PVALUE_MEDIAN=p_med, LAMBDA=lam,
+        D_ROMAN_EFF=np.asarray(A["D_ROMAN_EFF"], float), BEST_TE=np.asarray(A["BEST_TE"], float),
+        BEST_U0=np.asarray(A["BEST_U0"], float), BEST_T0=np.asarray(A["BEST_T0"], float),
+        SNR_EVENT=np.asarray(A["SNR_EVENT"], float),
+        XI_BOUNDARY_ALPHA05_P50=xb05_50, XI_BOUNDARY_ALPHA05_P90=xb05_90,
+        XI_BOUNDARY_3SIGMA_P50=xb3s_50, XI_BOUNDARY_REFERENCE_ALPHA05_P50=xbref_50,
+        C_ALPHA05=I["c05"], C_3SIGMA=I["c3s"], K_LOCAL=I["k"], N_C0=I["N0"],
+        k_h1=(np.nan if args.k_h1 is None else float(args.k_h1)),
+        blend_ratio=blend, F146=mags, u0_grid=u0, xiE_grid=xi, PtE_grid=pte,
+        P_days=np.asarray(A["P_days"], float), tE=float(A["tE"]), geometry=A["geometry"],
+        c0=c0, gv_summary=str(args.gv_summary), asimov=str(args.asimov))
+
+    lines = ["g,F146,u0,P_over_tE,P_days,xiE_min_pow50_alpha05,xiE_min_pow90_alpha05,"
+             "xiE_min_pow50_3sigma,xiE_min_pow50_alpha05_reference_geometry"]
+    for ib, g in enumerate(blend):
+        for im, mag in enumerate(mags):
+            for iu, uu in enumerate(u0):
+                for ip, pp in enumerate(pte):
+                    lines.append(f"{g:g},{mag:g},{uu:g},{pp:.6g},{pp * float(A['tE']):.6g},"
+                                 f"{xb05_50[ib, im, iu, ip]:.6g},{xb05_90[ib, im, iu, ip]:.6g},"
+                                 f"{xb3s_50[ib, im, iu, ip]:.6g},{xbref_50[ib, im, iu, ip]:.6g}")
+    Path(str(args.out) + "_boundary.csv").write_text("\n".join(lines) + "\n")
+
+    show = [int(np.argmin(np.abs(np.log(pte / v)))) for v in (1.0, 3.0, 10.0, 30.0, 100.0)]
+    print(f"\nxi_E,min (orientation-mean power 0.5, alpha 5%) at P/tE = "
+          + ", ".join(f"{pte[j]:.3g}" for j in show))
+    for ib, g in enumerate(blend):
+        for im, mag in enumerate(mags):
+            for iu, uu in enumerate(u0):
+                vals = "  ".join(f"{xb05_50[ib, im, iu, j]:8.3g}" for j in show)
+                print(f"  g {g:g}  F146 {mag:g}  u0 {uu:<5g} | {vals}")
+    print("\nsaved", str(args.out) + ".npz", str(args.out) + "_boundary.csv")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gv-summary", type=Path)
@@ -311,6 +405,11 @@ def main():
 
     nodes, u0_nodes = node_tables(summary, blend, mags)
     I = {k: interp_log_u0(v, u0_nodes, u0) for k, v in nodes.items()}
+    if "xiE_grid" in A.files:                                 # --grid xiP Asimov summary
+        if args.select_validation is not None:
+            raise SystemExit("--select-validation is defined on the u0P grid")
+        power_xi(args, A, I, c0)
+        return
     if args.select_validation is not None:
         select_validation(args, lam, I, A, blend, mags, u0, P)
         return

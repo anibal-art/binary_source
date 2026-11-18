@@ -10,7 +10,13 @@ Inputs
                 default: the newest results/*/xiE_ptE_maps/summary_xiE_ptE.npz.
 
 Outputs (<outdir>/)
-    sec6_power_xiE_ptE_u0_<u0>.{pdf,png}
+    sec6_Droman_xiE_ptE_g<g>.{pdf,png}     (main figure; --droman-g)
+        rows u0, columns F146. Colour: D_Roman = sqrt(lambda)/SNR, median over
+        the isotropic orientations, on the colour scale of the intrinsic D
+        maps (paper_style.d_norm). White: Roman detection, orientation-mean
+        power 0.5 (thick) and 0.9 (thin) at alpha = 5%. Crimson: intrinsic
+        median D = 1e-2 (solid) and 1e-3 (dashed). Dash-dotted: physical family.
+    sec6_power_xiE_ptE_u0_<u0>.{pdf,png}   (only with --power-maps)
         rows g = 0, 1, 4, columns F146 = 19, 21, 23, at one u0. Colour: power
         (alpha = 5%) averaged over the 24 isotropic orientations. White:
         power 0.5 and 0.9 at alpha = 5% (solid), 0.5 at 3 sigma (dashed).
@@ -32,7 +38,7 @@ for any companion mass and source distance, not for another tE.
 Usage:
     python binary_source/plot_codes/plot_sec6_power_xiE_ptE.py \
         --power results/roman_sec6_asimov_xi_v1/sec6_power_xi_kh1.npz \
-        --outdir figures/current [--summary PATH] [--u0 0.1] [--no-usetex]
+        --outdir figures/current [--summary PATH [PATH ...]] [--u0 0.1] [--no-usetex]
 """
 
 import argparse
@@ -46,7 +52,7 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from paper_style import (apply_paper_style, fig_width, heatmap, save_figure,  # noqa: E402
-                         C_BLUE, C_VERMILION)
+                         d_norm, C_BLUE, C_VERMILION, D_CMAP)
 from plot_xiE_ptE_maps import find_summary, log_edges, xi_family  # noqa: E402
 
 D_RATIO_RANGE = (1e-4, 1e-2)
@@ -105,13 +111,91 @@ def power_figure(d, iu, outdir, tex):
     return save_figure(fig, Path(outdir) / f"sec6_power_xiE_ptE_u0_{d['u0_grid'][iu]:g}".replace(".", "p"))
 
 
-def regions_figure(d, S, ib, bias_thr, outdir, tex):
+def intrinsic(summaries, u0, xi, pte):
+    """
+    Intrinsic maps at one u0 from the first summary that has it: median over
+    orientations of |Delta tE/tE| (xi, P) and D for every orientation
+    (geo, xi, P), on the Roman (xi_E, P/tE) nodes.  None if no summary has u0.
+    """
+    for path, S in summaries:
+        j = np.flatnonzero(np.isclose(S["u0"], u0, rtol=1e-9, atol=0.0))
+        if len(j) != 1:
+            continue
+        jx = match_index(S["xi_E"], xi, "xi_E")
+        jp = match_index(S["P_over_tE"], pte, "P/tE")
+        bias = S["abs_dtE_over_tE_p16_p50_p84"][1][j[0]][np.ix_(jx, jp)]
+        D = S["D_all"][j[0]][np.ix_(jx, np.arange(S["D_all"].shape[2]), jp)]
+        return path, bias, np.moveaxis(D, 1, 0)
+    return None
+
+
+def droman_figure(d, summaries, ib, outdir, tex):
+    """
+    D_Roman = sqrt(lambda)/SNR (median over the isotropic orientations) on the
+    axes and colour scale of the intrinsic D maps, with the Roman detection
+    contour (orientation-mean power 0.5 and 0.9 at alpha = 5%) and the
+    intrinsic contours D = 1e-2 (solid) and 1e-3 (dashed).
+    """
     L = labels(tex)
-    xi, pte, u0, mags = d["xiE_grid"], d["PtE_grid"], d["u0_grid"], d["F146"]
-    ju = match_index(S["u0"], u0, "u0")
-    jx = match_index(S["xi_E"], xi, "xi_E")
-    jp = match_index(S["P_over_tE"], pte, "P/tE")
-    bias = S["abs_dtE_over_tE_p16_p50_p84"][1]               # (u0, xi, P/tE), median over orientations
+    xi, pte, mags = d["xiE_grid"], d["PtE_grid"], d["F146"]
+    tE = float(d["tE"])
+    print(f"\nD_Roman map, g = {d['blend_ratio'][ib]:g}:")
+    rows = rows_with_intrinsic(d, summaries)
+    Drom, pw05 = d["D_ROMAN_EFF"], d["POWER_ALPHA05"]        # (geo, g, F146, u0, xi, P)
+    iso = slice(1, Drom.shape[0])
+    pline = np.geomspace(pte[0], pte[-1], 200)
+    fig, axes = plt.subplots(len(rows), len(mags), figsize=(fig_width(1.0), fig_width(0.95)),
+                             sharex=True, sharey=True, squeeze=False, constrained_layout=True)
+    for r, (iu, (_, _, di)) in enumerate(rows):               # di: (geo, xi, P)
+        dint = np.nanmedian(di[iso], axis=0)                  # intrinsic, (xi, P)
+        for im, mag in enumerate(mags):
+            ax = axes[r, im]
+            dr = np.nanmedian(Drom[iso, ib, im, iu], axis=0)  # (xi, P)
+            m05 = np.nanmean(pw05[iso, ib, im, iu], axis=0)
+            pcm = heatmap(ax, log_edges(xi), log_edges(pte), dr.T, norm=d_norm(), cmap=D_CMAP)
+            ax.contour(xi, pte, m05.T, levels=[0.5], colors="w", linewidths=1.1)
+            ax.contour(xi, pte, m05.T, levels=[0.9], colors="w", linewidths=0.7)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                ld = np.log10(dint.T)
+            ax.contour(xi, pte, ld, levels=[-2.0], colors="crimson", linewidths=1.0)
+            ax.contour(xi, pte, ld, levels=[-3.0], colors="crimson", linewidths=1.0,
+                       linestyles="--")
+            ax.plot(xi_family(pline, tE), pline, color="w", lw=0.8, ls="-.")
+            ax.set_xscale("log")
+            ax.set_yscale("log")
+            ax.set_xlim(xi[0], xi[-1])
+            ax.set_ylim(pte[0], pte[-1])
+            if r == 0:
+                ax.set_title(L["f146"](mag))
+            if im == 0:
+                ax.set_ylabel(L["u0"](d["u0_grid"][iu]) + "\n" + L["pte"])
+            if r == len(rows) - 1:
+                ax.set_xlabel(L["xi"])
+    fig.colorbar(pcm, ax=axes, shrink=0.9,
+                 label=r"$D_{\rm Roman}=\sqrt{\lambda}/{\rm SNR}$, median over orientations, "
+                       + L["g"](d["blend_ratio"][ib]))
+    return save_figure(fig, Path(outdir) / f"sec6_Droman_xiE_ptE_g{d['blend_ratio'][ib]:g}")
+
+
+def rows_with_intrinsic(d, summaries):
+    rows = []
+    for iu, u in enumerate(d["u0_grid"]):
+        r = intrinsic(summaries, u, d["xiE_grid"], d["PtE_grid"])
+        if r is None:
+            print(f"  u0 = {u:g}: no intrinsic summary with this u0, skipped")
+        else:
+            print(f"  u0 = {u:g}: intrinsic maps from {r[0]}")
+            rows.append((iu, r))
+    if not rows:
+        raise SystemExit("no u0 of the Roman grid is in the intrinsic summaries")
+    return rows
+
+
+def regions_figure(d, summaries, ib, bias_thr, outdir, tex):
+    L = labels(tex)
+    xi, pte, mags = d["xiE_grid"], d["PtE_grid"], d["F146"]
+    rows = rows_with_intrinsic(d, summaries)
+    u0 = np.array([d["u0_grid"][iu] for iu, _ in rows])
     pw05 = d["POWER_ALPHA05"]
     iso = slice(1, pw05.shape[0])
     cmap = ListedColormap(["0.85", C_VERMILION, C_BLUE])
@@ -131,10 +215,9 @@ def regions_figure(d, S, ib, bias_thr, outdir, tex):
             if c > 0:
                 axes[r, c].tick_params(labelleft=False)
     print(f"\nregions, g = {d['blend_ratio'][ib]:g}, |Delta tE/tE| threshold {bias_thr:g}:")
-    for iu in range(len(u0)):
-        b = bias[ju[iu]][np.ix_(jx, jp)]                      # (xi, P)
+    for r, (iu, (_, b, _)) in enumerate(rows):                # b: (xi, P)
         for im, mag in enumerate(mags):
-            ax = axes[iu, im]
+            ax = axes[r, im]
             m05 = np.nanmean(pw05[iso, ib, im, iu], axis=0)   # (xi, P)
             cls = np.where(m05 >= 0.5, 2, np.where(b >= bias_thr, 1, 0)).astype(float)
             cls[~np.isfinite(m05) | ~np.isfinite(b)] = np.nan
@@ -142,14 +225,14 @@ def regions_figure(d, S, ib, bias_thr, outdir, tex):
             ax.set_xscale("log")
             ax.set_yscale("log")
             fin = np.isfinite(cls)
-            print(f"  u0 {u0[iu]:g} F146 {mag:g}: detected {np.mean(cls[fin] == 2):.3f}  "
+            print(f"  u0 {u0[r]:g} F146 {mag:g}: detected {np.mean(cls[fin] == 2):.3f}  "
                   f"confused+biased {np.mean(cls[fin] == 1):.3f}  "
                   f"confused+unbiased {np.mean(cls[fin] == 0):.3f}")
-            if iu == 0:
+            if r == 0:
                 ax.set_title(L["f146"](mag))
             if im == 0:
-                ax.set_ylabel(L["u0"](u0[iu]) + "\n" + L["pte"])
-            if iu == len(u0) - 1:
+                ax.set_ylabel(L["u0"](u0[r]) + "\n" + L["pte"])
+            if r == len(u0) - 1:
                 ax.set_xlabel(L["xi"])
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in (C_BLUE, C_VERMILION, "0.85")]
     thr = rf"$|\Delta t_{{\rm E}}/t_{{\rm E}}| \geq {bias_thr:g}$"
@@ -159,22 +242,18 @@ def regions_figure(d, S, ib, bias_thr, outdir, tex):
     return save_figure(fig, Path(outdir) / f"sec6_regions_xiE_ptE_g{d['blend_ratio'][ib]:g}")
 
 
-def d_ratio_figure(d, S, outdir, tex):
+def d_ratio_figure(d, summaries, outdir, tex):
     L = labels(tex)
-    xi, pte, u0, mags = d["xiE_grid"], d["PtE_grid"], d["u0_grid"], d["F146"]
-    ju = match_index(S["u0"], u0, "u0")
-    jx = match_index(S["xi_E"], xi, "xi_E")
-    jp = match_index(S["P_over_tE"], pte, "P/tE")
-    Dint = S["D_all"]                                        # (u0, xi, geo, P/tE)
+    pte, mags = d["PtE_grid"], d["F146"]
+    print("\nD_Roman / D_intrinsic (median over orientations and xi_E cells, g = 0):")
+    rows = rows_with_intrinsic(d, summaries)
     Drom = d["D_ROMAN_EFF"]                                  # (geo, g, F146, u0, xi, P)
     ib = int(np.flatnonzero(np.isclose(d["blend_ratio"], 0.0))[0])
-    fig, axes = plt.subplots(1, len(u0), figsize=(fig_width(1.0), fig_width(0.36)),
+    fig, axes = plt.subplots(1, len(rows), figsize=(fig_width(1.0), fig_width(0.36)),
                              sharey=True, squeeze=False, constrained_layout=True)
-    print("\nD_Roman / D_intrinsic (median over orientations and xi_E cells, g = 0):")
-    for iu in range(len(u0)):
-        ax = axes[0, iu]
-        di = Dint[ju[iu]][np.ix_(jx, np.arange(Dint.shape[2]), jp)]   # (xi, geo, P)
-        di = np.moveaxis(di, 1, 0)                                    # (geo, xi, P)
+    u0 = d["u0_grid"]
+    for r, (iu, (_, _, di)) in enumerate(rows):               # di: (geo, xi, P)
+        ax = axes[0, r]
         for im, (mag, col) in enumerate(zip(mags, ("k", C_BLUE, C_VERMILION))):
             dr = Drom[:, ib, im, iu]                                  # (geo, xi, P)
             ok = (di >= D_RATIO_RANGE[0]) & (di <= D_RATIO_RANGE[1]) & np.isfinite(dr) & (di > 0)
@@ -197,11 +276,17 @@ def d_ratio_figure(d, S, outdir, tex):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--power", required=True)
-    ap.add_argument("--summary", default=None)
+    ap.add_argument("--summary", nargs="+", default=None,
+                    help="one or more summary_xiE_ptE.npz; each u0 of the Roman grid is "
+                         "taken from the first summary that has it")
     ap.add_argument("--outdir", default="figures/current")
     ap.add_argument("--u0", type=float, default=0.1, help="u0 of the power figure")
     ap.add_argument("--region-g", type=float, default=0.0, help="blend ratio of the region figure")
     ap.add_argument("--bias-threshold", type=float, default=0.01)
+    ap.add_argument("--droman-g", type=float, nargs="+", default=[0.0],
+                    help="blend ratios of the D_Roman maps (one figure each)")
+    ap.add_argument("--power-maps", action="store_true",
+                    help="also the power maps (rows g) at --u0")
     ap.add_argument("--no-usetex", action="store_true")
     args = ap.parse_args()
     tex = not args.no_usetex
@@ -212,16 +297,24 @@ def main():
         raise SystemExit("--power is not a --grid xiP power file")
     if not np.isfinite(float(d["k_h1"])):
         print("warning: power file made without --k-h1 (H0 k_local used)")
-    spath = args.summary or find_summary()
-    S = np.load(spath)
-    print("intrinsic summary:", spath)
-    if not np.allclose(S["geometries"], d["geometry"]):
-        raise SystemExit("orientations of the intrinsic summary differ from the Roman grid")
+    summaries = []
+    for spath in (args.summary or [find_summary()]):
+        S = np.load(spath)
+        if not np.allclose(S["geometries"], d["geometry"]):
+            raise SystemExit(f"orientations of {spath} differ from the Roman grid")
+        if float(S["q_flux_used"]) != 0.0:
+            raise SystemExit(f"{spath} has two luminous sources (q_f > 0)")
+        summaries.append((spath, S))
     iu = int(np.argmin(np.abs(np.log(d["u0_grid"] / args.u0))))
     ib = int(np.argmin(np.abs(d["blend_ratio"] - args.region_g)))
-    out = list(power_figure(d, iu, args.outdir, tex))
-    out += regions_figure(d, S, ib, args.bias_threshold, args.outdir, tex)
-    out += d_ratio_figure(d, S, args.outdir, tex)
+    out = []
+    for g in args.droman_g:
+        out += droman_figure(d, summaries, int(np.argmin(np.abs(d["blend_ratio"] - g))),
+                             args.outdir, tex)
+    if args.power_maps:
+        out += power_figure(d, iu, args.outdir, tex)
+    out += regions_figure(d, summaries, ib, args.bias_threshold, args.outdir, tex)
+    out += d_ratio_figure(d, summaries, args.outdir, tex)
     for f in out:
         print("saved", f)
 

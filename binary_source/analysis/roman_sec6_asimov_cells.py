@@ -105,6 +105,14 @@ GRIDS = {
     "xiP": {"u0": U0_VALUES, "xi": XI_E_GRID[::2], "seed_base": 4_100_000_000,
             "out": REPO_ROOT / "results/roman_sec6_asimov_xi_v1",
             "summary": "roman_sec6_asimov_xi.npz"},
+    # the u0 of the paper maps (Fig. 2: scan_xiE_ptE.py --u0 0.01 0.3 1 --refine 2;
+    # Fig. 3: u0 = 0.1).  0.1 and 0.3 sit at the same indices as in xiP, so those
+    # cells can be linked from roman_sec6_asimov_xi_v1 (the check of the stored
+    # u0 and xi_E in valid() guards the reuse).
+    "xiPpaper": {"u0": np.array([0.01, 0.1, 0.3, 1.0]), "xi": XI_E_GRID[::2],
+                 "seed_base": 4_150_000_000,
+                 "out": REPO_ROOT / "results/roman_sec6_asimov_xi_v2",
+                 "summary": "roman_sec6_asimov_xi_paper.npz"},
 }
 
 KEYS = [
@@ -152,12 +160,23 @@ def outfile(directory, grid, ig, ib, im, iu, ix):
     return Path(directory) / "cells" / f"geo{ig:02d}_g{ib}_m{im}_u{iu:02d}{tail}.npz"
 
 
-def valid(path, P):
+def valid(path, P, u0=None, xi=None):
+    """Complete cell file for this P grid (and, when given, this u0 and xi_E)."""
     try:
         with np.load(path, allow_pickle=False) as d:
-            return (d["delta_chi2_pspl"].shape == (len(P),) and np.allclose(d["P_days"], P))
+            ok = d["delta_chi2_pspl"].shape == (len(P),) and np.allclose(d["P_days"], P)
+            if u0 is not None:
+                ok = ok and np.isclose(float(d["u0"]), u0, rtol=1e-9, atol=0.0)
+            if xi is not None:
+                ok = ok and np.isclose(float(d["xi_E"]), xi, rtol=1e-9, atol=0.0)
+            return bool(ok)
     except Exception:
         return False
+
+
+def cell_values(grid, iu, ix):
+    xi = GRIDS[grid]["xi"]
+    return float(GRIDS[grid]["u0"][iu]), (None if xi is None else float(xi[ix]))
 
 
 def one_case(grid, ig, ib, im, iu, ix, ip, P):
@@ -187,7 +206,7 @@ def worker(job):
     grid, ig, ib, im, iu, ix, directory, policy, commits = job
     P = period_grid(policy, grid)
     out = outfile(directory, grid, ig, ib, im, iu, ix)
-    if valid(out, P):
+    if valid(out, P, *cell_values(grid, iu, ix)):
         return "skip"
     res = {k: np.full(len(P), np.nan) for k in KEYS}
     err = np.full(len(P), "", dtype="<U300")
@@ -251,6 +270,8 @@ def pilot(args):
         cases = [(0, 0, 1, 8, 0, 30), (0, 2, 1, 8, 0, 30), (1, 0, 2, 12, 0, 45), (5, 1, 0, 4, 0, 10)]
     else:
         cases = [(0, 0, 1, 1, 10, 14), (0, 2, 1, 1, 10, 14), (1, 0, 2, 2, 6, 5), (5, 1, 0, 0, 14, 25)]
+        if len(u0s) > 3:                                       # also the largest u0 (u0 = 1)
+            cases.append((2, 0, 2, len(u0s) - 1, 8, 20))
     secs = []
     for ig, ib, im, iu, ix, ip in cases:
         r = one_case(grid, ig, ib, im, iu, ix, ip, P)
@@ -281,7 +302,7 @@ def summarize(args):
     for ig, ib, im, iu, ix in tasks(grid):
         f = outfile(args.out, grid, ig, ib, im, iu, ix)
         idx = (ig, ib, im, iu) if xis is None else (ig, ib, im, iu, ix)
-        if not valid(f, P):
+        if not valid(f, P, *cell_values(grid, iu, ix)):
             missing.append(f.name)
             continue
         with np.load(f, allow_pickle=False) as d:

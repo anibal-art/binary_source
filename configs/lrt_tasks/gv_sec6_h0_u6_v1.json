@@ -1,0 +1,22 @@
+{
+  "run_name": "gv_sec6_h0_u6_v1",
+  "description": "Extension of the Section 6 Test A null calibration (gv_sec6_h0_v1) to the H0 u0 node 6 (u0 = 2.0), so that the critical value can be interpolated in log u0 up to u0 = 1 (the largest u0 of the paper maps): pi_E = 0 PSPL truths at tE = 30 d, F146 = 19, 21, 23 x g = 0, 1, 4 (9 configurations), 50 realizations each, catalog h0_candidate_v5_blend.parquet. Same pipeline as gv_sec6_h0_v1: runner with SAVE_ARRAYS=1 and fit_policy_test_a_dark_v4.json, lrt_omega_profile.py (one start), then lrt_gross_vitells.py --group-by-config --extra-alphas 0.0027 on the profiles of both runs together.",
+  "outdir": "results/roman_lrt/gv_sec6_h0_u6_v1",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0_grid_index": [6],
+        "tE": 30.0,
+        "source_mag_F146_AB": [19.0, 21.0, 23.0],
+        "blend_ratio_W149": [0.0, 1.0, 4.0]
+      },
+      "n_per_config": 50,
+      "expect_n_configs": 9
+    }
+  ]
+}

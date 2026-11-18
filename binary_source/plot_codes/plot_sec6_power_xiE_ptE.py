@@ -63,12 +63,12 @@ def match_index(full, sub, what):
 
 
 def labels(tex):
-    return dict(xi=r"$\xi_{\rm E}$" if tex else "xi_E",
-                pte=r"$P/t_{\rm E}$" if tex else "P/tE",
-                f146=(lambda m: rf"$F_{{146}} = {m:g}$" if tex else f"F146 = {m:g}"),
-                g=(lambda g: rf"$g = {g:g}$" if tex else f"g = {g:g}"),
-                u0=(lambda u: rf"$u_0 = {u:g}$" if tex else f"u0 = {u:g}"),
-                alpha=r"$\alpha = 5\%$" if tex else "alpha = 5%")
+    """Mathtext labels: the same strings work with and without usetex."""
+    return dict(xi=r"$\xi_{\rm E}$", pte=r"$P/t_{\rm E}$",
+                f146=(lambda m: rf"$F_{{146}} = {m:g}$"),
+                g=(lambda g: rf"$g = {g:g}$"),
+                u0=(lambda u: rf"$u_0 = {u:g}$"),
+                alpha=r"$\alpha = 5\%$")
 
 
 def power_figure(d, iu, outdir, tex):
@@ -116,8 +116,20 @@ def regions_figure(d, S, ib, bias_thr, outdir, tex):
     iso = slice(1, pw05.shape[0])
     cmap = ListedColormap(["0.85", C_VERMILION, C_BLUE])
     norm = BoundaryNorm([-0.5, 0.5, 1.5, 2.5], cmap.N)
-    fig, axes = plt.subplots(len(u0), len(mags), figsize=(fig_width(1.0), fig_width(0.95)),
-                             sharex=True, sharey=True, squeeze=False, constrained_layout=True)
+    fig = plt.figure(figsize=(fig_width(1.0), fig_width(1.02)), constrained_layout=True)
+    gs = fig.add_gridspec(len(u0) + 1, len(mags), height_ratios=[0.13] + [1.0] * len(u0))
+    lax = fig.add_subplot(gs[0, :])
+    lax.axis("off")
+    axes = np.empty((len(u0), len(mags)), dtype=object)
+    for r in range(len(u0)):
+        for c in range(len(mags)):
+            axes[r, c] = fig.add_subplot(gs[r + 1, c],
+                                         sharex=axes[0, 0] if (r or c) else None,
+                                         sharey=axes[0, 0] if (r or c) else None)
+            if r < len(u0) - 1:
+                axes[r, c].tick_params(labelbottom=False)
+            if c > 0:
+                axes[r, c].tick_params(labelleft=False)
     print(f"\nregions, g = {d['blend_ratio'][ib]:g}, |Delta tE/tE| threshold {bias_thr:g}:")
     for iu in range(len(u0)):
         b = bias[ju[iu]][np.ix_(jx, jp)]                      # (xi, P)
@@ -140,11 +152,10 @@ def regions_figure(d, S, ib, bias_thr, outdir, tex):
             if iu == len(u0) - 1:
                 ax.set_xlabel(L["xi"])
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in (C_BLUE, C_VERMILION, "0.85")]
-    thr = (rf"$|\Delta t_{{\rm E}}/t_{{\rm E}}| \geq {bias_thr:g}$" if tex
-           else f"|dtE/tE| >= {bias_thr:g}")
-    fig.legend(handles, ["detected (power >= 0.5)" if not tex else r"detected (power $\geq 0.5$)",
-                         "confused, " + thr, "confused, unbiased"],
-               loc="upper center", bbox_to_anchor=(0.5, 1.06), ncol=3, frameon=False)
+    thr = rf"$|\Delta t_{{\rm E}}/t_{{\rm E}}| \geq {bias_thr:g}$"
+    lax.legend(handles, [r"detected (power $\geq 0.5$)", "confused, " + thr,
+                         r"confused, $|\Delta t_{\rm E}/t_{\rm E}| <$ " + f"{bias_thr:g}"],
+               loc="center", ncol=3, frameon=False, handlelength=1.2, columnspacing=1.2)
     return save_figure(fig, Path(outdir) / f"sec6_regions_xiE_ptE_g{d['blend_ratio'][ib]:g}")
 
 
@@ -178,7 +189,7 @@ def d_ratio_figure(d, S, outdir, tex):
         ax.set_yscale("log")
         ax.set_xlabel(L["pte"])
         ax.set_title(L["u0"](u0[iu]))
-    axes[0, 0].set_ylabel(r"$D_{\rm Roman}/D$" if tex else "D_Roman / D")
+    axes[0, 0].set_ylabel(r"$D_{\rm Roman}/D$")
     axes[0, 0].legend(frameon=False)
     return save_figure(fig, Path(outdir) / "sec6_D_ratio")
 

@@ -49,8 +49,6 @@ def main():
     blend, mags = d["blend_ratio"], d["F146"]
     iso = slice(1, pw05.shape[0])                                # row 0 = reference geometry
 
-    pct = r"5\%" if tex else "5%"
-    alpha05 = (r"$\alpha = 5\%$" if tex else "alpha = 5%")
     fig, axes = plt.subplots(len(blend), len(mags), figsize=(fig_width(1.0), fig_width(0.95)),
                              sharex=True, sharey=True, squeeze=False, constrained_layout=True)
     for ib, g in enumerate(blend):
@@ -68,13 +66,13 @@ def main():
             ax.set_xscale("log")
             ax.set_yscale("log")
             if ib == 0:
-                ax.set_title(rf"$F_{{146}} = {mag:g}$" if tex else f"F146 = {mag:g}")
+                ax.set_title(rf"$F_{{146}} = {mag:g}$")
             if im == 0:
-                ax.set_ylabel(rf"$g = {g:g}$" "\n" r"$P$ [yr]" if tex else f"g = {g:g}\nP [yr]")
+                ax.set_ylabel(rf"$g = {g:g}$" "\n" r"$P$ [yr]")
             if ib == len(blend) - 1:
-                ax.set_xlabel(r"$u_0$" if tex else "u0")
-    label = (rf"Power ({alpha05}), mean over orientations" if tex
-             else f"Power (alpha = {pct}), mean over orientations")
+                ax.set_xlabel(r"$u_0$")
+    # mathtext labels: the same strings work with and without usetex
+    label = r"Power ($\alpha = 5\%$), mean over orientations"
     fig.colorbar(pcm, ax=axes, label=label, shrink=0.9)
     print("k_H1 =", float(d["k_h1"]))
     for f in save_figure(fig, args.out):

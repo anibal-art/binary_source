@@ -17,10 +17,17 @@ Model
     the Gross-Vitells fit of the H0 run (look-elsewhere effect over the
     period included).  Under H1, T is approximately noncentral
     chi2_k(lambda), with lambda the Asimov Delta chi2 (Cowan, Cranmer,
-    Gross & Vitells 2011, EPJC 71, 1554) and k = k_local of the H0 node:
+    Gross & Vitells 2011, EPJC 71, 1554).  k is NOT the H0 k_local: under
+    H0 the period is not identified (Davies problem) and k_local counts the
+    directions open at fixed omega, while under H1 omega is identified and
+    all the BSPL parameters beyond PSPL are free.  k = k_H1 is fitted to the
+    noisy-H1 validation (--validate prints the maximum-likelihood k_H1 and
+    its 68% interval; pass it with --k-h1).  Without --k-h1 the H0 k_local
+    of each node is used (gives lower power):
         power     = P(chi2_k(lambda) > c_alpha)
         confusion = 1 - power   (a binary source accepted as PSPL)
-        median p  = P_H0(T > median of chi2_k(lambda)), Gross-Vitells tail.
+        median p  = P_H0(T > median of chi2_k(lambda)), Gross-Vitells tail
+                    (H0 k_local and N(c0) of the node).
     c_alpha, k_local and N(c0) are interpolated linearly in log u0 between
     the H0 u0 nodes, which are exact points of the H1 grid (no
     extrapolation).  The 16-84% bootstrap band of c_alpha gives a band on
@@ -214,6 +221,57 @@ def validate(args):
     out = args.validate.with_name(args.validate.stem + "_result.csv")
     out.write_text("\n".join(lines) + "\n")
     print("saved", out)
+    fit_k_h1(cells, T, args.validate.with_name(args.validate.stem + "_k_h1.json"))
+
+
+def fit_k_h1(cells, T, dest):
+    """
+    Maximum-likelihood k of the noncentral chi2 under H1 from the binomial
+    counts T > c_alpha05 of the validation cells (lambda and c_alpha05 fixed);
+    68% interval from -2 Delta log L = 1.  Also the moment estimate
+    mean(T - lambda) and the Pearson chi2 of k_H1 and of the H0 k_local.
+    """
+    use = [(c, np.asarray(T[cid])) for cid, c in cells.items() if len(T[cid])]
+    ks = np.arange(1.0, 12.0001, 0.01)
+
+    def nll(k):
+        s = 0.0
+        for c, t in use:
+            p = np.clip(stats.ncx2.sf(c["c_alpha05"], k, c["lambda"]), 1e-12, 1 - 1e-12)
+            m = int((t > c["c_alpha05"]).sum())
+            s -= m * np.log(p) + (len(t) - m) * np.log(1 - p)
+        return s
+
+    L = np.array([nll(k) for k in ks])
+    k_best = float(ks[np.argmin(L)])
+    inside = ks[2 * (L - L.min()) <= 1.0]
+
+    def pearson(kfun):
+        chi, dof = 0.0, 0
+        for c, t in use:
+            p = float(stats.ncx2.sf(c["c_alpha05"], kfun(c), c["lambda"]))
+            m = float((t > c["c_alpha05"]).mean())
+            if 0.0 < p < 1.0 and len(t) * min(p, 1 - p) >= 1.0:   # skip saturated cells
+                chi += (m - p) ** 2 / (p * (1 - p) / len(t))
+                dof += 1
+        return chi, dof
+
+    chi_h1, dof_h1 = pearson(lambda c: k_best)
+    chi_h0, dof_h0 = pearson(lambda c: c["k_local"])
+    moment = float(np.mean(np.concatenate([t - c["lambda"] for c, t in use])))
+    res = {"k_h1": k_best, "k_h1_68": [float(inside.min()), float(inside.max())],
+           "k_h1_moment_mean_T_minus_lambda": moment,
+           "pearson_chi2_k_h1": chi_h1, "pearson_dof_k_h1": dof_h1 - 1,
+           "pearson_p_k_h1": float(stats.chi2.sf(chi_h1, max(dof_h1 - 1, 1))),
+           "pearson_chi2_k_local": chi_h0, "pearson_dof_k_local": dof_h0,
+           "pearson_p_k_local": float(stats.chi2.sf(chi_h0, max(dof_h0, 1))),
+           "n_cells": len(use)}
+    dest.write_text(json.dumps(res, indent=2) + "\n")
+    print(f"\nk_H1 (max. likelihood, alpha 5% counts) = {k_best:.2f} "
+          f"[{inside.min():.2f}, {inside.max():.2f}] 68%;  moment mean(T - lambda) = {moment:.2f}")
+    print(f"Pearson chi2: k_H1 {chi_h1:.1f} / {dof_h1 - 1} dof (p = {res['pearson_p_k_h1']:.2f});  "
+          f"H0 k_local {chi_h0:.1f} / {dof_h0} dof (p = {res['pearson_p_k_local']:.2g})")
+    print("saved", dest)
 
 
 def main():
@@ -230,6 +288,9 @@ def main():
     ap.add_argument("--validate", type=Path, default=None,
                     help="cells JSON: compare predicted and measured power (needs --profiles)")
     ap.add_argument("--profiles", nargs="*", default=[])
+    ap.add_argument("--k-h1", type=float, default=None,
+                    help="degrees of freedom of the noncentral chi2 under H1 (from --validate); "
+                         "default: H0 k_local of each node")
     args = ap.parse_args()
 
     if args.validate is not None:
@@ -257,16 +318,19 @@ def main():
     def b(x):                                                 # (g, F146, u0) -> broadcast
         return x[None, :, :, :, None]
 
-    pw05 = power(b(I["c05"]), b(I["k"]), lam)
-    pw05_lo = power(b(I["c05_hi"]), b(I["k"]), lam)            # higher threshold, lower power
-    pw05_hi = power(b(I["c05_lo"]), b(I["k"]), lam)
-    pw3s = power(b(I["c3s"]), b(I["k"]), lam)
-    pw3s_lo = power(b(I["c3s_hi"]), b(I["k"]), lam)
-    pw3s_hi = power(b(I["c3s_lo"]), b(I["k"]), lam)
-    kk = np.broadcast_to(b(I["k"]), lam.shape)
+    k1 = b(I["k"]) if args.k_h1 is None else float(args.k_h1)   # k under H1
+    print(f"k under H1: {'H0 k_local per node' if args.k_h1 is None else args.k_h1}")
+    pw05 = power(b(I["c05"]), k1, lam)
+    pw05_lo = power(b(I["c05_hi"]), k1, lam)                   # higher threshold, lower power
+    pw05_hi = power(b(I["c05_lo"]), k1, lam)
+    pw3s = power(b(I["c3s"]), k1, lam)
+    pw3s_lo = power(b(I["c3s_hi"]), k1, lam)
+    pw3s_hi = power(b(I["c3s_lo"]), k1, lam)
+    k1_full = np.broadcast_to(k1, lam.shape)
+    k0_full = np.broadcast_to(b(I["k"]), lam.shape)            # H0 tail for the p-value
     lam_ok = np.where(np.isfinite(lam), np.maximum(lam, 0.0), np.nan)
-    t_med = stats.ncx2.ppf(0.5, kk, lam_ok)
-    p_med = gv_sf(t_med, np.broadcast_to(b(I["N0"]), lam.shape), kk, c0)
+    t_med = stats.ncx2.ppf(0.5, k1_full, lam_ok)
+    p_med = gv_sf(t_med, np.broadcast_to(b(I["N0"]), lam.shape), k0_full, c0)
 
     np.savez_compressed(
         str(args.out) + ".npz",
@@ -274,6 +338,7 @@ def main():
         POWER_3SIGMA=pw3s, POWER_3SIGMA_LO=pw3s_lo, POWER_3SIGMA_HI=pw3s_hi,
         PVALUE_MEDIAN=p_med, LAMBDA=lam,
         C_ALPHA05=I["c05"], C_3SIGMA=I["c3s"], K_LOCAL=I["k"], N_C0=I["N0"],
+        k_h1=(np.nan if args.k_h1 is None else float(args.k_h1)),
         blend_ratio=blend, F146=mags, u0_grid=u0, P_days=P, geometry=A["geometry"],
         u0_nodes=u0_nodes, c0=c0, gv_summary=str(args.gv_summary), asimov=str(args.asimov))
 

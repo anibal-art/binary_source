@@ -177,8 +177,9 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     xiE = xi_E(cell["P_days"], spec)
     axT.set_title(rf"({letter}) {status}" "\n"
                   rf"$F146={cell['F146']:g}$, $g={cell['blend_ratio']:g}$, "
-                  rf"$u_0={cell['u0']:.3g}$, $P/t_E={cell['P_days'] / tE:.3g}$, "
-                  rf"$\xi_E={xiE:.2g}$", fontsize=FS_ANNOT, loc="left")
+                  rf"$u_0={cell['u0']:.3g}$" "\n"
+                  rf"$P/t_E={cell['P_days'] / tE:.3g}$, $\xi_E={xiE:.2g}$",
+                  fontsize=FS_ANNOT, loc="left", linespacing=1.25)
 
     # light curve
     tb, mb, eb = binned(t[z], m[z], w[z], args.bin_days)
@@ -194,11 +195,11 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     axA.tick_params(labelbottom=False)
     T, c3s, lam = float(profile["T_profile"]), cell["c_3sigma"], cell["lambda"]
     eff = float(stats.ncx2.sf(c3s, kh1, lam))
-    axA.text(0.03, 0.05,
+    axA.text(0.97, 0.96,
              rf"$T={T:.1f}$, $T_{{3\sigma}}={c3s:.1f}$" "\n"
              rf"$\lambda={lam:.1f}$, $\varepsilon_{{3\sigma}}={eff:.2f}$" "\n"
              rf"$\Delta t_E/t_E={100 * (tE_fit - tE) / tE:+.1f}\%$",
-             transform=axA.transAxes, ha="left", va="bottom", fontsize=FS_ANNOT,
+             transform=axA.transAxes, ha="right", va="top", fontsize=FS_ANNOT,
              linespacing=1.3)
 
     # residuals relative to the best PSPL, in mmag
@@ -221,7 +222,7 @@ def main():
     ap.add_argument("--run", type=Path, required=True)
     ap.add_argument("--examples", nargs="+", default=list(DEFAULT_EXAMPLES))
     ap.add_argument("--status", nargs="+", default=list(STATUS))
-    ap.add_argument("--zoom-tE", type=float, default=2.0)
+    ap.add_argument("--zoom-tE", type=float, default=1.3)
     ap.add_argument("--traj-tE", type=float, default=1.0)
     ap.add_argument("--bin-days", type=float, default=0.5)
     ap.add_argument("--resid-bin-days", type=float, default=1.0)
@@ -234,9 +235,9 @@ def main():
     apply_paper_style(usetex=not args.no_usetex)
     spec, cells, kh1 = load_cells(args.cells)
     n = len(args.examples)
-    fig = plt.figure(figsize=(fig_width(1.0), 6.2))
+    fig = plt.figure(figsize=(fig_width(1.0), 6.8))
     gs = fig.add_gridspec(3, n, height_ratios=[0.9, 1.5, 0.8], hspace=0.12, wspace=0.32,
-                          left=0.08, right=0.99, bottom=0.08, top=0.90)
+                          left=0.08, right=0.99, bottom=0.07, top=0.80)
     axes = []
     for j, (cid, status) in enumerate(zip(args.examples, args.status)):
         d, a, profile, Tmed, nreal = typical_event(args.run, cid)
@@ -259,7 +260,7 @@ def main():
                Line2D([], [], color="k", marker="+", ms=6, mew=1.0, ls="none")]
     fig.legend(handles, ["Roman data (binned)", "BSPL truth", "best-fitting PSPL",
                          "best-fitting BSPL", "dark companion", "lens"],
-               loc="upper center", ncol=6, frameon=False, fontsize=FS_ANNOT,
+               loc="upper center", ncol=3, frameon=False, fontsize=FS_ANNOT,
                bbox_to_anchor=(0.5, 1.0), handlelength=1.6)
     for f in save_figure(fig, args.out):
         print("saved", f)

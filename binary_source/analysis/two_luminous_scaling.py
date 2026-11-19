@@ -6,7 +6,7 @@ Expansion of the two-source magnification around the light centroid
 (Han & Gould 1997, ApJ 480, 196, Sect. 2.2):
   * first order: one luminous source moving with the photocentre amplitude
         xi_ph = |B - beta| xi_rel,  B = q_M/(1+q_M), beta = q_f/(1+q_f);
-  * second order: a separation term proportional to beta(1-beta) xi_rel^2,
+  * second order: a separation term proportional to eta(1-eta) xi_rel^2,
     which does not average out and, for P >> tE, is a STATIC binary source
     that the PSPL fit cannot absorb.
 
@@ -19,19 +19,19 @@ Checks (all on the median D over the random orientations):
     b. power-law slope of D_floor vs xi_rel in the perturbative window
        (expected 2), least squares in log-log (analyze_photocenter_scaling.py
        runs its analysis at import time, so its fit_power_law is not imported);
-    c. collapse: C = D_floor / [beta(1-beta) xi_rel^2] in the window; if the
+    c. collapse: C = D_floor / [eta(1-eta) xi_rel^2] in the window; if the
        floor is the second-order term, C depends on u0 only, not on (q_M, q_f);
     d. xi_rel where D_floor = 1e-3 and 1e-2, and the ratio to the row with the
-       largest beta(1-beta), compared with [beta(1-beta)]^(-1/2).
+       largest eta(1-eta), compared with [eta(1-eta)]^(-1/2).
  3. Validation (--validate S.npz, a (q_M, q_f) pair NOT in --summaries):
     C(u0) is calibrated as the mean of check 2c over the --summaries rows and
     the two-term model
-        D_model = sqrt( D_one(xi_ph)^2 + [C(u0) beta(1-beta) xi_rel^2]^2 ),
+        D_model = sqrt( D_one(xi_ph)^2 + [C(u0) eta(1-eta) xi_rel^2]^2 ),
     restricted to xi_rel <= --xi-pert, is compared with the measured map
     (median |log10 D - log10 D_model| by bands of P/tE), together with the
     long-period floor alone and the xi_rel where it reaches 1e-3. Adding the
     two terms in quadrature is an assumption of the model, tested here.
-Optional figure (--figure): D_floor / beta(1-beta) vs xi_rel, one panel per
+Optional figure (--figure): D_floor / eta(1-eta) vs xi_rel, one panel per
 u0, one curve per (q_M, q_f), with a xi^2 reference; with --validate also the
 measured map of the validation pair with the model contours.
 
@@ -189,7 +189,7 @@ def main():
         C_cal = [np.mean([Cs[(r["qm"], r["qf"], k)] for r in rows]) for k in range(len(u0s))]
         print(f"\n3. Validation: q_M={vqm:g}, q_f={vqf:g} (commit {V['code_commit']}, "
               f"dirty {bool(V['code_dirty'])}, failed fits {int(np.isnan(V['D_all']).sum())}); "
-              f"|B-beta|={vfac:.3f}, b(1-b)={vb1b:.4f}")
+              f"|B-eta|={vfac:.3f}, b(1-b)={vb1b:.4f}")
         print("   C(u0) calibrated on the rows above: " +
               ", ".join(f"u0={u0:g}: {c:.3g}" for u0, c in zip(u0s, C_cal)))
         print(f"   model: D = sqrt(D_one(xi_ph)^2 + (C b(1-b) xi^2)^2) for xi_rel <= "
@@ -236,7 +236,7 @@ def main():
         ax.set_xlabel(r"$\xi_{\rm rel}$")
         ax.set_title(rf"$u_0={u0:g}$, $P/t_E\geq{args.pte_static:g}$", fontsize=9)
         panel_label(ax, "abcdef"[k])
-    np.atleast_1d(axes)[0].set_ylabel(r"$D_{\rm floor}/[\beta(1-\beta)]$")
+    np.atleast_1d(axes)[0].set_ylabel(r"$D_{\rm floor}/[\eta(1-\eta)]$")
     np.atleast_1d(axes)[0].legend(fontsize=7, loc="lower right")
     out = save_figure(fig, os.path.join(args.out, "two_luminous_static_floor"))
     plt.close(fig)

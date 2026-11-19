@@ -9,7 +9,7 @@ Comparison with one luminous source (white dotted contours, same levels): to
 first order in the orbital displacement the two-source magnification equals
 that of ONE luminous source moving with the photocentre amplitude
 
-    xi_ph = |B - beta| xi_rel,   B = q_M/(1+q_M),  beta = q_f/(1+q_f),
+    xi_ph = |B - eta| xi_rel,   B = q_M/(1+q_M),  eta = q_f/(1+q_f),
 
 so the prediction is D_one(xi_E = xi_ph, P/tE), interpolated in log xi_E from
 the one-luminous summary (same u0 and P/tE grid). On q_f = q_M the prediction
@@ -111,10 +111,10 @@ def main():
                            linewidths=LW_THIN + 0.3, linestyles=":", zorder=11)
                 good = (Dmed[k] >= D_FLOOR) & (Dp >= D_FLOOR)
                 dev = np.nanmedian(np.abs(np.log10(Dmed[k][good]) - np.log10(Dp[good])))
-                print(f"  q_M={qm:g} q_f={qf:g} u0={u0:g}: |B-beta|={fac:.3f}, "
+                print(f"  q_M={qm:g} q_f={qf:g} u0={u0:g}: |B-eta|={fac:.3f}, "
                       f"median |dlog10 D| = {dev:.3f} over {int(good.sum())} cells")
             else:
-                print(f"  q_M={qm:g} q_f={qf:g} u0={u0:g}: |B-beta|={fac:.3f}, "
+                print(f"  q_M={qm:g} q_f={qf:g} u0={u0:g}: |B-eta|={fac:.3f}, "
                       "no first-order prediction")
             if r == nr - 1:
                 ax.set_xlabel(r"$\xi_{\rm rel}$")
@@ -133,7 +133,7 @@ def main():
     handles = [Line2D([], [], color="crimson", lw=1.2),
                Line2D([], [], color="white", lw=1.2, ls=":")]
     leg = fig.legend(handles, ["two luminous sources",
-                               r"one luminous source at $\xi_E=|B-\beta|\,\xi_{\rm rel}$"],
+                               r"one luminous source at $\xi_E=|B-\eta|\,\xi_{\rm rel}$"],
                      loc="lower center", ncol=2, fontsize=FS_ANNOT - 1, frameon=True,
                      bbox_to_anchor=(0.5, top + 0.03 / (1.0 + 2.15 * nr)),
                      facecolor="0.3", labelcolor="white", edgecolor="none")

@@ -228,9 +228,7 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     tr_, rb, rbe = binned(t[z], r[z], w[z], args.resid_bin_days)
     axR.axhline(0.0, color="0.6", lw=LW_THIN, ls=":")
     axR.errorbar((tr_ - t0) / tE, 1e3 * rb, 1e3 * rbe, fmt=".", ms=2.5, color="0.45", lw=0.5)
-    axR.plot(taud, 1e3 * (md_bspl - md_pspl), color=C_BLUE, lw=LW_THIN, ls=":")
-    axR.plot(taud, np.where(observed, 1e3 * (md_bspl - md_pspl), np.nan), color=C_BLUE,
-             lw=LW_MAIN)                           # solid where Roman has data
+    axR.plot(taud, 1e3 * (md_bspl - md_pspl), color=C_BLUE, lw=LW_MAIN)
     for g0, g1 in gaps:
         for ax in (axA, axR):
             ax.axvspan(g0, g1, color="0.9", lw=0, zorder=0)

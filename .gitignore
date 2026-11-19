@@ -35,9 +35,7 @@ lightcurves_binary/
 # release/ can contain intentionally versioned final PDFs.
 # ============================================================
 
-!/figures/release/
-!/figures/release/*.pdf
-!/figures/release/.gitkeep
+# (versioned at the end of this file, after the global *.pdf / *.png rules)
 
 
 # ============================================================
@@ -182,3 +180,16 @@ __pycache__/
 /reproduction_logs/
 logs/
 resultsDb_sqlite.db
+
+# ============================================================
+# Final manuscript figures, versioned so that they can be viewed on GitHub.
+# Must stay at the end: later rules win, and a file cannot be re-included
+# while its parent directory is excluded.
+# ============================================================
+
+!/figures/
+/figures/*
+!/figures/release/
+!/figures/release/*.pdf
+!/figures/release/*.png
+!/figures/release/.gitkeep

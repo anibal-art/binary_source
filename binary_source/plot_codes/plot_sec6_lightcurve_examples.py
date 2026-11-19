@@ -147,6 +147,9 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
                                      pspl["best_model"])
     md_bspl = runner.model_magnitude(runner.build_fit_model(lcd, ra, dec, ref, True), v_bspl)
     taud = (td - t0) / tE
+    ts = np.sort(t)                                # dense times with Roman data nearby
+    i = np.clip(np.searchsorted(ts, td), 1, len(ts) - 1)
+    observed = np.minimum(np.abs(td - ts[i - 1]), np.abs(ts[i] - td)) < 3 * np.median(np.diff(ts))
 
     tau = (t - t0) / tE
     z = np.abs(tau) < args.zoom_tE
@@ -221,7 +224,8 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     tr_, rb, rbe = binned(t[z], r[z], w[z], args.resid_bin_days)
     axR.axhline(0.0, color="0.6", lw=LW_THIN, ls=":")
     axR.errorbar((tr_ - t0) / tE, 1e3 * rb, 1e3 * rbe, fmt=".", ms=2.5, color="0.45", lw=0.5)
-    axR.plot(taud, 1e3 * (md_bspl - md_pspl), color=C_BLUE, lw=LW_MAIN)
+    axR.plot(taud, np.where(observed, 1e3 * (md_bspl - md_pspl), np.nan), color=C_BLUE,
+             lw=LW_MAIN)                           # only where Roman has data
     lim = 1.2 * np.nanmax(np.abs(1e3 * rb) + 1e3 * rbe)
     axR.set_ylim(lim, -lim)                         # magnitudes: brighter up
     axR.set_xlabel(r"$(t-t_0)/t_E$")
@@ -251,7 +255,7 @@ def main():
     n = len(args.examples)
     fig = plt.figure(figsize=(fig_width(1.0), 6.8))
     gs = fig.add_gridspec(3, n, height_ratios=[0.9, 1.5, 0.8], hspace=0.12, wspace=0.32,
-                          left=0.08, right=0.99, bottom=0.07, top=0.86)
+                          left=0.08, right=0.96, bottom=0.07, top=0.86)
     axes = []
     for j, (cid, status) in enumerate(zip(args.examples, args.status)):
         d, a, profile, Tmed, nreal = typical_event(args.run, cid)

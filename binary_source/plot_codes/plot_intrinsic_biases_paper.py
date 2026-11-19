@@ -1269,7 +1269,7 @@ def draw_figure3(alt=False):
         cbar.set_ticks(np.arange(-np.floor(lim / step), np.floor(lim / step) + 1) * step)
         cbar.ax.xaxis.set_major_formatter(percent_fmt)
         cbar.ax.xaxis.set_minor_locator(mticker.NullLocator())
-        cbar.set_label(r"$\Delta t_E/t_E$ (\%)", labelpad=3)
+        cbar.set_label(r"$\Delta t_E/t_E\ (\%)$", labelpad=3)
 
     stem = os.path.join(output_directory,
                         f"paper_tE_bias_D_contours_tE{int(tE_plot)}" + ("_alt" if alt else ""))
@@ -1324,7 +1324,7 @@ def draw_figure4(alt=False):
     ax.set_xlim(x_u0.min(), x_u0.max())
     ax.yaxis.set_major_formatter(percent_fmt)
     ax.set_xlabel(r"$P/t_E$")
-    ax.set_ylabel(r"Relative PSPL bias (\%)")
+    ax.set_ylabel(r"Relative PSPL bias ($\%$)")
     ax.legend(loc="lower right")
     if alt:
         ax.tick_params(top=False, which="both")

@@ -177,7 +177,7 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     xiE = xi_E(cell["P_days"], spec)
     axT.set_title(rf"({letter}) {status}" "\n"
                   rf"$F146={cell['F146']:g}$, $g={cell['blend_ratio']:g}$, "
-                  rf"$u_0={cell['u0']:.3g}$" "\n"
+                  rf"$u_0={cell['u0']:.2g}$" "\n"
                   rf"$P/t_E={cell['P_days'] / tE:.3g}$, $\xi_E={xiE:.2g}$",
                   fontsize=FS_ANNOT, loc="left", linespacing=1.25)
 
@@ -192,6 +192,8 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     axA.plot(tau[oz], m_pspl[oz], color=C_VERMILION, lw=LW_MAIN, ls="--", zorder=4)
     axA.plot(tau[oz], m_bspl[oz], color=C_BLUE, lw=LW_THIN, ls=":", zorder=5)
     axA.invert_yaxis()
+    faint, bright = axA.get_ylim()                 # headroom above the peak for the labels
+    axA.set_ylim(faint, bright - 0.55 * (faint - bright))
     axA.tick_params(labelbottom=False)
     T, c3s, lam = float(profile["T_profile"]), cell["c_3sigma"], cell["lambda"]
     eff = float(stats.ncx2.sf(c3s, kh1, lam))
@@ -237,7 +239,7 @@ def main():
     n = len(args.examples)
     fig = plt.figure(figsize=(fig_width(1.0), 6.8))
     gs = fig.add_gridspec(3, n, height_ratios=[0.9, 1.5, 0.8], hspace=0.12, wspace=0.32,
-                          left=0.08, right=0.99, bottom=0.07, top=0.80)
+                          left=0.08, right=0.99, bottom=0.07, top=0.86)
     axes = []
     for j, (cid, status) in enumerate(zip(args.examples, args.status)):
         d, a, profile, Tmed, nreal = typical_event(args.run, cid)

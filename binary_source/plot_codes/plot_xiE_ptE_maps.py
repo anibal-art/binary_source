@@ -422,7 +422,7 @@ def bias_figure(S, outdir):
         y_line = 2.0 * np.pi * x_line / a_val
         ax_a.plot(x_line, y_line, color="white", lw=LW_THIN, ls="--", zorder=11)
         x_at = np.clip(a_val * 300.0 / (2.0 * np.pi), xi[2], xi[-8])   # label near P/tE ~ 300
-        label_on_curve(ax_a, x_line, y_line, x_at, rf"$A={a_val:g}$", "white",
+        label_on_curve(ax_a, x_line, y_line, x_at, rf"$v_{{\rm orb}}={a_val:g}$", "white",
                        above=True, dark=True)
     ax_a.set_xscale("log"); ax_a.set_yscale("log")
     ax_a.set_xlim(log_edges(xi)[0], log_edges(xi)[-1])
@@ -443,14 +443,14 @@ def bias_figure(S, outdir):
     ax_b.plot(rline, 0.5 * (rline + 1.0), color="0.5", lw=LW_THIN, ls="--", zorder=1,
               label=r"uniform in $[-1,1]$")
     spreads = {}
-    for key, col, lab, mk in (("r_tE", C_BLUE, r"$\Delta t_E/(t_E A)$", "o"),
-                              ("r_t0", C_VERMILION, r"$\Delta t_0/(t_E u_0 A)$", "s")):
+    for key, col, lab, mk in (("r_tE", C_BLUE, r"$\Delta t_E/(t_E v_{\rm orb})$", "o"),
+                              ("r_t0", C_VERMILION, r"$\Delta t_0/(t_E u_0 v_{\rm orb})$", "s")):
         m, lo, hi = ranked_orientation_medians(B[key], B["ok"])
         ax_b.errorbar(m, cdf, xerr=[m - lo, hi - m], fmt=mk, ms=3.0, color=col, mfc=col,
                       elinewidth=0.6, capsize=0, zorder=3, label=lab)
         spreads[key] = np.nanmax(hi - lo)
     ax_b.set_xlim(-1.15, 1.15); ax_b.set_ylim(0, 1)
-    ax_b.set_xlabel("offset / first-order amplitude")
+    ax_b.set_xlabel(r"offset / $v_{\rm orb}$")
     ax_b.set_ylabel("fraction of orientations")
     ax_b.legend(loc="upper left", fontsize=FS_ANNOT - 1.5, handlelength=1.4)
     panel_label(ax_b, "b", x=0.88, y=0.12)
@@ -469,13 +469,13 @@ def bias_figure(S, outdir):
                 y[j] = np.median(v[sel])
         ax_c.plot(mid, y, "o-", ms=3.0, lw=LW_THIN, color=colours[iu % 3],
                   label=rf"$u_0={u0:g}$")
-    ax_c.plot(mid, mid, color="0.5", lw=LW_THIN, ls=":", label=r"$\propto A$")
+    ax_c.plot(mid, mid, color="0.5", lw=LW_THIN, ls=":", label=r"$\propto v_{\rm orb}$")
     ref = np.nanmedian([np.nanmedian(B["du0"][iu][B["ok"][iu] & (B["A"][iu] > 0.03)])
                         for iu in range(len(u0s))])
     ax_c.plot(mid, ref * (mid / 0.05) ** 2, color="0.5", lw=LW_THIN, ls="--",
-              label=r"$\propto A^2$")
+              label=r"$\propto v_{\rm orb}^2$")
     ax_c.set_xscale("log"); ax_c.set_yscale("log")
-    ax_c.set_xlabel(r"$A = 2\pi\,\xi_E\,t_E/P$")
+    ax_c.set_xlabel(r"$v_{\rm orb} = 2\pi\,\xi_E\,t_E/P$")
     ax_c.set_ylabel(r"median $|\Delta u_0|/u_0$")
     ax_c.legend(loc="upper left", fontsize=FS_ANNOT - 1.5, handlelength=1.4)
     panel_label(ax_c, "c", x=0.88, y=0.12)

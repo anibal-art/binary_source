@@ -5,8 +5,9 @@ and p-values of Test A (PSPL vs PSPL + xallarap with a dark companion).
 
 Inputs
     --gv-summary : <out>_summary.json of
-                   lrt_gross_vitells.py --group-by-config --extra-alphas 0.0027
-                   on the gv_sec6_h0_v1 run (one row per H0 configuration
+                   lrt_gross_vitells.py --group-by-config --extra-alphas 0.00135
+                   (3 sigma one-sided; 0.0027 and 2.87e-7 may be added) on the
+                   H0 calibration run (one row per H0 configuration
                    (u0 node, F146, g): critical values, k_local, N(c0)).
     --asimov     : roman_sec6_asimov.npz of roman_sec6_asimov_cells.py
                    --summarize (lambda = Asimov Delta chi2 on
@@ -65,7 +66,9 @@ Validation of the noncentral chi2 power with noisy H1 realizations
        (identical to the H0 calibration);
     3. --validate CELLS.json --profiles .../omega_profile/*_omega_profile.json
        compares, per cell, the measured fraction T > c_alpha (Wilson 68%) with
-       the prediction, and the mean of T with k + lambda.
+       the prediction, and the mean of T with k + lambda.  With --gv-summary
+       the thresholds and k_local of the cells are taken from that H0 summary
+       (e.g. after a recalibration) instead of CELLS.json.
 """
 
 import argparse
@@ -86,7 +89,10 @@ for p in (REPO_ROOT, ANALYSIS_DIR.parent / "plot_codes"):
 from binary_source.analysis.lrt_gross_vitells import gv_sf  # noqa: E402
 
 H0_U0_NODES = np.geomspace(0.005, 2.0, 7)       # build_h0_catalog.U0_NODES
-ALPHA_3SIGMA = 0.0027
+# Significance Z = Phi^-1(1 - p), one-sided (Cowan, Cranmer, Gross & Vitells 2011,
+# eq. 1): 3 sigma <-> p = 1.35e-3 (norm.sf(3) = 1.3499e-3, written as passed to
+# --extra-alphas, which sets the keys of the H0 summary); 5 sigma <-> 2.87e-7.
+ALPHA_3SIGMA = 0.00135
 CONFIG_RE = re.compile(r":m(\d+):u(\d+):pi0(?::g([0-9.]+))?$")
 
 
@@ -189,17 +195,43 @@ def select_validation(args, lam, I, A, blend, mags, u0, P):
     print(f"saved {args.select_validation}  ({len(cells)} cells x {args.n_validation} realizations)")
 
 
+def check_summary(summary):
+    if abs(float(summary["alpha"]) - 0.05) > 1e-12 or ALPHA_3SIGMA not in summary["extra_alphas"]:
+        raise SystemExit(f"expected --alpha 0.05 --extra-alphas {ALPHA_3SIGMA:g} in the H0 summary")
+
+
+def refresh_thresholds(cells, summary):
+    """
+    c_alpha05, c_3sigma and k_local of every validation cell from an H0 summary,
+    interpolated in log u0 at the cell's u0 as for the power maps; lambda and
+    the noisy-H1 profiles are unchanged.
+    """
+    check_summary(summary)
+    blend = np.unique([c["blend_ratio"] for c in cells.values()])
+    mags = np.unique([c["F146"] for c in cells.values()])
+    nodes, u0_nodes = node_tables(summary, blend, mags)
+    for c in cells.values():
+        ib = int(np.flatnonzero(np.isclose(blend, c["blend_ratio"]))[0])
+        im = int(np.flatnonzero(np.isclose(mags, c["F146"]))[0])
+        u = np.array([c["u0"]])
+        for key, name in (("c05", "c_alpha05"), ("c3s", "c_3sigma"), ("k", "k_local")):
+            c[name] = float(interp_log_u0(nodes[key][ib, im][None, :], u0_nodes, u)[0, 0])
+
+
 def validate(args):
     from binary_source.analysis.lrt_gross_vitells import wilson
     spec = json.loads(args.validate.read_text())
     cells = {c["config_id"]: c for c in spec["cells"]}
+    if args.gv_summary is not None:
+        refresh_thresholds(cells, json.loads(args.gv_summary.read_text()))
+        print(f"thresholds and k_local of the cells from {args.gv_summary}")
     T = {cid: [] for cid in cells}
     for f in args.profiles:
         d = json.loads(Path(f).read_text())
         if d.get("config_id") in T:
             T[d["config_id"]].append(float(d["T_profile"]))
     lines = ["config_id,n,lambda,k_local,c_alpha05,power05_pred,power05_meas,power05_lo,power05_hi,"
-             "power3s_pred,power3s_meas,mean_T,k_plus_lambda,median_T,median_T_pred"]
+             "power3s_pred,power3s_meas,mean_T,k_plus_lambda,median_T,median_T_pred,c_3sigma"]
     print(f"{'cell':>18} {'n':>4} {'lambda':>7} | {'pow05 pred':>10} {'meas [68%]':>20} | "
           f"{'pow3s pred':>10} {'meas':>6} | {'<T>':>7} {'k+lam':>7}")
     for cid, c in cells.items():
@@ -211,13 +243,16 @@ def validate(args):
         n05, n3s = int((t > c["c_alpha05"]).sum()), int((t > c["c_3sigma"]).sum())
         lo, hi = wilson(n05, n)
         med_pred = float(stats.ncx2.ppf(0.5, c["k_local"], c["lambda"]))
+        c["power05_pred"], c["power3s_pred"] = (
+            float(stats.ncx2.sf(c[key], c["k_local"], c["lambda"])) for key in ("c_alpha05", "c_3sigma"))
         print(f"{cid:>18} {n:4d} {c['lambda']:7.2f} | {c['power05_pred']:10.3f} "
               f"{n05 / n:6.3f} [{lo:.3f}, {hi:.3f}] | {c['power3s_pred']:10.3f} {n3s / n:6.3f} | "
               f"{t.mean():7.2f} {c['k_local'] + c['lambda']:7.2f}")
         lines.append(f"{cid},{n},{c['lambda']:.4f},{c['k_local']:.4f},{c['c_alpha05']:.4f},"
                      f"{c['power05_pred']:.4f},{n05 / n:.4f},{lo:.4f},{hi:.4f},"
                      f"{c['power3s_pred']:.4f},{n3s / n:.4f},{t.mean():.4f},"
-                     f"{c['k_local'] + c['lambda']:.4f},{np.median(t):.4f},{med_pred:.4f}")
+                     f"{c['k_local'] + c['lambda']:.4f},{np.median(t):.4f},{med_pred:.4f},"
+                     f"{c['c_3sigma']:.4f}")
     out = args.validate.with_name(args.validate.stem + "_result.csv")
     out.write_text("\n".join(lines) + "\n")
     print("saved", out)
@@ -407,8 +442,7 @@ def main():
 
     summary = json.loads(args.gv_summary.read_text())
     c0 = float(summary["c0"])
-    if abs(float(summary["alpha"]) - 0.05) > 1e-12 or ALPHA_3SIGMA not in summary["extra_alphas"]:
-        raise SystemExit("expected --alpha 0.05 --extra-alphas 0.0027 in the H0 summary")
+    check_summary(summary)
     A = np.load(args.asimov, allow_pickle=False)
     blend, mags, u0, P = (np.asarray(A[k], float) for k in ("blend_ratio", "F146", "u0_grid", "P_days"))
     lam = np.asarray(A["DELTA_CHI2_PSPL"], float)            # (geo, g, F146, u0, P)

@@ -5,13 +5,15 @@ realizations (sec6_h1_validation_v1).
 
 Inputs (written by binary_source/analysis/roman_sec6_power.py):
     <cells>.json         --select-validation (lambda, c_alpha, k_local per cell)
-    <cells>_result.csv   --validate (measured fractions T > c per cell)
+    <cells>_result.csv   --validate (measured fractions T > c per cell, and the
+                         thresholds and k_local used)
     <cells>_k_h1.json    --validate (maximum-likelihood k_H1 and 68% interval)
 
 Output: <out>.{pdf,png}, two panels
     (a) power against lambda.  Points: measured fraction of the 100
         realizations of each cell with T > c (alpha = 5%, filled; 3 sigma,
-        open), Wilson 68% intervals.  Curves: P(chi2_k(lambda) > c) for the
+        one-sided p = 1.35e-3, open), Wilson 68% intervals.  Curves:
+        P(chi2_k(lambda) > c) for the
         median c of the cells, with k = k_H1 (solid; band: 68% interval of
         k_H1) and k = median H0 k_local (dashed).
     (b) measured against predicted power, cell by cell (each with its own c),
@@ -57,9 +59,10 @@ def main():
 
     ids = [cid for cid in cells if cid in res]
     lam = np.array([cells[c]["lambda"] for c in ids])
-    c05 = np.array([cells[c]["c_alpha05"] for c in ids])
-    c3s = np.array([cells[c]["c_3sigma"] for c in ids])
-    k0 = np.array([cells[c]["k_local"] for c in ids])
+    # thresholds and k_local used by --validate (refreshed there with --gv-summary)
+    c05 = np.array([float(res[c]["c_alpha05"]) for c in ids])
+    c3s = np.array([float(res[c]["c_3sigma"]) for c in ids])
+    k0 = np.array([float(res[c]["k_local"]) for c in ids])
     n = np.array([int(res[c]["n"]) for c in ids])
     m05 = np.array([float(res[c]["power05_meas"]) for c in ids])
     m3s = np.array([float(res[c]["power3s_meas"]) for c in ids])

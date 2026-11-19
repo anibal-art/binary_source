@@ -59,6 +59,8 @@ Usage (from the repository root, PYTHONPATH=$PWD):
     python binary_source/analysis/roman_sec6_asimov_cells.py --shard 0 --n-shards 8 --workers 40
     python binary_source/analysis/roman_sec6_asimov_cells.py --summarize
     (add --grid xiP to any of them for the (P/tE, xi_E) grid)
+    python binary_source/analysis/roman_sec6_asimov_cells.py --grid xiPpaper --umin
+    (finite-source check: closest approach of the luminous source, no fits)
 """
 
 import argparse
@@ -326,6 +328,123 @@ def summarize(args):
     print(f"saved {dest}")
 
 
+# ============================================================
+# Finite-source check, stage 1 (--umin): closest approach of the luminous source
+# ============================================================
+# u0 is the lens - luminous-source separation at t0, but with the orbital motion
+# the luminous source can pass closer to the lens at other epochs.  Finite-source
+# effects matter when this closest approach u_min is ~< 3 rho.  For grid nodes
+# near P/tE = UMIN_PTE and xi_E = UMIN_XI_OVER_U0 * u0, all geometries and the
+# three F146, g = 0, u_min is measured over the observed Roman epochs of the
+# same simulated light curve as the cells (simulate_roman_bspl, photometric
+# filter on; saturated peak epochs are removed), from the pyLIMA source
+# trajectory (trajectory_diagnostics of sanity_check_finite_source).  No fits.
+# The lambda of the corresponding cell is attached when the cell exists.
+
+UMIN_RHO = np.array([5e-4, 1e-3, 1.5e-3])            # bulge sources, F146 = 19-23
+UMIN_PTE = np.array([0.5, 1.0, 3.0, 10.0, 30.0])     # nearest P/tE nodes of the grid
+UMIN_XI_OVER_U0 = np.array([0.5, 2.0, 10.0])         # nearest xi_E nodes of the grid
+
+
+def umin_axes(grid, policy):
+    """Period grid, P indices, and xi_E indices per u0 used by --umin."""
+    P = period_grid(policy, grid)
+    ips = sorted({int(np.argmin(np.abs(np.log(P / TE / r)))) for r in UMIN_PTE})
+    xis = GRIDS[grid]["xi"]
+    ixs = [sorted({int(np.argmin(np.abs(np.log(xis / (u0 * r))))) for r in UMIN_XI_OVER_U0})
+           for u0 in GRIDS[grid]["u0"]]
+    return P, ips, ixs
+
+
+def umin_case(job):
+    """(u_min, t(u_min) - t0, u at the epoch nearest t0, that epoch - t0) of the luminous source."""
+    from binary_source.analysis.sanity_check_finite_source import trajectory_diagnostics
+    grid, ig, im, iu, ix, P_days = job
+    theta, phi, inc = GEO[ig]
+    u0, xi = cell_values(grid, iu, ix)
+    sim = bs.simulate_roman_bspl(
+        event_index=0, P_days=float(P_days), u0=u0, tE=TE, t0=T0_DEFAULT,
+        source_mag_ab=float(MAGS[im]), asimov=True, truth_parallax=False, q_flux=0.0,
+        time_window_te=FIT_WINDOW_TE, apply_photometric_filter=PHOTOMETRIC_FILTER,
+        phi=float(phi), inclination=float(inc), theta=float(theta),
+        xi_rel=xi * (1.0 + Q_MASS) / Q_MASS, blend_ratio=0.0,
+    )
+    model, pyp = sim["model"], sim["py_params"]
+    tel = model.event.telescopes[0]
+    t = plain(tel.lightcurve["time"])
+    # q_flux = 0: source 1 is the luminous star, source 2 the dark companion
+    geo = trajectory_diagnostics(t, model.sources_trajectory(tel, pyp, data_type="photometry"))
+    i0 = int(np.argmin(np.abs(t - T0_DEFAULT)))
+    return (geo["u1_min"], geo["t_u1_min"] - T0_DEFAULT,
+            float(geo["u1"][i0]), float(t[i0] - T0_DEFAULT))
+
+
+def cell_lambda(directory, grid, ig, im, iu, ix, ip, P):
+    """lambda of the (g = 0) cell at this period, NaN if the cell is not there."""
+    f = outfile(directory, grid, ig, 0, im, iu, ix)
+    if not valid(f, P, *cell_values(grid, iu, ix)):
+        return np.nan
+    with np.load(f, allow_pickle=False) as d:
+        return float(d["delta_chi2_pspl"][ip])
+
+
+def umin(args):
+    grid = args.grid
+    if GRIDS[grid]["xi"] is None:
+        raise SystemExit("--umin needs a grid with a xi_E axis (xiP, xiPpaper)")
+    P, ips, ixs = umin_axes(grid, args.fit_policy)
+    u0s, xis = GRIDS[grid]["u0"], GRIDS[grid]["xi"]
+    idx = [(ig, im, iu, ix, ip)
+           for im in range(len(MAGS)) for iu in range(len(u0s)) for ix in ixs[iu]
+           for ip in ips for ig in range(len(GEO))]
+    if args.umin_limit is not None:
+        idx = idx[:args.umin_limit]
+    print(f"provenance: {provenance()}")
+    print(f"--umin, grid {grid}: P/tE nodes {np.round(P[ips] / TE, 3).tolist()}, "
+          f"{len(idx)} simulations (no fits)")
+    out = np.full((len(idx), 4), np.nan)
+    with ProcessPoolExecutor(max_workers=args.workers) as ex:
+        futs = {ex.submit(umin_case, (grid, ig, im, iu, ix, float(P[ip]))): n
+                for n, (ig, im, iu, ix, ip) in enumerate(idx)}
+        for k, f in enumerate(as_completed(futs), 1):
+            try:
+                out[futs[f]] = f.result()
+            except Exception as exc:
+                print(f"error {idx[futs[f]]}: {type(exc).__name__}: {exc}"[:300])
+            if k % 200 == 0 or k == len(idx):
+                print(f"{k}/{len(idx)}", flush=True)
+    a = np.array(idx)
+    lam = np.array([cell_lambda(args.out, grid, ig, im, iu, ix, ip, P) for ig, im, iu, ix, ip in idx])
+    rec = dict(geometry_index=a[:, 0], F146=MAGS[a[:, 1]], u0=u0s[a[:, 2]], xi_E=xis[a[:, 3]],
+               PtE=P[a[:, 4]] / TE, u_min=out[:, 0], t_u_min=out[:, 1], u_t0=out[:, 2],
+               dt_t0=out[:, 3], lambda_cell=lam)
+    dest = Path(args.out) / f"umin_{grid}.npz"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(dest, **rec, rho=UMIN_RHO, tE=TE, t0=T0_DEFAULT, blend_ratio=0.0,
+                        photometric_filter=PHOTOMETRIC_FILTER, **provenance())
+
+    # u at the epoch nearest t0 must be u0 (convention check; epochs within 0.01 d)
+    near = np.isfinite(rec["u_t0"]) & (np.abs(rec["dt_t0"]) < 0.01)
+    if near.any():
+        dev = np.abs(rec["u_t0"][near] / rec["u0"][near] - 1.0)
+        print(f"convention check, |u(t0)/u0 - 1| over {int(near.sum())} cases: max {dev.max():.2e}")
+    print("\nF146 u0     xi_E    P/tE  | med u_min/u0  min u_min | frac(u_min < 3 rho), rho = "
+          + " ".join(f"{r:.1e}" for r in UMIN_RHO) + " | med lambda")
+    for m in MAGS:
+        for u0 in u0s:
+            for xi in np.unique(rec["xi_E"][rec["u0"] == u0]):
+                for pte in np.unique(rec["PtE"]):
+                    s = ((rec["F146"] == m) & (rec["u0"] == u0) & (rec["xi_E"] == xi)
+                         & (rec["PtE"] == pte) & np.isfinite(rec["u_min"]))
+                    if not s.any():
+                        continue
+                    um = rec["u_min"][s]
+                    fr = " ".join(f"{np.mean(um < 3 * r):7.2f}" for r in UMIN_RHO)
+                    print(f"{m:4.0f} {u0:<6.3g} {xi:<7.3g} {pte:<6.3g}| {np.median(um / u0):12.3f}"
+                          f"  {um.min():9.2e} | {fr} | {np.nanmedian(rec['lambda_cell'][s]):9.3g}")
+    print(f"saved {dest}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--grid", choices=sorted(GRIDS), default="u0P")
@@ -338,6 +457,10 @@ def main():
     g.add_argument("--pilot", action="store_true")
     g.add_argument("--list", action="store_true")
     g.add_argument("--summarize", action="store_true")
+    g.add_argument("--umin", action="store_true",
+                   help="finite-source check: closest approach of the luminous source (no fits)")
+    ap.add_argument("--umin-limit", type=int, default=None,
+                    help="--umin: only the first N simulations (quick test)")
     args = ap.parse_args()
     if args.out is None:
         args.out = GRIDS[args.grid]["out"]
@@ -351,6 +474,8 @@ def main():
               f"x {len(P)} P = {nt * len(P)} cases")
     elif args.summarize:
         summarize(args)
+    elif args.umin:
+        umin(args)
     else:
         run(args)
 

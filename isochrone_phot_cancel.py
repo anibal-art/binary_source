@@ -465,12 +465,12 @@ def track_lines(ax, key):
 
 
 # (a) F146 flux ratio against mass ratio
-fig, ax = plt.subplots(figsize=(w, 0.85 * w))
+fig, ax = plt.subplots(figsize=(w, 0.85 * w), layout="constrained")
 q_ref = np.logspace(-1.1, 0.0, 500)
 ax.plot(q_ref, q_ref, color="k", lw=LW_THIN, ls="--")
 ax.plot(q_ref, q_ref ** 4, color="0.45", lw=LW_THIN, ls=":")
 ax.text(0.22, 0.42, r"$q_f=q_M$", fontsize=FS_ANNOT)
-ax.text(0.33, 2.5e-3, r"$q_f=q_M^4$", fontsize=FS_ANNOT, color="0.45")
+ax.text(0.40, 5e-3, r"$q_f=q_M^4$", fontsize=FS_ANNOT, color="0.45")
 track_lines(ax, "qf")
 ax.set_xscale("log")
 ax.set_yscale("log")
@@ -485,7 +485,7 @@ for f in save_figure(fig, output_directory / "physical_qM_qf_PARSECF146"):
 plt.close(fig)
 
 # (b) surviving first-order photocenter amplitude
-fig, ax = plt.subplots(figsize=(w, 0.85 * w))
+fig, ax = plt.subplots(figsize=(w, 0.85 * w), layout="constrained")
 ax.axhline(1.0, color="0.6", lw=LW_THIN, ls=":")
 ax.axhline(0.0, color="0.6", lw=LW_THIN, ls="--")
 track_lines(ax, "Sph")
@@ -494,7 +494,7 @@ ax.set_ylim(-0.03, 1.05)
 ax.set_xlabel(r"$q_M=M_{S,2}/M_{S,1}$")
 ax.set_ylabel(r"$S_{\rm ph}$")
 ax.legend(loc="lower left")
-panel_label(ax, "b")
+panel_label(ax, "b", x=0.86)
 for f in save_figure(fig, output_directory / "physical_photocenter_suppression_PARSECF146"):
     print("saved", f)
 plt.close(fig)

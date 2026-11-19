@@ -13,10 +13,7 @@ from scipy.interpolate import PchipInterpolator
 
 home = Path.home()
 
-repo = (
-    home
-    / "binary_source"
-)
+repo = Path(__file__).resolve().parent          # repository root
 
 isochrone_file = (
     repo
@@ -435,235 +432,69 @@ for M1 in M1_values:
 
 
 # ============================================================
-# FIGURE 1:
-# PHYSICAL qf(qM)
+# TRACKS FOR run_paper_figures.py AND FIGURES IN THE PAPER STYLE
 # ============================================================
 
-fig, ax = plt.subplots(
-
-    figsize=(
-        6.5,
-        5.0,
-    )
-
-)
-
-
-q_ref = np.logspace(
-
-    -1.1,
-
-    0.0,
-
-    500,
-
-)
-
-
-ax.plot(
-
-    q_ref,
-    q_ref,
-
-    linestyle="--",
-
-    linewidth=1.5,
-
-    label=r"$q_f=q_M$ (exact cancellation)",
-
-)
-
-
-ax.plot(
-
-    q_ref,
-    q_ref**4,
-
-    linestyle=":",
-
-    linewidth=1.5,
-
-    label=r"$q_f=q_M^4$ (toy model)",
-
-)
-
-
-for M1 in M1_values:
-
-    track = tracks[
-        M1
-    ]
-
-    ax.plot(
-
-        track["qM"],
-        track["qf"],
-
-        linewidth=2,
-
-        label=(
-            rf"PARSEC F146, "
-            rf"$M_1={M1:.1f}\,M_\odot$"
-        ),
-
-    )
-
-
-ax.set_xscale(
-    "log"
-)
-
-ax.set_yscale(
-    "log"
-)
-
-
-ax.set_xlabel(
-    r"$q_M=M_2/M_1$"
-)
-
-ax.set_ylabel(
-    r"$q_f^{\rm F146}=F_2/F_1$"
-)
-
-
-ax.grid(
-    alpha=0.25
-)
-
-ax.legend(
-    fontsize=8
-)
-
-
-fig.tight_layout()
-
-
-fig.savefig(
-
-    output_directory
-    /
-    "physical_qM_qf_PARSECF146.pdf"
-
-)
-
-fig.savefig(
-
-    output_directory
-    /
-    "physical_qM_qf_PARSECF146.png",
-
-    dpi=300,
-
-)
-
-
-# ============================================================
-# FIGURE 2:
-# PHOTOCENTER SUPPRESSION
-# ============================================================
-
-fig, ax = plt.subplots(
-
-    figsize=(
-        6.5,
-        5.0,
-    )
-
-)
-
-
-for M1 in M1_values:
-
-    track = tracks[
-        M1
-    ]
-
-    ax.plot(
-
-        track["qM"],
-        track["Sph"],
-
-        linewidth=2,
-
-        label=(
-            rf"$M_1={M1:.1f}\,M_\odot$"
-        ),
-
-    )
-
-
-ax.axhline(
-
-    1.0,
-
-    linestyle=":",
-
-    linewidth=1,
-
-)
-
-
-ax.axhline(
-
-    0.0,
-
-    linestyle="--",
-
-    linewidth=1,
-
-)
-
-
-ax.set_xscale(
-    "log"
-)
-
-
-ax.set_xlabel(
-    r"$q_M=M_2/M_1$"
-)
-
-ax.set_ylabel(
-    r"$S_{\rm ph}$"
-)
-
-
-ax.set_ylim(
-    -0.03,
-    1.05,
-)
-
-
-ax.grid(
-    alpha=0.25
-)
-
-ax.legend(
-    fontsize=9
-)
-
-
-fig.tight_layout()
-
-
-fig.savefig(
-
-    output_directory
-    /
-    "physical_photocenter_suppression_PARSECF146.pdf"
-
-)
-
-fig.savefig(
-
-    output_directory
-    /
-    "physical_photocenter_suppression_PARSECF146.png",
-
-    dpi=300,
-
-)
-
-
-plt.show()
+import json
+import sys
+
+sys.path.insert(0, str(repo / "binary_source" / "plot_codes"))
+from paper_style import (apply_paper_style, fig_width, panel_label, save_figure,  # noqa: E402
+                         M1_STYLE, LW_MAIN, LW_THIN, FS_ANNOT)
+
+json_path = output_directory / "physical_qM_qf_PARSECF146.json"
+json_path.write_text(json.dumps({
+    "isochrone": isochrone_file.name,
+    "band": "Roman F146",
+    "tracks": {f"{M1:g}": {"qM": np.asarray(tracks[M1]["qM"]).tolist(),
+                           "qf": np.asarray(tracks[M1]["qf"]).tolist()}
+               for M1 in M1_values},
+}, indent=1))
+print("saved", json_path)
+
+apply_paper_style()
+w = fig_width(0.49)
+
+
+def track_lines(ax, key):
+    for M1 in M1_values:
+        st = M1_STYLE[M1]
+        ax.plot(tracks[M1]["qM"], tracks[M1][key], color=st["color"], lw=LW_MAIN,
+                marker=st["marker"], markevery=0.2, ms=3.0, mec="white", mew=0.5,
+                label=rf"$M_{{S,1}}={M1:g}\,M_\odot$")
+
+
+# (a) F146 flux ratio against mass ratio
+fig, ax = plt.subplots(figsize=(w, 0.85 * w))
+q_ref = np.logspace(-1.1, 0.0, 500)
+ax.plot(q_ref, q_ref, color="k", lw=LW_THIN, ls="--")
+ax.plot(q_ref, q_ref ** 4, color="0.45", lw=LW_THIN, ls=":")
+ax.text(0.22, 0.42, r"$q_f=q_M$", fontsize=FS_ANNOT)
+ax.text(0.33, 2.5e-3, r"$q_f=q_M^4$", fontsize=FS_ANNOT, color="0.45")
+track_lines(ax, "qf")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.08, 1.05)
+ax.set_ylim(3e-5, 1.5)
+ax.set_xlabel(r"$q_M=M_{S,2}/M_{S,1}$")
+ax.set_ylabel(r"$q_f=F_{S,2}/F_{S,1}$ (F146)")
+ax.legend(loc="lower right")
+panel_label(ax, "a")
+for f in save_figure(fig, output_directory / "physical_qM_qf_PARSECF146"):
+    print("saved", f)
+plt.close(fig)
+
+# (b) surviving first-order photocenter amplitude
+fig, ax = plt.subplots(figsize=(w, 0.85 * w))
+ax.axhline(1.0, color="0.6", lw=LW_THIN, ls=":")
+ax.axhline(0.0, color="0.6", lw=LW_THIN, ls="--")
+track_lines(ax, "Sph")
+ax.set_xlim(0.1, 1.0)
+ax.set_ylim(-0.03, 1.05)
+ax.set_xlabel(r"$q_M=M_{S,2}/M_{S,1}$")
+ax.set_ylabel(r"$S_{\rm ph}$")
+ax.legend(loc="lower left")
+panel_label(ax, "b")
+for f in save_figure(fig, output_directory / "physical_photocenter_suppression_PARSECF146"):
+    print("saved", f)
+plt.close(fig)

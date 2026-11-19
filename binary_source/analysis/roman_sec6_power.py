@@ -304,8 +304,8 @@ def power_xi(args, A, I, c0):
     LAMBDA (geo, g, F146, u0, xi_E, P).  Same model as the u0P grid; the
     thresholds are interpolated at the three u0 of the grid.  Writes
     <out>.npz with the power arrays and the boundary xi_E,min(P/tE) at which
-    the orientation-mean power reaches 0.5 and 0.9 (alpha = 5%) and 0.5
-    (3 sigma), and <out>_boundary.csv.
+    the orientation-mean power reaches 0.5 and 0.9 (alpha = 5% and 3 sigma),
+    and <out>_boundary.csv.
     """
     lam = np.asarray(A["DELTA_CHI2_PSPL"], float)
     blend, mags, u0 = (np.asarray(A[k], float) for k in ("blend_ratio", "F146", "u0_grid"))
@@ -328,7 +328,7 @@ def power_xi(args, A, I, c0):
     iso = slice(1, lam.shape[0])                              # row 0 = reference geometry
     mean05, mean3s = np.nanmean(pw05[iso], axis=0), np.nanmean(pw3s[iso], axis=0)
     xb05_50, xb05_90 = boundary_xi(mean05, xi, 0.5), boundary_xi(mean05, xi, 0.9)
-    xb3s_50 = boundary_xi(mean3s, xi, 0.5)
+    xb3s_50, xb3s_90 = boundary_xi(mean3s, xi, 0.5), boundary_xi(mean3s, xi, 0.9)
     xbref_50 = boundary_xi(pw05[0], xi, 0.5)
 
     np.savez_compressed(
@@ -339,7 +339,8 @@ def power_xi(args, A, I, c0):
         BEST_U0=np.asarray(A["BEST_U0"], float), BEST_T0=np.asarray(A["BEST_T0"], float),
         SNR_EVENT=np.asarray(A["SNR_EVENT"], float),
         XI_BOUNDARY_ALPHA05_P50=xb05_50, XI_BOUNDARY_ALPHA05_P90=xb05_90,
-        XI_BOUNDARY_3SIGMA_P50=xb3s_50, XI_BOUNDARY_REFERENCE_ALPHA05_P50=xbref_50,
+        XI_BOUNDARY_3SIGMA_P50=xb3s_50, XI_BOUNDARY_3SIGMA_P90=xb3s_90,
+        XI_BOUNDARY_REFERENCE_ALPHA05_P50=xbref_50,
         C_ALPHA05=I["c05"], C_3SIGMA=I["c3s"], K_LOCAL=I["k"], N_C0=I["N0"],
         k_h1=(np.nan if args.k_h1 is None else float(args.k_h1)),
         blend_ratio=blend, F146=mags, u0_grid=u0, xiE_grid=xi, PtE_grid=pte,
@@ -347,14 +348,16 @@ def power_xi(args, A, I, c0):
         c0=c0, gv_summary=str(args.gv_summary), asimov=str(args.asimov))
 
     lines = ["g,F146,u0,P_over_tE,P_days,xiE_min_pow50_alpha05,xiE_min_pow90_alpha05,"
-             "xiE_min_pow50_3sigma,xiE_min_pow50_alpha05_reference_geometry"]
+             "xiE_min_pow50_3sigma,xiE_min_pow50_alpha05_reference_geometry,"
+             "xiE_min_pow90_3sigma"]
     for ib, g in enumerate(blend):
         for im, mag in enumerate(mags):
             for iu, uu in enumerate(u0):
                 for ip, pp in enumerate(pte):
                     lines.append(f"{g:g},{mag:g},{uu:g},{pp:.6g},{pp * float(A['tE']):.6g},"
                                  f"{xb05_50[ib, im, iu, ip]:.6g},{xb05_90[ib, im, iu, ip]:.6g},"
-                                 f"{xb3s_50[ib, im, iu, ip]:.6g},{xbref_50[ib, im, iu, ip]:.6g}")
+                                 f"{xb3s_50[ib, im, iu, ip]:.6g},{xbref_50[ib, im, iu, ip]:.6g},"
+                                 f"{xb3s_90[ib, im, iu, ip]:.6g}")
     Path(str(args.out) + "_boundary.csv").write_text("\n".join(lines) + "\n")
 
     show = [int(np.argmin(np.abs(np.log(pte / v)))) for v in (1.0, 3.0, 10.0, 30.0, 100.0)]
@@ -365,6 +368,14 @@ def power_xi(args, A, I, c0):
             for iu, uu in enumerate(u0):
                 vals = "  ".join(f"{xb05_50[ib, im, iu, j]:8.3g}" for j in show)
                 print(f"  g {g:g}  F146 {mag:g}  u0 {uu:<5g} | {vals}")
+    print(f"\nxi_E,min (orientation-mean power 0.5 | 0.9, 3 sigma) at P/tE = "
+          + ", ".join(f"{pte[j]:.3g}" for j in show))
+    for ib, g in enumerate(blend):
+        for im, mag in enumerate(mags):
+            for iu, uu in enumerate(u0):
+                v50 = "  ".join(f"{xb3s_50[ib, im, iu, j]:8.3g}" for j in show)
+                v90 = "  ".join(f"{xb3s_90[ib, im, iu, j]:8.3g}" for j in show)
+                print(f"  g {g:g}  F146 {mag:g}  u0 {uu:<5g} | {v50} | {v90}")
     print("\nsaved", str(args.out) + ".npz", str(args.out) + "_boundary.csv")
 
 

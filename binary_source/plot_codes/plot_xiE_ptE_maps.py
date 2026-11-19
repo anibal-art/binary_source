@@ -435,7 +435,7 @@ def bias_figure(S, outdir):
     cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal")
     cbar.ax.xaxis.set_ticks_position("top"); cbar.ax.xaxis.set_label_position("top")
     cbar.ax.tick_params(which="both", direction="in", pad=1.5)
-    cbar.set_label(r"median $|\Delta t_E|/t_E$ (\%)", labelpad=3)
+    cbar.set_label(r"median $|\Delta t_E|/t_E\ (\%)$", labelpad=3)
 
     # (b) ranked per-orientation medians against the uniform distribution
     cdf = (np.arange(n_geo) + 0.5) / n_geo

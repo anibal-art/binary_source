@@ -136,9 +136,17 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
 
     m_pspl_model = runner.build_fit_model(lc, ra, dec, ref, False)
     m_bspl_model = runner.build_fit_model(lc, ra, dec, ref, True)
+    v_bspl = best_bspl_vector(profile)
     m_pspl = runner.model_magnitude(m_pspl_model, pspl["best_model"])
-    m_bspl = runner.model_magnitude(m_bspl_model, best_bspl_vector(profile))
     fx, fy = pspl_trajectory(m_pspl_model, pspl["best_model"])
+    # fitted models on a dense time grid, so that gaps in the data (saturated
+    # points removed at the peak, season edges) are not drawn as straight segments
+    td = np.linspace(t0 - args.zoom_tE * tE, t0 + args.zoom_tE * tE, 4001)
+    lcd = np.column_stack([td, np.full_like(td, np.median(m)), np.full_like(td, np.median(e))])
+    md_pspl = runner.model_magnitude(runner.build_fit_model(lcd, ra, dec, ref, False),
+                                     pspl["best_model"])
+    md_bspl = runner.model_magnitude(runner.build_fit_model(lcd, ra, dec, ref, True), v_bspl)
+    taud = (td - t0) / tE
 
     tau = (t - t0) / tE
     z = np.abs(tau) < args.zoom_tE
@@ -184,13 +192,17 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     # light curve
     tb, mb, eb = binned(t[z], m[z], w[z], args.bin_days)
     axA.errorbar((tb - t0) / tE, mb, eb, fmt=".", ms=2.5, color="0.45", lw=0.5, zorder=1)
-    if "truth_mag" in a:
+    if "truth_mag" in a:                           # stored at the data epochs: break at gaps
         otr = np.argsort(a["truth_time"])
-        ztr = np.abs((a["truth_time"][otr] - t0) / tE) < args.zoom_tE
-        axA.plot((a["truth_time"][otr][ztr] - t0) / tE, a["truth_mag"][otr][ztr], color="k",
+        xt = (np.asarray(a["truth_time"], float)[otr] - t0) / tE
+        yt = np.asarray(a["truth_mag"], float)[otr]
+        keep = np.abs(xt) < args.zoom_tE
+        xt, yt = xt[keep], yt[keep]
+        cut = np.flatnonzero(np.diff(xt) > 5 * np.median(np.diff(xt))) + 1
+        axA.plot(np.insert(xt, cut, np.nan), np.insert(yt, cut, np.nan), color="k",
                  lw=LW_MAIN, zorder=3)
-    axA.plot(tau[oz], m_pspl[oz], color=C_VERMILION, lw=LW_MAIN, ls="--", zorder=4)
-    axA.plot(tau[oz], m_bspl[oz], color=C_BLUE, lw=LW_THIN, ls=":", zorder=5)
+    axA.plot(taud, md_pspl, color=C_VERMILION, lw=LW_MAIN, ls="--", zorder=4)
+    axA.plot(taud, md_bspl, color=C_BLUE, lw=LW_THIN, ls=":", zorder=5)
     axA.invert_yaxis()
     faint, bright = axA.get_ylim()                 # headroom above the peak for the labels
     axA.set_ylim(faint, bright - 0.55 * (faint - bright))
@@ -209,7 +221,7 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     tr_, rb, rbe = binned(t[z], r[z], w[z], args.resid_bin_days)
     axR.axhline(0.0, color="0.6", lw=LW_THIN, ls=":")
     axR.errorbar((tr_ - t0) / tE, 1e3 * rb, 1e3 * rbe, fmt=".", ms=2.5, color="0.45", lw=0.5)
-    axR.plot(tau[oz], 1e3 * (m_bspl - m_pspl)[oz], color=C_BLUE, lw=LW_MAIN)
+    axR.plot(taud, 1e3 * (md_bspl - md_pspl), color=C_BLUE, lw=LW_MAIN)
     lim = 1.2 * np.nanmax(np.abs(1e3 * rb) + 1e3 * rbe)
     axR.set_ylim(lim, -lim)                         # magnitudes: brighter up
     axR.set_xlabel(r"$(t-t_0)/t_E$")

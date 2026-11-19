@@ -74,7 +74,7 @@ def labels(tex):
                 f146=(lambda m: rf"$F_{{146}} = {m:g}$"),
                 g=(lambda g: rf"$g = {g:g}$"),
                 u0=(lambda u: rf"$u_0 = {u:g}$"),
-                alpha=r"$\alpha = 5\%$")
+                alpha=r"$5\%$ false-alarm probability")
 
 
 def power_figure(d, iu, outdir, tex):
@@ -107,7 +107,7 @@ def power_figure(d, iu, outdir, tex):
             if ib == len(blend) - 1:
                 ax.set_xlabel(L["xi"])
     fig.colorbar(pcm, ax=axes, shrink=0.9,
-                 label=f"Power ({L['alpha']}), mean over orientations, " + L["u0"](d["u0_grid"][iu]))
+                 label=f"Detection efficiency ({L['alpha']}), mean over orientations, " + L["u0"](d["u0_grid"][iu]))
     return save_figure(fig, Path(outdir) / f"sec6_power_xiE_ptE_u0_{d['u0_grid'][iu]:g}".replace(".", "p"))
 
 
@@ -236,7 +236,7 @@ def regions_figure(d, summaries, ib, bias_thr, outdir, tex):
                 ax.set_xlabel(L["xi"])
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in (C_BLUE, C_VERMILION, "0.85")]
     thr = rf"$|\Delta t_{{\rm E}}/t_{{\rm E}}| \geq {bias_thr:g}$"
-    lax.legend(handles, [r"detected (power $\geq 0.5$)", "confused, " + thr,
+    lax.legend(handles, [r"detected (efficiency $\geq 0.5$)", "confused, " + thr,
                          r"confused, $|\Delta t_{\rm E}/t_{\rm E}| <$ " + f"{bias_thr:g}"],
                loc="center", ncol=3, frameon=False, handlelength=1.2, columnspacing=1.2)
     return save_figure(fig, Path(outdir) / f"sec6_regions_xiE_ptE_g{d['blend_ratio'][ib]:g}")

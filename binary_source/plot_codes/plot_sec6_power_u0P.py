@@ -72,7 +72,7 @@ def main():
             if ib == len(blend) - 1:
                 ax.set_xlabel(r"$u_0$")
     # mathtext labels: the same strings work with and without usetex
-    label = r"Power ($\alpha = 5\%$), mean over orientations"
+    label = r"Detection efficiency ($5\%$ false-alarm probability)"
     fig.colorbar(pcm, ax=axes, label=label, shrink=0.9)
     print("k_H1 =", float(d["k_h1"]))
     for f in save_figure(fig, args.out):

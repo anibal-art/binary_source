@@ -72,7 +72,7 @@ def main():
     fig, (ax, bx) = plt.subplots(1, 2, figsize=(fig_width(1.0), fig_width(0.42)),
                                  constrained_layout=True)
     lg = np.linspace(0.0, 1.1 * lam.max(), 300)
-    for cc, mm, ci, col, mk, lab in ((np.median(c05), m05, ci05, C_BLUE, "o", r"$\alpha = 5\%$"),
+    for cc, mm, ci, col, mk, lab in ((np.median(c05), m05, ci05, C_BLUE, "o", r"$5\%$"),
                                      (np.median(c3s), m3s, ci3s, C_VERMILION, "s", r"$3\sigma$")):
         ax.fill_between(lg, stats.ncx2.sf(cc, k1_lo, lg), stats.ncx2.sf(cc, k1_hi, lg),
                         color=col, alpha=0.2, lw=0)
@@ -80,27 +80,27 @@ def main():
         ax.plot(lg, stats.ncx2.sf(cc, np.median(k0), lg), color=col, lw=1.0, ls="--")
         ax.errorbar(lam, mm, yerr=[mm - ci[:, 0], ci[:, 1] - mm], fmt=mk, ms=3.5, color=col,
                     mfc=col if mk == "o" else "white", lw=0.8, capsize=0, label=lab)
-    ax.plot([], [], color="0.3", lw=1.2, label=rf"$k_{{\rm H1}} = {k1:.2f}$")
-    ax.plot([], [], color="0.3", lw=1.0, ls="--", label=rf"$k_{{\rm local}} = {np.median(k0):.1f}$ (H0)")
-    ax.set_xlabel(r"$\lambda$ (Asimov $\Delta\chi^2$)")
-    ax.set_ylabel("Power")
+    ax.plot([], [], color="0.3", lw=1.2, label=rf"$k = {k1:.1f}$")
+    ax.plot([], [], color="0.3", lw=1.0, ls="--", label=rf"$k = {np.median(k0):.1f}$ (PSPL curves)")
+    ax.set_xlabel(r"$\lambda$")
+    ax.set_ylabel("Detection efficiency")
     ax.set_ylim(-0.02, 1.02)
     ax.set_xlim(0, lg[-1])
     ax.legend(frameon=False, loc="lower right")
     panel_label(ax, "a")
 
-    for k_use, mfc, lab in ((k1, None, r"$k_{\rm H1}$"), (k0, "white", r"$k_{\rm local}$ (H0)")):
+    for k_use, mfc, lab in ((k1, None, rf"$k = {k1:.1f}$"), (k0, "white", r"$k$ (PSPL curves)")):
         p05 = stats.ncx2.sf(c05, k_use, lam)
         p3s = stats.ncx2.sf(c3s, k_use, lam)
         bx.errorbar(p05, m05, yerr=[m05 - ci05[:, 0], ci05[:, 1] - m05], fmt="o", ms=3.5,
                     color=C_BLUE, mfc=mfc or C_BLUE, lw=0.8, capsize=0,
-                    label=r"$\alpha = 5\%$, " + lab)
+                    label=r"$5\%$, " + lab)
         bx.errorbar(p3s, m3s, yerr=[m3s - ci3s[:, 0], ci3s[:, 1] - m3s], fmt="s", ms=3.5,
                     color=C_VERMILION, mfc=mfc or C_VERMILION, lw=0.8, capsize=0,
                     label=r"$3\sigma$, " + lab)
     bx.plot([0, 1], [0, 1], color="0.5", lw=0.7, ls=":")
-    bx.set_xlabel("Predicted power")
-    bx.set_ylabel("Measured power")
+    bx.set_xlabel("Predicted efficiency")
+    bx.set_ylabel("Measured efficiency")
     bx.set_xlim(-0.02, 1.02)
     bx.set_ylim(-0.02, 1.02)
     bx.legend(frameon=False, loc="lower right", fontsize="small")

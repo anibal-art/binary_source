@@ -32,6 +32,14 @@ Usage:
 .png for each and <out>_summary.json / .csv with one row per configuration.
 --extra-alphas adds critical values at other levels (e.g. 0.0027 = 3 sigma),
 extrapolated with the same Gross-Vitells fit.
+
+--validate (with --group-by-config) checks the Gross-Vitells critical values
+against the realizations themselves: (1) pooled fraction of realizations with
+T above the critical value of their configuration, in-sample; (2) the same
+with split halves (critical value fitted on one half of each configuration,
+counted on the other, and vice versa); (3) chi2 homogeneity of the 5%
+critical value across configurations, with the bootstrap 16-84 half-width as
+uncertainty.  Writes <out>_validation.json.
 """
 
 import argparse
@@ -124,6 +132,70 @@ def wilson(k, n, z=1.0):
     return mid - half, mid + half
 
 
+def split_half_counts(curves, T, levels, c0, alphas, rng):
+    """Exceedances of T over the GV k_local critical value fitted on the other half."""
+    n = len(T)
+    idx = rng.permutation(n)
+    halves = (idx[: n // 2], idx[n // 2:])
+    counts = {a: [0, 0] for a in alphas}
+    for fit_i, test_i in ((0, 1), (1, 0)):
+        f, t = halves[fit_i], halves[test_i]
+        res = analyse([curves[i] for i in f], T[f], levels, c0, alphas[0], alphas[1:])
+        crit = {alphas[0]: res["c_crit_gv_klocal"]}
+        crit.update({a: res["c_crit_extra"][f"{a:g}"]["gv_klocal"] for a in alphas[1:]})
+        for a in alphas:
+            counts[a][0] += int(np.sum(T[t] > crit[a]))
+            counts[a][1] += len(t)
+    return counts
+
+
+def validation(rows, args):
+    """Pooled empirical false-alarm rate of the GV critical values, and homogeneity."""
+    alphas = [args.alpha] + list(args.extra_alphas)
+    levels = np.array(args.levels, dtype=float)
+    rng = np.random.default_rng(1)
+    insample = {a: [0, 0] for a in alphas}
+    split = {a: [0, 0] for a in alphas}
+    for o in rows:
+        T = np.array(o["T"])
+        crit = {args.alpha: o["c_crit_gv_klocal"]}
+        crit.update({a: o["c_crit_extra"][f"{a:g}"]["gv_klocal"] for a in args.extra_alphas})
+        for a in alphas:
+            insample[a][0] += int(np.sum(T > crit[a]))
+            insample[a][1] += len(T)
+        curves, _, T2, _ = load(o["profiles"])
+        for a, (k, m) in split_half_counts(curves, T2, levels, args.c0, alphas, rng).items():
+            split[a][0] += k
+            split[a][1] += m
+    report = {"c0": args.c0, "n_configurations": len(rows), "levels": {}}
+    print("\nvalidation of the Gross-Vitells critical values (k_local):")
+    for a in alphas:
+        r = {}
+        for name, (k, m) in (("in_sample", insample[a]), ("split_half", split[a])):
+            lo, hi = wilson(k, m)
+            r[name] = {"n_above": k, "n": m, "rate": k / m, "rate_1sigma": [lo, hi]}
+            print(f"  alpha = {a:g} ({name}): {k}/{m} = {k / m:.4f} "
+                  f"[{lo:.4f}, {hi:.4f}]  (expected {a:g})")
+        report["levels"][f"{a:g}"] = r
+    c = np.array([o["c_crit_gv_klocal"] for o in rows])
+    b = np.array([o["bootstrap_16_84"]["c_crit_gv_klocal"] for o in rows])
+    sig = (b[:, 1] - b[:, 0]) / 2
+    ok = sig > 0
+    w = 1.0 / sig[ok] ** 2
+    cbar = float(np.sum(w * c[ok]) / np.sum(w))
+    chi2 = float(np.sum(((c[ok] - cbar) / sig[ok]) ** 2))
+    dof = int(ok.sum() - 1)
+    pval = float(stats.chi2.sf(chi2, dof))
+    report["homogeneity"] = {"weighted_mean": cbar, "chi2": chi2, "dof": dof, "p": pval,
+                             "min": float(c.min()), "max": float(c.max())}
+    print(f"  homogeneity of the {100 * (1 - args.alpha):g}% critical value: weighted mean "
+          f"{cbar:.2f}, chi2 = {chi2:.1f} for {dof} dof, p = {pval:.3g} "
+          f"(range {c.min():.1f}-{c.max():.1f})")
+    out = Path(str(args.out) + "_validation.json")
+    out.write_text(json.dumps(report, indent=2) + "\n")
+    print("saved", out)
+
+
 def config_of(path):
     return json.loads(Path(path).read_text()).get("config_id")
 
@@ -144,7 +216,12 @@ def main():
                     help="further levels for the critical value, e.g. 0.0027 (3 sigma)")
     ap.add_argument("--group-by-config", action="store_true",
                     help="analyse each config_id of --profiles separately and write a summary")
+    ap.add_argument("--validate", action="store_true",
+                    help="with --group-by-config: empirical false-alarm rate of the critical "
+                         "values (in-sample and split halves) and homogeneity test")
     args = ap.parse_args()
+    if args.validate and not args.group_by_config:
+        raise SystemExit("--validate needs --group-by-config")
 
     if not args.group_by_config:
         run(args.profiles, args.out, args)
@@ -188,6 +265,8 @@ def main():
         print("  " + "  ".join(f"{k}={r[k]:.3g}" if isinstance(r[k], float) else f"{k}={r[k]}"
                               for k in keys))
     print("saved", str(args.out) + "_summary.json", str(args.out) + "_summary.csv")
+    if args.validate:
+        validation(rows, args)
 
 
 def run(profiles, out_prefix, args):

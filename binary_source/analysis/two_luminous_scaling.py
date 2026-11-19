@@ -268,9 +268,6 @@ def main():
         panel_label(ax, "abcdef"[k], color="white")
         ax.text(0.19, 0.95, rf"$u_0={u0:g}$", transform=ax.transAxes, ha="left", va="top",
                 color="white", fontsize=FS_ANNOT, zorder=30)
-    fig.text(0.5, 0.775, rf"$q_M={vqm:g}$, $q_f={vqf:g}$: measured (crimson) and "
-             r"two-term model (white dotted, $\xi_{\rm rel}\leq" + f"{args.xi_pert:g}" + "$)",
-             ha="center", fontsize=FS_ANNOT)
     base.top_colorbar(fig, cax, pcm, D_LABEL)
     out = save_figure(fig, os.path.join(args.out, "two_luminous_validation"))
     plt.close(fig)

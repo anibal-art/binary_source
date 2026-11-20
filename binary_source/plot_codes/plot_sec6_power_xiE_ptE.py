@@ -162,6 +162,8 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
     pw = efficiency_levels(d, primary)[0]
     iso = slice(1, Drom.shape[0])
     pline = np.geomspace(pte[0], pte[-1], 200)
+    # hatch colour and width are read when the figure is saved, not when drawn
+    plt.rcParams.update({"hatch.color": "w", "hatch.linewidth": 0.35})
     fig, axes = plt.subplots(len(rows), len(mags), figsize=(fig_width(1.0), fig_width(0.95)),
                              sharex=True, sharey=True, squeeze=False, constrained_layout=True)
     for r, (iu, (_, b, di)) in enumerate(rows):               # b: (xi, P); di: (geo, xi, P)
@@ -182,9 +184,8 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
             hidden = ((m < 0.5) & (b >= bias_thr)).astype(float)
             hidden[~np.isfinite(m) | ~np.isfinite(b)] = 0.0
             if hidden.any():
-                with plt.rc_context({"hatch.color": "w", "hatch.linewidth": 0.5}):
-                    ax.contourf(xi, pte, hidden.T, levels=[0.5, 1.5], colors="none",
-                                hatches=["////"])
+                ax.contourf(xi, pte, hidden.T, levels=[0.5, 1.5], colors="none",
+                            hatches=["\\\\\\\\"])
             ax.plot(xi_family(pline, tE), pline, color="w", lw=0.8, ls="-.")
             ax.set_xscale("log")
             ax.set_yscale("log")

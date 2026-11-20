@@ -449,7 +449,7 @@ def bias_figure(S, outdir):
     for a_val in A_LINES:
         y_line = 2.0 * np.pi * x_line / a_val
         ax_a.plot(x_line, y_line, color="white", lw=LW_THIN, ls="--", zorder=11)
-        x_at = np.clip(a_val * 300.0 / (2.0 * np.pi), xi[2], xi[-12])   # label near P/tE ~ 300
+        x_at = np.clip(a_val * 300.0 / (2.0 * np.pi), xi[2], xi[-18])   # label near P/tE ~ 300
         label_on_curve(ax_a, x_line, y_line, x_at, rf"$v_{{\rm orb}}={a_val:g}$", "white",
                        above=True, dark=True)
     ax_a.set_xscale("log"); ax_a.set_yscale("log")

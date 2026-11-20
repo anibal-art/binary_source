@@ -43,8 +43,8 @@ COMPANIONS = (           # kind (console only), M2 [Msun], P/tE of the M2 label,
     ("neutron star", 1.4, 5.0, False),      # contour labels are placed away from lines
     ("black hole", 10.0, 0.8, False),       # and labels (base.label_contours_avoiding)
 )
-PERIOD_TICKS = ((10.0, r"10\,d"), (100.0, r"100\,d"), (base.YEAR_D, r"1\,yr"),
-                (10 * base.YEAR_D, r"10\,yr"), (100 * base.YEAR_D, r"100\,yr"))
+PERIOD_TICKS = ((10.0, "10 d"), (100.0, "100 d"), (base.YEAR_D, "1 yr"),   # plain text:
+                (10 * base.YEAR_D, "10 yr"), (100 * base.YEAR_D, "100 yr"))  # works without usetex
 
 
 def companion_xi(pte, m2, tE=REF_TE, rehat=REF_REHAT, m1=LUMINOUS_M1):
@@ -113,7 +113,8 @@ def main():
                                 label_unreachable=False, show_families=False,
                                 return_contours=True)
         avoid = draw_companions(ax, pte)
-        base.label_contours_avoiding(ax, cs, avoid_lines=avoid)
+        base.label_contours_avoiding(ax, cs, avoid_lines=avoid,
+                                     box=(0.10, 0.92, 0.38, 0.85))   # above the M2 labels
         add_period_axis(ax, right=(k == n - 1))
         ax.set_xlabel(r"$\xi_E$")
         if k == 0:

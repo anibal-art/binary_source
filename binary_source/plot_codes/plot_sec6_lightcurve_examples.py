@@ -259,7 +259,7 @@ def main():
     spec, cells, kh1 = load_cells(args.cells)
     n = len(args.examples)
     fig = plt.figure(figsize=(fig_width(1.0), 6.8))
-    gs = fig.add_gridspec(4, n, height_ratios=[0.9, 0.2, 1.5, 0.8], hspace=0.12, wspace=0.32,
+    gs = fig.add_gridspec(4, n, height_ratios=[0.9, 0.1, 1.5, 0.8], hspace=0.12, wspace=0.32,
                           left=0.08, right=0.96, bottom=0.07, top=0.86)
     axes = []
     for j, (cid, status) in enumerate(zip(args.examples, args.status)):

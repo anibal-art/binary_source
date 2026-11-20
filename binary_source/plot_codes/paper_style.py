@@ -123,7 +123,8 @@ PAPER_RC = {
 def apply_paper_style(usetex=True):
     rc = dict(PAPER_RC)
     if not usetex:
-        rc.update({"text.usetex": False, "font.serif": ["cmr10", "DejaVu Serif"]})
+        rc.update({"text.usetex": False, "font.serif": ["cmr10", "DejaVu Serif"],
+                   "axes.unicode_minus": False})   # cmr10 has no U+2212 glyph
     mpl.rcParams.update(rc)
 
 

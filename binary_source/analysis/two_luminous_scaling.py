@@ -218,9 +218,10 @@ def main():
     if not args.figure:
         return
     import matplotlib.pyplot as plt
-    from paper_style import apply_paper_style, fig_width, panel_label, save_figure
+    from paper_style import apply_paper_style, fig_width, panel_label, save_figure, FS_ANNOT
     apply_paper_style(usetex=not args.no_usetex)
-    fig, axes = plt.subplots(1, len(u0s), figsize=(fig_width(1.0), 2.6), sharey=True)
+    fig, axes = plt.subplots(1, len(u0s), figsize=(fig_width(1.0), 2.6), sharey=True,
+                             layout="constrained")
     for k, (ax, u0) in enumerate(zip(np.atleast_1d(axes), u0s)):
         for r in rows:
             floor = floors[(r["qm"], r["qf"], k)][0]
@@ -234,7 +235,8 @@ def main():
                   label=r"$\propto\xi_{\rm rel}^2$")
         ax.axvspan(lo_xi, hi_xi, color="0.9", zorder=0)
         ax.set_xlabel(r"$\xi_{\rm rel}$")
-        ax.set_title(rf"$u_0={u0:g}$, $P/t_E\geq{args.pte_static:g}$", fontsize=9)
+        ax.text(0.19, 0.95, rf"$u_0={u0:g}$", transform=ax.transAxes, ha="left", va="top",
+                fontsize=FS_ANNOT, zorder=30)
         panel_label(ax, "abcdef"[k])
     np.atleast_1d(axes)[0].set_ylabel(r"$D_{\rm floor}/[\eta(1-\eta)]$")
     np.atleast_1d(axes)[0].legend(fontsize=7, loc="lower right")
@@ -245,12 +247,12 @@ def main():
     if models is None:
         return
     import plot_xiE_ptE_maps as base
-    from paper_style import D_LABEL, FS_ANNOT, LW_THIN
-    fig = plt.figure(figsize=(fig_width(1.0), 3.2))
-    left, right, gap, bottom, top = 0.085, 0.985, 0.025, 0.14, 0.74
+    from paper_style import D_LABEL, LW_THIN
+    fig = plt.figure(figsize=(fig_width(1.0), 2.9))
+    left, right, gap, bottom, top = 0.085, 0.985, 0.025, 0.154, 0.817
     n = len(u0s)
     w = (right - left - (n - 1) * gap) / n
-    cax = fig.add_axes([left, 0.88, right - left, 0.025])
+    cax = fig.add_axes([left, 0.869, right - left, 0.028])
     X, Y = np.meshgrid(xi, pte, indexing="ij")
     for k, u0 in enumerate(u0s):
         ax = fig.add_axes([left + k * (w + gap), bottom, w, top - bottom])

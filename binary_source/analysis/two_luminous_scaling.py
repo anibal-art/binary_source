@@ -249,10 +249,10 @@ def main():
     import plot_xiE_ptE_maps as base
     from paper_style import D_LABEL, LW_THIN
     fig = plt.figure(figsize=(fig_width(1.0), 2.9))
-    left, right, gap, bottom, top = 0.085, 0.985, 0.025, 0.154, 0.817
+    left, right, gap, bottom, top = 0.085, 0.985, 0.025, 0.154, 0.803
     n = len(u0s)
     w = (right - left - (n - 1) * gap) / n
-    cax = fig.add_axes([left, 0.869, right - left, 0.028])
+    cax = fig.add_axes([left, 0.855, right - left, 0.028])
     X, Y = np.meshgrid(xi, pte, indexing="ij")
     for k, u0 in enumerate(u0s):
         ax = fig.add_axes([left + k * (w + gap), bottom, w, top - bottom])

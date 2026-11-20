@@ -37,11 +37,11 @@ import plot_xiE_ptE_maps as base  # noqa: E402
 REF_TE = 30.0            # d
 REF_REHAT = 5.0          # AU
 LUMINOUS_M1 = 1.0        # Msun
-COMPANIONS = (           # kind (console only), M2 [Msun], xi_E of the M2 label, label above line
-    ("brown dwarf", 0.05, 0.0018, False),   # labels near P/tE ~ 1, between the 10 d
-    ("white dwarf", 0.6, 0.017, True),      # and 100 d rows of circles, away from the
-    ("neutron star", 1.4, 0.030, False),    # contour labels at the right edge
-    ("black hole", 10.0, 0.076, False),
+COMPANIONS = (           # kind (console only), M2 [Msun], P/tE of the M2 label, label above line
+    ("brown dwarf", 0.05, 1.5, False),      # labels staggered in P/tE so that the close
+    ("white dwarf", 0.6, 0.8, True),        # 0.6 and 1.4 Msun lines do not share a height;
+    ("neutron star", 1.4, 5.0, False),      # contour labels are placed away from lines
+    ("black hole", 10.0, 0.8, False),       # and labels (base.label_contours_avoiding)
 )
 PERIOD_TICKS = ((10.0, r"10\,d"), (100.0, r"100\,d"), (base.YEAR_D, r"1\,yr"),
                 (10 * base.YEAR_D, r"10\,yr"), (100 * base.YEAR_D, r"100\,yr"))
@@ -52,12 +52,19 @@ def companion_xi(pte, m2, tE=REF_TE, rehat=REF_REHAT, m1=LUMINOUS_M1):
 
 
 def draw_companions(ax, pte):
+    """White companion lines with their M2 labels. Returns the lines and the label
+    positions (data coordinates), which the contour labels must avoid."""
     p_line = np.logspace(np.log10(pte[0]) - 0.1, np.log10(pte[-1]) + 0.1, 400)
-    for _, m2, x_lab, above in COMPANIONS:
+    avoid = []
+    for _, m2, p_lab, above in COMPANIONS:
         x = companion_xi(p_line, m2)
+        x_lab = float(companion_xi(p_lab, m2))
         ax.plot(x, p_line, color="white", lw=LW_MAIN, zorder=15)
         base.label_on_curve(ax, x, p_line, x_lab, rf"${m2:g}\,M_\odot$", "white",
                             above=above, dark=True)
+        avoid.append(np.c_[x, p_line])
+        avoid.append(np.array([[x_lab / 1.5, p_lab], [x_lab * 1.5, p_lab]]))
+    return avoid
 
 
 def add_period_axis(ax, right):
@@ -65,7 +72,8 @@ def add_period_axis(ax, right):
     if right:
         sec = ax.secondary_yaxis("right", functions=(lambda p: p * REF_TE,
                                                      lambda P: P / REF_TE))
-        sec.set_yticks([P for P, _ in PERIOD_TICKS], labels=[t for _, t in PERIOD_TICKS])
+        sec.set_yticks([P for P, _ in PERIOD_TICKS])          # matplotlib < 3.5: no labels=
+        sec.set_yticklabels([t for _, t in PERIOD_TICKS])
         sec.yaxis.set_minor_locator(NullLocator())
         sec.tick_params(direction="in")
         sec.set_ylabel(rf"$P$ for $t_E={REF_TE:g}\,$d")
@@ -101,9 +109,11 @@ def main():
     axes = [fig.add_axes([left + k * (w + gap), bottom, w, top - bottom]) for k in range(n)]
     cax = fig.add_axes([left, 0.875, right - left, 0.025])
     for k, (ax, u0) in enumerate(zip(axes, u0s)):
-        pcm = base.draw_map(ax, xi, pte, Dmed[k], label_contours=True, period_labels=None,
-                            label_unreachable=False, show_families=False)
-        draw_companions(ax, pte)
+        pcm, cs = base.draw_map(ax, xi, pte, Dmed[k], label_contours=False, period_labels=None,
+                                label_unreachable=False, show_families=False,
+                                return_contours=True)
+        avoid = draw_companions(ax, pte)
+        base.label_contours_avoiding(ax, cs, avoid_lines=avoid)
         add_period_axis(ax, right=(k == n - 1))
         ax.set_xlabel(r"$\xi_E$")
         if k == 0:

@@ -74,7 +74,7 @@ def match_index(full, sub, what):
 
 def labels(tex):
     """Mathtext labels: the same strings work with and without usetex."""
-    return dict(xi=r"$\xi_{\rm E}$", pte=r"$P/t_{\rm E}$",
+    return dict(xi=r"$\xi_E$", pte=r"$P/t_E$",
                 f146=(lambda m: rf"$F_{{146}} = {m:g}$"),
                 g=(lambda g: rf"$g = {g:g}$"),
                 u0=(lambda u: rf"$u_0 = {u:g}$"))
@@ -242,9 +242,9 @@ def regions_figure(d, summaries, ib, bias_thr, outdir, tex, primary):
             if r == len(u0) - 1:
                 ax.set_xlabel(L["xi"])
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in (C_BLUE, C_VERMILION, "0.85")]
-    thr = rf"$|\Delta t_{{\rm E}}/t_{{\rm E}}| \geq {bias_thr:g}$"
+    thr = rf"$|\Delta t_E/t_E| \geq {bias_thr:g}$"
     lax.legend(handles, [r"detected (efficiency $\geq 0.5$)", "undetected, " + thr,
-                         r"undetected, $|\Delta t_{\rm E}/t_{\rm E}| <$ " + f"{bias_thr:g}"],
+                         r"undetected, $|\Delta t_E/t_E| <$ " + f"{bias_thr:g}"],
                loc="center", ncol=3, frameon=False, handlelength=1.2, columnspacing=1.2)
     return save_figure(fig, Path(outdir) / f"sec6_regions_xiE_ptE_g{d['blend_ratio'][ib]:g}")
 
@@ -277,6 +277,11 @@ def d_ratio_figure(d, summaries, outdir, tex):
         ax.set_title(L["u0"](u0[iu]))
     axes[0, 0].set_ylabel(r"$D_{\rm Roman}/D$")
     axes[0, 0].legend(frameon=False)
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter
+    yax = axes[0, 0].yaxis                                   # shared by all panels
+    yax.set_major_locator(FixedLocator([0.3, 0.5, 1.0, 2.0, 5.0, 10.0]))
+    yax.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+    yax.set_minor_formatter(NullFormatter())
     return save_figure(fig, Path(outdir) / "sec6_D_ratio")
 
 

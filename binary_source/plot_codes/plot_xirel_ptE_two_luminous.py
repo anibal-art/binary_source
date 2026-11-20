@@ -91,7 +91,7 @@ def main():
 
     nr, nc = len(rows), len(u0s)
     fig = plt.figure(figsize=(fig_width(1.0), 1.0 + 2.15 * nr))
-    left, right, gap, bottom = 0.085, 0.985, 0.022, 0.065
+    left, right, gap, bottom = 0.115, 0.985, 0.022, 0.065
     top = 1.0 - 0.95 / (1.0 + 2.15 * nr)
     w = (right - left - (nc - 1) * gap) / nc
     h = (top - bottom - (nr - 1) * gap) / nr
@@ -101,14 +101,17 @@ def main():
         fac = photocentre_factor(qm, qf)
         for k, u0 in enumerate(u0s):
             ax = fig.add_axes([left + k * (w + gap), top - (r + 1) * h - r * gap, w, h])
-            pcm = base.draw_map(ax, xi_rel, pte, Dmed[k], label_contours=(r == 0 and k == 0),
-                                period_labels=None, label_unreachable=False,
-                                show_families=False)
+            pcm, cs = base.draw_map(ax, xi_rel, pte, Dmed[k], label_contours=False,
+                                    period_labels=None, label_unreachable=False,
+                                    show_families=False, return_contours=True)
             Dp = predicted_from_one(D1[k], xiE1, xi_rel, fac)
+            avoid = []
             if np.isfinite(Dp).any():
                 X, Y = np.meshgrid(xi_rel, pte, indexing="ij")
-                ax.contour(X, Y, np.log10(Dp), levels=np.log10(base.D_LEVELS), colors="white",
-                           linewidths=LW_THIN + 0.3, linestyles=":", zorder=11)
+                cd = ax.contour(X, Y, np.log10(Dp), levels=np.log10(base.D_LEVELS),
+                                colors="white", linewidths=LW_THIN + 0.3, linestyles=":",
+                                zorder=11)
+                avoid = [seg for lev in cd.allsegs for seg in lev if len(seg) > 1]
                 good = (Dmed[k] >= D_FLOOR) & (Dp >= D_FLOOR)
                 dev = np.nanmedian(np.abs(np.log10(Dmed[k][good]) - np.log10(Dp[good])))
                 print(f"  q_M={qm:g} q_f={qf:g} u0={u0:g}: |B-eta|={fac:.3f}, "
@@ -116,19 +119,19 @@ def main():
             else:
                 print(f"  q_M={qm:g} q_f={qf:g} u0={u0:g}: |B-eta|={fac:.3f}, "
                       "no first-order prediction")
+            if r == 0 and k == 0:
+                base.label_contours_avoiding(ax, cs, avoid_lines=avoid)
             if r == nr - 1:
                 ax.set_xlabel(r"$\xi_{\rm rel}$")
             else:
                 ax.set_xticklabels([])
             if k == 0:
-                ax.set_ylabel(r"$P/t_E$")
+                ax.set_ylabel(rf"$(q_M,q_f)=({qm:g},{qf:g})$" + "\n" + r"$P/t_E$")
             else:
                 ax.set_yticklabels([])
             panel_label(ax, next(letters), color="white")
             ax.text(0.19, 0.95, rf"$u_0={u0:g}$", transform=ax.transAxes, ha="left",
                     va="top", color="white", fontsize=FS_ANNOT, zorder=30)
-            ax.text(0.97, 0.05, rf"$q_M={qm:g}$, $q_f={qf:g}$", transform=ax.transAxes,
-                    ha="right", va="bottom", color="white", fontsize=FS_ANNOT - 1, zorder=30)
     base.top_colorbar(fig, cax, pcm, D_LABEL)
     handles = [Line2D([], [], color="crimson", lw=1.2),
                Line2D([], [], color="white", lw=1.2, ls=":")]

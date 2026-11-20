@@ -60,7 +60,7 @@ from matplotlib.ticker import LogLocator, NullFormatter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from paper_style import (apply_paper_style, fig_width, heatmap, panel_label,  # noqa: E402
-                         save_figure, d_norm, halo,
+                         save_figure, d_norm, halo, place_contour_labels,
                          D_CMAP, D_LABEL, FS_ANNOT, LW_MAIN, LW_THIN,
                          C_BLACK, C_BLUE, C_VERMILION)
 
@@ -187,7 +187,7 @@ def family_legend(ax, y0=0.84):
 
 def draw_map(ax, xi, pte, Dmed, label_family=False, label_contours=True,
              period_labels="full", label_unreachable=True, show_families=True,
-             max_label_P=np.inf):
+             max_label_P=np.inf, return_contours=False):
     pcm = heatmap(ax, log_edges(xi), log_edges(pte), np.ma.masked_invalid(Dmed).T,
                   norm=d_norm(), cmap=D_CMAP)
     X, Y = np.meshgrid(xi, pte, indexing="ij")
@@ -239,7 +239,19 @@ def draw_map(ax, xi, pte, Dmed, label_family=False, label_contours=True,
         axis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10), numticks=12))
         axis.set_minor_formatter(NullFormatter())
     ax.tick_params(which="both", direction="in", top=True, right=True)
-    return pcm
+    return (pcm, cs) if return_contours else pcm
+
+
+def label_contours_avoiding(ax, cs, avoid_lines=(), box=(0.10, 0.90, 0.10, 0.85)):
+    """
+    Inline labels 1e-3 and 1e-2 on the crimson contours returned by draw_map
+    (return_contours=True), placed with paper_style.place_contour_labels inside
+    `box` (axes fraction) and as far as possible from `avoid_lines` (data
+    coordinates), so that they are neither clipped nor drawn over other curves.
+    """
+    fmts = [{c.levels[0]: txt} for c, txt in zip(cs, (r"$10^{-3}$", r"$10^{-2}$"))]
+    return place_contour_labels(ax, cs, fmts, avoid_lines=avoid_lines, box=box,
+                                label_halo=[halo(1.8, "white")] * len(cs))
 
 
 def main():
@@ -437,7 +449,7 @@ def bias_figure(S, outdir):
     for a_val in A_LINES:
         y_line = 2.0 * np.pi * x_line / a_val
         ax_a.plot(x_line, y_line, color="white", lw=LW_THIN, ls="--", zorder=11)
-        x_at = np.clip(a_val * 300.0 / (2.0 * np.pi), xi[2], xi[-8])   # label near P/tE ~ 300
+        x_at = np.clip(a_val * 300.0 / (2.0 * np.pi), xi[2], xi[-12])   # label near P/tE ~ 300
         label_on_curve(ax_a, x_line, y_line, x_at, rf"$v_{{\rm orb}}={a_val:g}$", "white",
                        above=True, dark=True)
     ax_a.set_xscale("log"); ax_a.set_yscale("log")

@@ -150,7 +150,6 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     ts = np.sort(t)                                # dense times with Roman data nearby
     i = np.clip(np.searchsorted(ts, td), 1, len(ts) - 1)
     cadence = np.median(np.diff(ts))
-    observed = np.minimum(np.abs(td - ts[i - 1]), np.abs(ts[i] - td)) < 3 * cadence
     tz = ts[np.abs((ts - t0) / tE) < args.zoom_tE]         # intervals without data (saturation)
     k = np.flatnonzero(np.diff(tz) > 3 * cadence)
     gaps = [((tz[j] - t0) / tE, (tz[j + 1] - t0) / tE) for j in k]
@@ -184,7 +183,7 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     axT.set_ylim(yc - hy, yc + hy)
     add_direction_arrows(axT, s1x[ot][loc], s1y[ot][loc], "k", n_arrows=1,
                          scale=0.12 * hx, lw=LW_THIN)
-    axT.set_xlabel(r"$u_x$", labelpad=1.0)
+    axT.set_xlabel(r"$\tau$", labelpad=1.0)
     axT.xaxis.set_major_locator(MaxNLocator(nbins=5, symmetric=True))
     axT.yaxis.set_major_locator(MaxNLocator(nbins=3))
     axT.xaxis.set_minor_locator(AutoMinorLocator())
@@ -260,7 +259,7 @@ def main():
     spec, cells, kh1 = load_cells(args.cells)
     n = len(args.examples)
     fig = plt.figure(figsize=(fig_width(1.0), 6.8))
-    gs = fig.add_gridspec(3, n, height_ratios=[0.9, 1.5, 0.8], hspace=0.12, wspace=0.32,
+    gs = fig.add_gridspec(4, n, height_ratios=[0.9, 0.2, 1.5, 0.8], hspace=0.12, wspace=0.32,
                           left=0.08, right=0.96, bottom=0.07, top=0.86)
     axes = []
     for j, (cid, status) in enumerate(zip(args.examples, args.status)):
@@ -270,9 +269,9 @@ def main():
               f"P {c['P_days']:.1f} d lambda {c['lambda']:.2f} T_3s {c['c_3sigma']:.2f} | "
               f"event seed {d['simulation_seed']} T {profile['T_profile']:.2f} "
               f"(median of {nreal}: {Tmed:.2f})")
-        sub = [gs[0, j], gs[1, j], gs[2, j]]
+        sub = [gs[0, j], gs[2, j], gs[3, j]]        # row 1: room for the x label of the top row
         axes.append(column(fig, sub, d, a, profile, c, spec, kh1, status, "abc"[j], args))
-    axes[0][0].set_ylabel(r"$u_y$")
+    axes[0][0].set_ylabel(r"$\beta$")
     axes[0][1].set_ylabel("F146 [mag]")
     axes[0][2].set_ylabel(r"$\Delta m$ [mmag]")
     fig.align_ylabels([ax for ax in axes[0]])

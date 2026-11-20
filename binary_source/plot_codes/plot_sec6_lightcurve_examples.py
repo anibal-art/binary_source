@@ -184,7 +184,7 @@ def column(fig, gs_col, d, a, profile, cell, spec, kh1, status, letter, args):
     add_direction_arrows(axT, s1x[ot][loc], s1y[ot][loc], "k", n_arrows=1,
                          scale=0.12 * hx, lw=LW_THIN)
     axT.set_xlabel(r"$\tau$", labelpad=1.0)
-    axT.xaxis.set_major_locator(MaxNLocator(nbins=5, symmetric=True))
+    axT.xaxis.set_major_locator(MaxNLocator(nbins=2, symmetric=True))   # -1, 0, 1
     axT.yaxis.set_major_locator(MaxNLocator(nbins=3))
     axT.xaxis.set_minor_locator(AutoMinorLocator())
     axT.yaxis.set_minor_locator(AutoMinorLocator())

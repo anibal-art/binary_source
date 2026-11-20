@@ -174,13 +174,10 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
             m = np.nanmean(pw[iso, ib, im, iu], axis=0)
             pcm = heatmap(ax, log_edges(xi), log_edges(pte), dr.T, norm=d_norm(), cmap=D_CMAP)
             ax.contour(xi, pte, m.T, levels=[0.5], colors="w", linewidths=1.1)
-            ax.contour(xi, pte, m.T, levels=[0.9], colors="w", linewidths=0.7)
             with np.errstate(divide="ignore", invalid="ignore"):
                 ld = np.log10(dint.T)
-            ax.contour(xi, pte, ld, levels=[-2.0], colors="crimson", linewidths=1.0,
-                       linestyles="solid")
             ax.contour(xi, pte, ld, levels=[-3.0], colors="crimson", linewidths=1.0,
-                       linestyles="--")
+                       linestyles="solid")
             # Undetected and biased: efficiency < 0.5 and |Delta tE/tE| >= bias_thr.
             # The hatched region is min(g1, g2) > 0, with g1 = (0.5 - efficiency)/0.5
             # and g2 = log10(|Delta tE/tE|/bias_thr), so its edges are the drawn
@@ -189,14 +186,14 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
             with np.errstate(divide="ignore", invalid="ignore"):
                 g2 = np.log10(b / bias_thr)
             g2 = np.where(np.isfinite(g2), g2, -9.0)
-            ax.contour(xi, pte, g2.T, levels=[0.0], colors="w", linewidths=0.8,
+            g2_edge = np.where(m < 0.5, g2, np.nan)        # only as the hatch edge
+            ax.contour(xi, pte, g2_edge.T, levels=[0.0], colors="w", linewidths=0.8,
                        linestyles=":")
             g = np.minimum((0.5 - m) / 0.5, g2)
             g[~np.isfinite(g)] = -1.0
             if (g > 0).any():
                 ax.contourf(xi, pte, g.T, levels=[0.0, float(g.max()) + 1.0],
                             colors="none", hatches=["\\\\\\\\"])
-            ax.plot(xi_family(pline, tE), pline, color="w", lw=0.8, ls="-.")
             ax.set_xscale("log")
             ax.set_yscale("log")
             ax.set_xlim(xi[0], xi[-1])

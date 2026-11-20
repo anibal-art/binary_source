@@ -231,6 +231,9 @@ def regions_figure(d, summaries, ib, bias_thr, outdir, tex, primary):
             heatmap(ax, log_edges(xi), log_edges(pte), cls.T, cmap=cmap, norm=norm)
             ax.set_xscale("log")
             ax.set_yscale("log")
+            from matplotlib.ticker import LogLocator     # same ticks in the PDF and the PNG
+            ax.xaxis.set_major_locator(LogLocator(base=10, numticks=12))
+            ax.yaxis.set_major_locator(LogLocator(base=10, numticks=12))
             fin = np.isfinite(cls)
             print(f"  u0 {u0[r]:g} F146 {mag:g}: detected {np.mean(cls[fin] == 2):.3f}  "
                   f"confused+biased {np.mean(cls[fin] == 1):.3f}  "

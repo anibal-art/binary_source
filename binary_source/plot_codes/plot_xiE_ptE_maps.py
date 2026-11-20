@@ -41,7 +41,8 @@ orbits). Panels: (a) median |Delta tE/tE| over orientations at u0 = U0_BIAS_MAP,
 only where the median D < BIAS_D_MAX, with lines of constant A; (b) for each
 orientation, the median of Delta tE/(tE A) and Delta t0/(tE u0 A) over the
 first-order cells (A <= BIAS_A_MAX, P/tE >= BIAS_PTE_MIN, D < BIAS_D_MAX, all
-u0), ranked, against the uniform distribution; (c) median |Delta u0/u0| against A.
+u0), against the first-order prediction -v_par, -v_perp (projected_unit_velocity);
+(c) median |Delta u0/u0| against A.
 
 Usage:
     python binary_source/plot_codes/plot_xiE_ptE_maps.py [--summary PATH] [--biases]
@@ -354,6 +355,21 @@ def velocity_amplitude(xi, pte, factor=1.0):
     return 2.0 * np.pi * factor * np.asarray(xi)[:, None] / np.asarray(pte)[None, :]
 
 
+def projected_unit_velocity(geometry):
+    """
+    Projected orbital velocity of the luminous star at t_xi = t0, in units of
+    v_orb, along (v_par) and across (v_perp) the lens-source motion, from
+    Equations 8-9 of the paper: s = (cos Omega, sin i sin Omega),
+    s_proj = R(-alpha) s, Omega = phi at t0. Rows of geometry: (alpha, phi, i).
+    Checked against the fitted offsets by analysis/check_bias_orientations.py.
+    """
+    geometry = np.asarray(geometry, float)
+    alpha, phi, inc = geometry[:, 0], geometry[:, 1], geometry[:, 2]
+    wx, wy = -np.sin(phi), np.sin(inc) * np.cos(phi)     # d s / d Omega
+    ca, sa = np.cos(alpha), np.sin(alpha)               # R(-alpha) = [[ca, sa], [-sa, ca]]
+    return ca * wx + sa * wy, -sa * wx + ca * wy
+
+
 def bias_cells(S, xi, pte, factor=1.0, d_max=BIAS_D_MAX, a_max=BIAS_A_MAX,
                pte_min=BIAS_PTE_MIN):
     """
@@ -377,16 +393,16 @@ def bias_cells(S, xi, pte, factor=1.0, d_max=BIAS_D_MAX, a_max=BIAS_A_MAX,
                 A=np.broadcast_to(A, dte.shape), ok=ok)
 
 
-def ranked_orientation_medians(r, ok):
-    """Per orientation: median and 16-84 percentiles of r over the valid cells, ranked."""
+def orientation_medians(r, ok):
+    """Per orientation: median and 16-84 percentiles of r over the valid cells, and their number."""
     n_geo = r.shape[2]
-    med, lo, hi = (np.full(n_geo, np.nan) for _ in range(3))
+    med, lo, hi, n = (np.full(n_geo, np.nan) for _ in range(4))
     for g in range(n_geo):
         v = r[:, :, g, :][ok[:, :, g, :]]
         if v.size:
             lo[g], med[g], hi[g] = np.percentile(v, [16, 50, 84])
-    order = np.argsort(med)
-    return med[order], lo[order], hi[order]
+            n[g] = v.size
+    return med, lo, hi, n
 
 
 def bias_figure(S, outdir):
@@ -437,21 +453,23 @@ def bias_figure(S, outdir):
     cbar.ax.tick_params(which="both", direction="in", pad=1.5)
     cbar.set_label(r"median $|\Delta t_E|/t_E\ (\%)$", labelpad=3)
 
-    # (b) ranked per-orientation medians against the uniform distribution
-    cdf = (np.arange(n_geo) + 0.5) / n_geo
-    rline = np.linspace(-1.0, 1.0, 2)
-    ax_b.plot(rline, 0.5 * (rline + 1.0), color="0.5", lw=LW_THIN, ls="--", zorder=1,
-              label=r"uniform in $[-1,1]$")
-    spreads = {}
-    for key, col, lab, mk in (("r_tE", C_BLUE, r"$\Delta t_E/(t_E v_{\rm orb})$", "o"),
-                              ("r_t0", C_VERMILION, r"$\Delta t_0/(t_E u_0 v_{\rm orb})$", "s")):
-        m, lo, hi = ranked_orientation_medians(B[key], B["ok"])
-        ax_b.errorbar(m, cdf, xerr=[m - lo, hi - m], fmt=mk, ms=3.0, color=col, mfc=col,
+    # (b) per-orientation medians against the first-order prediction (Eqs. 8-9)
+    v_par, v_perp = projected_unit_velocity(np.asarray(S["geometries"], float)[1:])
+    assert len(v_par) == n_geo, (len(v_par), n_geo)
+    rline = np.array([-1.1, 1.1])
+    ax_b.plot(rline, rline, color="0.5", lw=LW_THIN, ls="--", zorder=1)
+    spreads, rms = {}, {}
+    for key, pred, col, lab, mk in (
+            ("r_tE", -v_par, C_BLUE, r"$\Delta t_E/(t_E v_{\rm orb})$", "o"),
+            ("r_t0", -v_perp, C_VERMILION, r"$\Delta t_0/(t_E u_0 v_{\rm orb})$", "s")):
+        m, lo, hi, _ = orientation_medians(B[key], B["ok"])
+        ax_b.errorbar(pred, m, yerr=[m - lo, hi - m], fmt=mk, ms=3.0, color=col, mfc=col,
                       elinewidth=0.6, capsize=0, zorder=3, label=lab)
         spreads[key] = np.nanmax(hi - lo)
-    ax_b.set_xlim(-1.15, 1.15); ax_b.set_ylim(0, 1)
-    ax_b.set_xlabel(r"offset / $v_{\rm orb}$")
-    ax_b.set_ylabel("fraction of orientations")
+        rms[key] = np.sqrt(np.nanmean((m - pred) ** 2))
+    ax_b.set_xlim(-1.1, 1.1); ax_b.set_ylim(-1.1, 1.1)
+    ax_b.set_xlabel(r"$-v_\parallel/v_{\rm orb}$, $-v_\perp/v_{\rm orb}$")
+    ax_b.set_ylabel(r"offset / $v_{\rm orb}$")
     ax_b.legend(loc="upper left", fontsize=FS_ANNOT - 1.5, handlelength=1.4)
     panel_label(ax_b, "b", x=0.88, y=0.12)
 
@@ -482,7 +500,8 @@ def bias_figure(S, outdir):
 
     print(f"biases: {int(B['ok'].sum())} first-order cells over {n_geo} orientations; "
           f"largest 16-84 spread of a per-orientation median: r_tE {spreads['r_tE']:.3f}, "
-          f"r_t0 {spreads['r_t0']:.3f}")
+          f"r_t0 {spreads['r_t0']:.3f}; rms against the first-order prediction: "
+          f"r_tE {rms['r_tE']:.4f}, r_t0 {rms['r_t0']:.4f}")
     for key in ("r_tE", "r_t0"):
         v = B[key][B["ok"]]
         print(f"  {key}: min {v.min():+.3f} max {v.max():+.3f} "

@@ -45,28 +45,8 @@ from scipy import stats
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "binary_source" / "plot_codes"))
-from plot_xiE_ptE_maps import bias_cells  # noqa: E402
-
-
-def unit_velocity(geometry):
-    """(v_x, v_y)/v_orb at Omega = phi from Equations 8-9; geometry rows (alpha, phi, i)."""
-    alpha, phi, inc = geometry[:, 0], geometry[:, 1], geometry[:, 2]
-    wx = -np.sin(phi)                       # d s_x / d Omega
-    wy = np.sin(inc) * np.cos(phi)          # d s_y / d Omega
-    ca, sa = np.cos(alpha), np.sin(alpha)   # R(-alpha) = [[ca, sa], [-sa, ca]]
-    return ca * wx + sa * wy, -sa * wx + ca * wy
-
-
-def per_orientation_median(r, ok):
-    """Median of r over the valid cells of each orientation (unranked)."""
-    n_geo = r.shape[2]
-    med, lo, hi, n = (np.full(n_geo, np.nan) for _ in range(4))
-    for g in range(n_geo):
-        v = r[:, :, g, :][ok[:, :, g, :]]
-        if v.size:
-            lo[g], med[g], hi[g] = np.percentile(v, [16, 50, 84])
-            n[g] = v.size
-    return med, lo, hi, n
+from plot_xiE_ptE_maps import (bias_cells, orientation_medians,  # noqa: E402
+                               projected_unit_velocity)
 
 
 def best_candidate(measured, vx, vy):
@@ -98,9 +78,9 @@ def main():
     B = bias_cells(S, S["xi_E"], S["P_over_tE"])
     assert B["r_tE"].shape[2] == len(geo), (B["r_tE"].shape, geo.shape)
 
-    vx, vy = unit_velocity(geo)
-    m_tE, lo_tE, hi_tE, n_tE = per_orientation_median(B["r_tE"], B["ok"])
-    m_t0, lo_t0, hi_t0, n_t0 = per_orientation_median(B["r_t0"], B["ok"])
+    vx, vy = projected_unit_velocity(geo)
+    m_tE, lo_tE, hi_tE, n_tE = orientation_medians(B["r_tE"], B["ok"])
+    m_t0, lo_t0, hi_t0, n_t0 = orientation_medians(B["r_t0"], B["ok"])
 
     print(f"summary: {args.summary}")
     print(f"orientations: {len(geo)}; first-order cells per orientation: "
@@ -136,7 +116,7 @@ def main():
     for iu, u0 in enumerate(S["u0"]):
         ok_u = np.zeros_like(B["ok"])
         ok_u[iu] = B["ok"][iu]
-        m_u = per_orientation_median(B["r_t0"], ok_u)[0]
+        m_u = orientation_medians(B["r_t0"], ok_u)[0]
         d = m_u - (-vy)
         print(f"   u0 = {u0:<5g}: median of (measured + v_perp) over orientations = "
               f"{np.nanmedian(d):+.3f}, max |.| = {np.nanmax(np.abs(d)):.3f}")

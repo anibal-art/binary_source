@@ -163,7 +163,8 @@ def droman_figure(d, summaries, ib, outdir, tex, primary):
             ax.contour(xi, pte, m.T, levels=[0.9], colors="w", linewidths=0.7)
             with np.errstate(divide="ignore", invalid="ignore"):
                 ld = np.log10(dint.T)
-            ax.contour(xi, pte, ld, levels=[-2.0], colors="crimson", linewidths=1.0)
+            ax.contour(xi, pte, ld, levels=[-2.0], colors="crimson", linewidths=1.0,
+                       linestyles="solid")
             ax.contour(xi, pte, ld, levels=[-3.0], colors="crimson", linewidths=1.0,
                        linestyles="--")
             ax.plot(xi_family(pline, tE), pline, color="w", lw=0.8, ls="-.")

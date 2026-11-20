@@ -221,7 +221,7 @@ def main():
     from paper_style import apply_paper_style, fig_width, panel_label, save_figure, FS_ANNOT
     apply_paper_style(usetex=not args.no_usetex)
     fig, axes = plt.subplots(1, len(u0s), figsize=(fig_width(1.0), 2.6), sharey=True,
-                             layout="constrained")
+                             constrained_layout=True)
     for k, (ax, u0) in enumerate(zip(np.atleast_1d(axes), u0s)):
         for r in rows:
             floor = floors[(r["qm"], r["qf"], k)][0]

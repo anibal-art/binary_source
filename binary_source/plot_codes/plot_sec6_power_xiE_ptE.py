@@ -12,7 +12,7 @@ Inputs
 Outputs (<outdir>/)
     sec6_Droman_xiE_ptE_g<g>.{pdf,png}     (main figure; --droman-g)
         rows u0, columns F146. Colour: D_Roman = sqrt(lambda)/SNR, median over
-        the isotropic orientations, on the colour scale of the intrinsic D
+        the random orientations, on the colour scale of the intrinsic D
         maps (paper_style.d_norm). White: Roman detection, orientation-mean
         efficiency 0.5 (thick) and 0.9 (thin) at the primary false-alarm level
         (--primary: 3 sigma, the default, or 5%). Crimson: intrinsic
@@ -38,10 +38,9 @@ Outputs (<outdir>/)
 With real sampling the problem is not scale free: the maps hold at tE = 30 d
 for any companion mass and source distance, not for another tE.
 
-Usage:
-    python binary_source/plot_codes/plot_sec6_power_xiE_ptE.py \
-        --power results/roman_sec6_asimov_xi_v1/sec6_power_xi_kh1.npz \
-        --outdir figures/current [--summary PATH [PATH ...]] [--u0 0.1] [--no-usetex]
+Usage (paper figures; the defaults of --power and --summary are the paper
+inputs listed at PAPER_POWER / PAPER_SUMMARY below):
+    python binary_source/plot_codes/plot_sec6_power_xiE_ptE.py --outdir figures/current [--no-usetex]
 """
 
 import argparse
@@ -56,10 +55,22 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from paper_style import (apply_paper_style, fig_width, heatmap, save_figure,  # noqa: E402
                          d_norm, C_BLUE, C_VERMILION, D_CMAP)
-from plot_xiE_ptE_maps import find_summary, log_edges, xi_family  # noqa: E402
+from plot_xiE_ptE_maps import REPO_ROOT, log_edges, xi_family  # noqa: E402
 from plot_sec6_power_u0P import LEVELS, efficiency_levels  # noqa: E402
 
 D_RATIO_RANGE = (1e-4, 1e-2)
+
+# Inputs of the paper figures (Section 6 and Appendix E):
+#   power   : roman_sec6_power.py --k-h1 6.21 on the xiPpaper grid
+#             (roman_sec6_asimov_cells.py --grid xiPpaper: u0 = 0.01, 0.1, 0.3, 1;
+#             results/roman_sec6_asimov_xi_v2/roman_sec6_asimov_xi_paper.npz)
+#             with the H0 thresholds of results/roman_lrt/gv_sec6_h0_final;
+#   summary : scan_xiE_ptE.py --u0 0.01 0.3 1 --refine 2 (the maps of Figure 2).
+# The rows are the u0 present in both files: 0.01, 0.3, 1.
+PAPER_POWER = REPO_ROOT / "results/roman_sec6_final/sec6_power_xi_kh1.npz"
+PAPER_SUMMARY = (REPO_ROOT / "results/final_52468b04987a"
+                 / "xiE_ptE_maps_u0_0p01_0p3_1_refine2/summary_xiE_ptE.npz")
+PAPER_U0 = (0.01, 0.3, 1.0)
 
 
 def match_index(full, sub, what):
@@ -134,12 +145,13 @@ def intrinsic(summaries, u0, xi, pte):
     return None
 
 
-def droman_figure(d, summaries, ib, outdir, tex, primary):
+def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
     """
-    D_Roman = sqrt(lambda)/SNR (median over the isotropic orientations) on the
+    D_Roman = sqrt(lambda)/SNR (median over the random orientations) on the
     axes and colour scale of the intrinsic D maps, with the Roman detection
     contour (orientation-mean efficiency 0.5 and 0.9 at the primary level) and the
-    intrinsic contours D = 1e-2 (solid) and 1e-3 (dashed).
+    intrinsic contours D = 1e-2 (solid) and 1e-3 (dashed). Hatched: undetected
+    (efficiency < 0.5) with intrinsic median |Delta tE/tE| >= bias_thr.
     """
     L = labels(tex)
     xi, pte, mags = d["xiE_grid"], d["PtE_grid"], d["F146"]
@@ -152,7 +164,7 @@ def droman_figure(d, summaries, ib, outdir, tex, primary):
     pline = np.geomspace(pte[0], pte[-1], 200)
     fig, axes = plt.subplots(len(rows), len(mags), figsize=(fig_width(1.0), fig_width(0.95)),
                              sharex=True, sharey=True, squeeze=False, constrained_layout=True)
-    for r, (iu, (_, _, di)) in enumerate(rows):               # di: (geo, xi, P)
+    for r, (iu, (_, b, di)) in enumerate(rows):               # b: (xi, P); di: (geo, xi, P)
         dint = np.nanmedian(di[iso], axis=0)                  # intrinsic, (xi, P)
         for im, mag in enumerate(mags):
             ax = axes[r, im]
@@ -167,6 +179,12 @@ def droman_figure(d, summaries, ib, outdir, tex, primary):
                        linestyles="solid")
             ax.contour(xi, pte, ld, levels=[-3.0], colors="crimson", linewidths=1.0,
                        linestyles="--")
+            hidden = ((m < 0.5) & (b >= bias_thr)).astype(float)
+            hidden[~np.isfinite(m) | ~np.isfinite(b)] = 0.0
+            if hidden.any():
+                with plt.rc_context({"hatch.color": "w", "hatch.linewidth": 0.5}):
+                    ax.contourf(xi, pte, hidden.T, levels=[0.5, 1.5], colors="none",
+                                hatches=["////"])
             ax.plot(xi_family(pline, tE), pline, color="w", lw=0.8, ls="-.")
             ax.set_xscale("log")
             ax.set_yscale("log")
@@ -267,7 +285,7 @@ def d_ratio_figure(d, summaries, outdir, tex):
         for im, (mag, col) in enumerate(zip(mags, ("k", C_BLUE, C_VERMILION))):
             dr = Drom[:, ib, im, iu]                                  # (geo, xi, P)
             ok = (di >= D_RATIO_RANGE[0]) & (di <= D_RATIO_RANGE[1]) & np.isfinite(dr) & (di > 0)
-            ok[0] = False                                             # isotropic rows only
+            ok[0] = False                                             # random-orientation rows only
             ratio = np.where(ok, dr / np.where(di > 0, di, np.nan), np.nan)
             med = np.array([np.nanmedian(ratio[..., j]) if ok[..., j].any() else np.nan
                             for j in range(len(pte))])
@@ -290,8 +308,8 @@ def d_ratio_figure(d, summaries, outdir, tex):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--power", required=True)
-    ap.add_argument("--summary", nargs="+", default=None,
+    ap.add_argument("--power", default=str(PAPER_POWER))
+    ap.add_argument("--summary", nargs="+", default=[str(PAPER_SUMMARY)],
                     help="one or more summary_xiE_ptE.npz; each u0 of the Roman grid is "
                          "taken from the first summary that has it")
     ap.add_argument("--outdir", default="figures/current")
@@ -304,6 +322,8 @@ def main():
                     help="also the power maps (rows g) at --u0")
     ap.add_argument("--primary", choices=tuple(LEVELS), default="3sigma",
                     help="false-alarm level of the detection contours and regions")
+    ap.add_argument("--any-u0", action="store_true",
+                    help="accept rows other than the paper's u0 = 0.01, 0.3, 1")
     ap.add_argument("--no-usetex", action="store_true")
     args = ap.parse_args()
     tex = not args.no_usetex
@@ -315,7 +335,7 @@ def main():
     if not np.isfinite(float(d["k_h1"])):
         print("warning: power file made without --k-h1 (H0 k_local used)")
     summaries = []
-    for spath in (args.summary or [find_summary()]):
+    for spath in args.summary:
         S = np.load(spath)
         if not np.allclose(S["geometries"], d["geometry"]):
             raise SystemExit(f"orientations of {spath} differ from the Roman grid")
@@ -324,12 +344,18 @@ def main():
         if "xi_E" not in S.files or ("q_flux_used" in S.files and float(S["q_flux_used"]) != 0.0):
             raise SystemExit(f"{spath} is not a one-luminous-source summary (xi_E grid)")
         summaries.append((spath, S))
+    rows_u0 = [float(u) for u in d["u0_grid"]
+               if any(np.isclose(S["u0"], u, rtol=1e-9, atol=0.0).any() for _, S in summaries)]
+    if not args.any_u0 and (len(rows_u0) != len(PAPER_U0)
+                            or not np.allclose(rows_u0, PAPER_U0)):
+        raise SystemExit(f"rows u0 = {rows_u0}, not the paper's {list(PAPER_U0)}: "
+                         "check --power and --summary, or pass --any-u0")
     iu = int(np.argmin(np.abs(np.log(d["u0_grid"] / args.u0))))
     ib = int(np.argmin(np.abs(d["blend_ratio"] - args.region_g)))
     out = []
     for g in args.droman_g:
         out += droman_figure(d, summaries, int(np.argmin(np.abs(d["blend_ratio"] - g))),
-                             args.outdir, tex, args.primary)
+                             args.outdir, tex, args.primary, args.bias_threshold)
     if args.power_maps:
         out += power_figure(d, iu, args.outdir, tex, args.primary)
     out += regions_figure(d, summaries, ib, args.bias_threshold, args.outdir, tex, args.primary)

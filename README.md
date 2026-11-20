@@ -799,6 +799,27 @@ The primary manuscript analysis uses `tE = 30 d`.
 | `figures/appendix/roman_te_bound_validation.pdf` | `python binary_source/validation/validate_roman_te_bound.py` | `python binary_source/plot_codes/plot_roman_te_bound_validation.py` |
 | `figures/appendix/geometry_robustness_appendix.pdf` | `python binary_source/validation/validate_geometry_robustness.py` | `python binary_source/plot_codes/plot_geometry_robustness_appendix.py` |
 
+### Section 6 maps (Detectability with Roman)
+
+`figures/current/sec6_Droman_xiE_ptE_g0.pdf` (D_Roman with the 3-sigma detection
+contours and, hatched, undetected configurations that shift tE by >= 1%),
+`sec6_regions_xiE_ptE_g0.pdf` and `sec6_D_ratio.pdf` (Appendix E):
+
+```bash
+python binary_source/plot_codes/plot_sec6_power_xiE_ptE.py --outdir figures/current --no-usetex
+```
+
+Default inputs (the paper's):
+
+| Input | File | Produced by |
+|---|---|---|
+| Detection efficiency | `results/roman_sec6_final/sec6_power_xi_kh1.npz` | `roman_sec6_power.py --k-h1 6.21`, Asimov grid `roman_sec6_asimov_cells.py --grid xiPpaper` (u0 = 0.01, 0.1, 0.3, 1; `results/roman_sec6_asimov_xi_v2/roman_sec6_asimov_xi_paper.npz`), thresholds `results/roman_lrt/gv_sec6_h0_final` |
+| Intrinsic maps | `results/final_52468b04987a/xiE_ptE_maps_u0_0p01_0p3_1_refine2/summary_xiE_ptE.npz` | `scan_xiE_ptE.py --u0 0.01 0.3 1 --refine 2` (Figure 2) |
+
+The rows are u0 = 0.01, 0.3, 1; the script stops if they differ (`--any-u0` to
+override). Do not use `results/roman_sec6_asimov_xi_v1` or the
+`results/final_*/xiE_ptE_maps` summaries (u0 = 0.03, 0.1, 0.3) for the paper.
+
 ### Roman F146 production
 
 Before the full Roman run, use the smoke test:

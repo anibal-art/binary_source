@@ -181,11 +181,21 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
                        linestyles="solid")
             ax.contour(xi, pte, ld, levels=[-3.0], colors="crimson", linewidths=1.0,
                        linestyles="--")
-            hidden = ((m < 0.5) & (b >= bias_thr)).astype(float)
-            hidden[~np.isfinite(m) | ~np.isfinite(b)] = 0.0
-            if hidden.any():
-                ax.contourf(xi, pte, hidden.T, levels=[0.5, 1.5], colors="none",
-                            hatches=["\\\\\\\\"])
+            # Undetected and biased: efficiency < 0.5 and |Delta tE/tE| >= bias_thr.
+            # The hatched region is min(g1, g2) > 0, with g1 = (0.5 - efficiency)/0.5
+            # and g2 = log10(|Delta tE/tE|/bias_thr), so its edges are the drawn
+            # contours efficiency = 0.5 (thick white) and |Delta tE/tE| = bias_thr
+            # (dotted white).
+            with np.errstate(divide="ignore", invalid="ignore"):
+                g2 = np.log10(b / bias_thr)
+            g2 = np.where(np.isfinite(g2), g2, -9.0)
+            ax.contour(xi, pte, g2.T, levels=[0.0], colors="w", linewidths=0.8,
+                       linestyles=":")
+            g = np.minimum((0.5 - m) / 0.5, g2)
+            g[~np.isfinite(g)] = -1.0
+            if (g > 0).any():
+                ax.contourf(xi, pte, g.T, levels=[0.0, float(g.max()) + 1.0],
+                            colors="none", hatches=["\\\\\\\\"])
             ax.plot(xi_family(pline, tE), pline, color="w", lw=0.8, ls="-.")
             ax.set_xscale("log")
             ax.set_yscale("log")

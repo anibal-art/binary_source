@@ -246,8 +246,8 @@ def regions_figure(d, summaries, ib, bias_thr, outdir, tex, primary):
                 ax.set_xlabel(L["xi"])
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in (C_BLUE, C_VERMILION, "0.85")]
     thr = rf"$|\Delta t_E/t_E| \geq {bias_thr:g}$"
-    lax.legend(handles, [r"detected (efficiency $\geq 0.5$)", "undetected, " + thr,
-                         r"undetected, $|\Delta t_E/t_E| <$ " + f"{bias_thr:g}"],
+    lax.legend(handles, [r"$\varepsilon \geq 0.5$", r"$\varepsilon < 0.5$, " + thr,
+                         r"$\varepsilon < 0.5$, $|\Delta t_E/t_E| <$ " + f"{bias_thr:g}"],
                loc="center", ncol=3, frameon=False, handlelength=1.2, columnspacing=1.2)
     return save_figure(fig, Path(outdir) / f"sec6_regions_xiE_ptE_g{d['blend_ratio'][ib]:g}")
 

@@ -227,13 +227,14 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
                 ax.set_xlabel(L["xi"])
     handles = [Line2D([], [], color="w", lw=1.1),
                Line2D([], [], color="crimson", lw=1.4),
-               Patch(facecolor="none", edgecolor="w", linewidth=0.0,
+               Patch(facecolor=plt.get_cmap(D_CMAP)(0.4), edgecolor="w", linewidth=0.6,
                      hatch="\\\\\\\\")]
     names = [r"$\varepsilon=0.5$ ($3\sigma$)", r"$D_{\rm BSPL-PSPL}=10^{-3}$",
              r"$\varepsilon<0.5$, $|\Delta t_E|/t_E\geq1\%$"]
     leg = lax.legend(handles, names, loc="center", ncol=3, frameon=True,
                      facecolor=plt.get_cmap(D_CMAP)(0.0), edgecolor="none",
-                     framealpha=1.0, handlelength=1.8, columnspacing=1.5)
+                     framealpha=1.0, handlelength=1.8, handleheight=1.2,
+                     columnspacing=1.5)
     for t in leg.get_texts():
         t.set_color("w")
     fig.colorbar(pcm, ax=list(axes.ravel()), shrink=0.9,

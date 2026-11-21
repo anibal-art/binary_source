@@ -118,6 +118,10 @@ MAX_WORKERS = max(
     ),
 )
 
+# Override (e.g. the CPUs allocated by SLURM; os.cpu_count() counts the
+# whole node).
+MAX_WORKERS = int(os.environ.get("BINARY_SOURCE_MAX_WORKERS", MAX_WORKERS))
+
 
 def final_output_dir(name):
     """

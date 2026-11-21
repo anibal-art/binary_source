@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=12
+#SBATCH --cpus-per-task=40
 #SBATCH --hint=nomultithread
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --partition=milliways-int
 #SBATCH --job-name="qmqf"
 #SBATCH --output=qmqf_%j.log
@@ -16,7 +16,7 @@
 #   timing test: BINARY_SOURCE_QMQF_N=3 BINARY_SOURCE_QMQF_PTE=1 BINARY_SOURCE_QMQF_NGEO=1 \
 #                sbatch binary_source/scan_codes/run_qmqf.slurm
 #   paper run  : sbatch binary_source/scan_codes/run_qmqf.slurm
-# run_final_scans.py uses at most 12 workers (final_config.MAX_WORKERS).
+# Workers = allocated CPUs (BINARY_SOURCE_MAX_WORKERS, read by final_config).
 
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=1
@@ -24,6 +24,7 @@ export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 export HDF5_USE_FILE_LOCKING=FALSE
+export BINARY_SOURCE_MAX_WORKERS=${SLURM_CPUS_PER_TASK:-12}
 
 export BINARY_SOURCE_QMQF_TE=${BINARY_SOURCE_QMQF_TE:-30}
 export BINARY_SOURCE_QMQF_N=${BINARY_SOURCE_QMQF_N:-60}

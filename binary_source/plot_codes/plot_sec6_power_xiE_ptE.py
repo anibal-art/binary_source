@@ -147,6 +147,25 @@ def intrinsic(summaries, u0, xi, pte):
     return None
 
 
+def panels_with_key_row(nrows, ncols, height):
+    """Grid of nrows x ncols panels sharing axes, below a row for the key."""
+    fig = plt.figure(figsize=(fig_width(1.0), fig_width(height)), constrained_layout=True)
+    gs = fig.add_gridspec(nrows + 1, ncols, height_ratios=[0.13] + [1.0] * nrows)
+    lax = fig.add_subplot(gs[0, :])
+    lax.axis("off")
+    axes = np.empty((nrows, ncols), dtype=object)
+    for r in range(nrows):
+        for c in range(ncols):
+            axes[r, c] = fig.add_subplot(gs[r + 1, c],
+                                         sharex=axes[0, 0] if (r or c) else None,
+                                         sharey=axes[0, 0] if (r or c) else None)
+            if r < nrows - 1:
+                axes[r, c].tick_params(labelbottom=False)
+            if c > 0:
+                axes[r, c].tick_params(labelleft=False)
+    return fig, lax, axes
+
+
 def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
     """
     D_Roman = sqrt(lambda)/SNR (median over the random orientations) on the
@@ -154,7 +173,7 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
     contour (orientation-mean efficiency 0.5 at the primary level) and the
     intrinsic contour D = 1e-3. Hatched: undetected (efficiency < 0.5) with
     intrinsic median |Delta tE/tE| >= bias_thr, edged by the dotted contour.
-    Key in the upper-left panel.
+    Key above the panels.
     """
     L = labels(tex)
     xi, pte, mags = d["xiE_grid"], d["PtE_grid"], d["F146"]
@@ -167,8 +186,7 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
     pline = np.geomspace(pte[0], pte[-1], 200)
     # hatch colour and width are read when the figure is saved, not when drawn
     plt.rcParams.update({"hatch.color": "w", "hatch.linewidth": 0.35})
-    fig, axes = plt.subplots(len(rows), len(mags), figsize=(fig_width(1.0), fig_width(0.95)),
-                             sharex=True, sharey=True, squeeze=False, constrained_layout=True)
+    fig, lax, axes = panels_with_key_row(len(rows), len(mags), 1.03)
     for r, (iu, (_, b, di)) in enumerate(rows):               # b: (xi, P); di: (geo, xi, P)
         dint = np.nanmedian(di[iso], axis=0)                  # intrinsic, (xi, P)
         for im, mag in enumerate(mags):
@@ -208,16 +226,17 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
             if r == len(rows) - 1:
                 ax.set_xlabel(L["xi"])
     handles = [Line2D([], [], color="w", lw=1.1),
-               Line2D([], [], color="crimson", lw=1.0),
+               Line2D([], [], color="crimson", lw=1.4),
                Patch(facecolor="none", edgecolor="w", linewidth=0.0,
                      hatch="\\\\\\\\")]
     names = [r"$\varepsilon=0.5$ ($3\sigma$)", r"$D_{\rm BSPL-PSPL}=10^{-3}$",
              r"$\varepsilon<0.5$, $|\Delta t_E|/t_E\geq1\%$"]
-    leg = axes[0, 0].legend(handles, names, loc="upper left", frameon=False,
-                            fontsize="x-small", handlelength=1.6, borderaxespad=0.3)
+    leg = lax.legend(handles, names, loc="center", ncol=3, frameon=True,
+                     facecolor=plt.get_cmap(D_CMAP)(0.0), edgecolor="none",
+                     framealpha=1.0, handlelength=1.8, columnspacing=1.5)
     for t in leg.get_texts():
         t.set_color("w")
-    fig.colorbar(pcm, ax=axes, shrink=0.9,
+    fig.colorbar(pcm, ax=list(axes.ravel()), shrink=0.9,
                  label=r"$D_{\rm Roman}=\sqrt{\lambda}/{\rm SNR}$, median over orientations, "
                        + L["g"](d["blend_ratio"][ib]))
     return save_figure(fig, Path(outdir) / f"sec6_Droman_xiE_ptE_g{d['blend_ratio'][ib]:g}")
@@ -246,20 +265,7 @@ def regions_figure(d, summaries, ib, bias_thr, outdir, tex, primary):
     iso = slice(1, pw.shape[0])
     cmap = ListedColormap(["0.85", C_VERMILION, C_BLUE])
     norm = BoundaryNorm([-0.5, 0.5, 1.5, 2.5], cmap.N)
-    fig = plt.figure(figsize=(fig_width(1.0), fig_width(1.02)), constrained_layout=True)
-    gs = fig.add_gridspec(len(u0) + 1, len(mags), height_ratios=[0.13] + [1.0] * len(u0))
-    lax = fig.add_subplot(gs[0, :])
-    lax.axis("off")
-    axes = np.empty((len(u0), len(mags)), dtype=object)
-    for r in range(len(u0)):
-        for c in range(len(mags)):
-            axes[r, c] = fig.add_subplot(gs[r + 1, c],
-                                         sharex=axes[0, 0] if (r or c) else None,
-                                         sharey=axes[0, 0] if (r or c) else None)
-            if r < len(u0) - 1:
-                axes[r, c].tick_params(labelbottom=False)
-            if c > 0:
-                axes[r, c].tick_params(labelleft=False)
+    fig, lax, axes = panels_with_key_row(len(u0), len(mags), 1.02)
     print(f"\nregions, g = {d['blend_ratio'][ib]:g}, |Delta tE/tE| threshold {bias_thr:g}:")
     for r, (iu, (_, b, _)) in enumerate(rows):                # b: (xi, P)
         for im, mag in enumerate(mags):

@@ -69,6 +69,8 @@ from final_remaining_experiments import (
     run_photocenter,
 )
 
+from scan_xiE_ptE import geometries  # noqa: E402
+
 
 # ============================================================
 # Common physical/numerical configuration
@@ -123,16 +125,18 @@ TE_VALUES = np.array(
 # qf_grid = [0] + qM_grid ensures qf=qM is sampled exactly.
 # ============================================================
 
-N_QMQF = 200
+N_QMQF = int(os.environ.get("BINARY_SOURCE_QMQF_N", "200"))
 
 P_OVER_TE_QMQF = np.array(
-    [
-        0.3,
-        1.0,
-        3.0,
-    ],
+    [float(x) for x in os.environ.get("BINARY_SOURCE_QMQF_PTE", "0.3,1,3").split(",")],
     dtype=float,
 )
+
+# Orientations: 0 keeps the single reference orientation (THETA, PHI,
+# INCLINATION) and the original file names; N > 0 uses the reference
+# orientation plus the N random orientations of the (xi_E, P/tE) maps,
+# scan_xiE_ptE.geometries(N), drawn with the same seed.
+N_QMQF_GEO = int(os.environ.get("BINARY_SOURCE_QMQF_NGEO", "0"))
 
 
 # ============================================================
@@ -650,6 +654,16 @@ QMQF_P_GRID = (
     * QMQF_TE
 )
 
+QMQF_GEO = (geometries(N_QMQF_GEO) if N_QMQF_GEO > 0
+            else np.array([[THETA, PHI, INCLINATION]]))
+
+
+def qmqf_outfile(directory, i_qM, i_qf, i_geo):
+    name = f"scan_qM_{i_qM:03d}_qf_{i_qf:03d}"
+    if N_QMQF_GEO > 0:
+        name += f"_geo_{i_geo:03d}"
+    return Path(directory) / (name + ".npz")
+
 
 def worker_qmqf(task):
 
@@ -658,16 +672,12 @@ def worker_qmqf(task):
         qM,
         i_qf,
         qf,
+        i_geo,
+        (theta, phi, inc),
         directory,
     ) = task
 
-    outfile = (
-        Path(directory)
-        / (
-            f"scan_qM_{i_qM:03d}"
-            f"_qf_{i_qf:03d}.npz"
-        )
-    )
+    outfile = qmqf_outfile(directory, i_qM, i_qf, i_geo)
 
     if valid_npz(
         outfile,
@@ -694,10 +704,10 @@ def worker_qmqf(task):
         u0_true=0.1,
         tE_true=QMQF_TE,
 
-        phi_true=PHI,
-        i_true=INCLINATION,
+        phi_true=float(phi),
+        i_true=float(inc),
         qflux_true=float(qf),
-        theta_true=THETA,
+        theta_true=float(theta),
 
         M1_Msun=M1,
         M2_Msun=M2,
@@ -726,249 +736,89 @@ def worker_qmqf(task):
 def build_qmqf_summary(
     directory,
 ):
+    """Collect the qM-qf scan. Arrays have axes (qM, qf, orientation, P).
+    The original keys (D, DT0, ...) hold the reference orientation (index 0);
+    with random orientations, the 16/50/84th percentiles over them of D and
+    |Delta tE|/tE (successful fits only) are added."""
 
-    directory = Path(
-        directory
-    )
-
-    shape = (
-        len(QMQF_QM_GRID),
-        len(QMQF_QF_GRID),
-        len(QMQF_P_GRID),
-    )
-
-    metrics = {
-        key: np.full(
-            shape,
-            np.nan,
-            dtype=float,
-        )
-        for key in [
-            "D",
-            "RMS",
-            "MAXABS",
-            "TDEV",
-            "DT0",
-            "DU0",
-            "DTE",
-            "Q_A",
-        ]
-    }
-
-    success = np.zeros(
-        shape,
-        dtype=bool,
-    )
-
+    directory = Path(directory)
+    keys = ["D", "RMS", "MAXABS", "TDEV", "DT0", "DU0", "DTE", "Q_A"]
+    shape = (len(QMQF_QM_GRID), len(QMQF_QF_GRID), len(QMQF_GEO), len(QMQF_P_GRID))
+    metrics = {key: np.full(shape, np.nan, dtype=float) for key in keys}
+    success = np.zeros(shape, dtype=bool)
     xi_rel_of_P = None
+    missing = 0
 
-    for i_qM in range(
-        len(QMQF_QM_GRID)
-    ):
-
-        for i_qf in range(
-            len(QMQF_QF_GRID)
-        ):
-
-            filename = (
-                directory
-                / (
-                    f"scan_qM_{i_qM:03d}"
-                    f"_qf_{i_qf:03d}.npz"
-                )
-            )
-
-            if not valid_npz(
-                filename,
-                QMQF_P_GRID,
-            ):
-                continue
-
-            with np.load(
-                filename,
-                allow_pickle=False,
-            ) as d:
-
-                for key in metrics:
-
-                    metrics[key][
-                        i_qM,
-                        i_qf,
-                        :,
-                    ] = np.asarray(
-                        d[key],
-                        dtype=float,
-                    )
-
-                success[
-                    i_qM,
-                    i_qf,
-                    :,
-                ] = np.asarray(
-                    d["SUCCESS"],
-                    dtype=bool,
-                )
-
-                if xi_rel_of_P is None:
-
-                    xi_rel_of_P = np.asarray(
-                        d["xiE_of_P"],
-                        dtype=float,
-                    )
-
+    for i_qM in range(len(QMQF_QM_GRID)):
+        for i_qf in range(len(QMQF_QF_GRID)):
+            for i_geo in range(len(QMQF_GEO)):
+                filename = qmqf_outfile(directory, i_qM, i_qf, i_geo)
+                if not valid_npz(filename, QMQF_P_GRID):
+                    missing += 1
+                    continue
+                with np.load(filename, allow_pickle=False) as d:
+                    for key in keys:
+                        metrics[key][i_qM, i_qf, i_geo] = np.asarray(d[key], dtype=float)
+                    success[i_qM, i_qf, i_geo] = np.asarray(d["SUCCESS"], dtype=bool)
+                    if xi_rel_of_P is None:
+                        xi_rel_of_P = np.asarray(d["xiE_of_P"], dtype=float)
 
     if xi_rel_of_P is None:
+        raise RuntimeError("Could not construct qM-qf summary.")
 
-        raise RuntimeError(
-            "Could not construct qM-qf summary."
+    M1_grid = 3.0 / (1.0 + QMQF_QM_GRID)
+    M2_grid = QMQF_QM_GRID * M1_grid
+    QM = QMQF_QM_GRID[:, None, None]
+    QF = QMQF_QF_GRID[None, :, None]
+    XI = xi_rel_of_P[None, None, :]
+    xi_phot = np.abs(QM - QF) / ((1.0 + QM) * (1.0 + QF)) * XI
+
+    extra = {}
+    if N_QMQF_GEO > 0:
+        rnd = slice(1, None)                      # random orientations only
+        D_ok = np.where(success, metrics["D"], np.nan)[:, :, rnd]
+        dte = np.where(success, metrics["DTE"], np.nan)[:, :, rnd] / QMQF_TE
+        extra = dict(
+            geometries=QMQF_GEO,
+            n_random_geometries=np.int64(N_QMQF_GEO),
+            D_all=metrics["D"], DT0_all=metrics["DT0"], DU0_all=metrics["DU0"],
+            DTE_all=metrics["DTE"], SUCCESS_all=success,
+            D_p16_p50_p84=np.nanpercentile(D_ok, [16, 50, 84], axis=2),
+            abs_dtE_over_tE_p16_p50_p84=np.nanpercentile(np.abs(dte), [16, 50, 84],
+                                                        axis=2),
         )
 
-
-    M1_grid = (
-        3.0
-        / (
-            1.0
-            + QMQF_QM_GRID
-        )
-    )
-
-    M2_grid = (
-        QMQF_QM_GRID
-        * M1_grid
-    )
-
-
-    QM = (
-        QMQF_QM_GRID[
-            :,
-            None,
-            None,
-        ]
-    )
-
-    QF = (
-        QMQF_QF_GRID[
-            None,
-            :,
-            None,
-        ]
-    )
-
-    XI = (
-        xi_rel_of_P[
-            None,
-            None,
-            :,
-        ]
-    )
-
-
-    xi_phot = (
-        np.abs(
-            QM - QF
-        )
-        / (
-            (1.0 + QM)
-            * (1.0 + QF)
-        )
-        * XI
-    )
-
-
-    summary = (
-        directory
-        / "summary_qM_qf.npz"
-    )
-
+    summary = directory / "summary_qM_qf.npz"
     np.savez_compressed(
         summary,
-
-        qM_grid=QMQF_QM_GRID,
-        qf_grid=QMQF_QF_GRID,
-
-        P_grid=QMQF_P_GRID,
-        P_over_tE_grid=(
-            P_OVER_TE_QMQF
-        ),
-
-        Mtot_source=3.0,
-        M1_grid=M1_grid,
-        M2_grid=M2_grid,
-
-        t0_true=T0,
-        u0_true=0.1,
-        tE_true=QMQF_TE,
-
-        rEhat_AU=REHAT_AU,
-
-        phi_true=PHI,
-        i_true=INCLINATION,
-        theta_true=THETA,
-
-        xi_rel_of_P=xi_rel_of_P,
-        xi_phot=xi_phot,
-
-        D=metrics["D"],
-        RMS=metrics["RMS"],
-        MAXABS=metrics["MAXABS"],
-        TDEV=metrics["TDEV"],
-
-        DT0=metrics["DT0"],
-        DU0=metrics["DU0"],
-        DTE=metrics["DTE"],
-
-        Q_A=metrics["Q_A"],
-
-        SUCCESS=success,
-
-        fit_objective=np.array(
-            FIT_OBJECTIVE
-        ),
-
-        code_commit=np.array(
-            CODE_COMMIT
-        ),
-
-        code_dirty=np.bool_(
-            CODE_DIRTY
-        ),
-
-        window_tE=np.float64(
-            WINDOW_TE
-        ),
-
-        n_time=np.int64(
-            FINAL_N_TIME
-        ),
+        qM_grid=QMQF_QM_GRID, qf_grid=QMQF_QF_GRID,
+        P_grid=QMQF_P_GRID, P_over_tE_grid=P_OVER_TE_QMQF,
+        Mtot_source=3.0, M1_grid=M1_grid, M2_grid=M2_grid,
+        t0_true=T0, u0_true=0.1, tE_true=QMQF_TE, rEhat_AU=REHAT_AU,
+        phi_true=QMQF_GEO[0, 1], i_true=QMQF_GEO[0, 2], theta_true=QMQF_GEO[0, 0],
+        xi_rel_of_P=xi_rel_of_P, xi_phot=xi_phot,
+        **{key: metrics[key][:, :, 0] for key in keys},
+        SUCCESS=success[:, :, 0],
+        fit_objective=np.array(FIT_OBJECTIVE),
+        code_commit=np.array(CODE_COMMIT), code_dirty=np.bool_(CODE_DIRTY),
+        window_tE=np.float64(WINDOW_TE), n_time=np.int64(FINAL_N_TIME),
+        **extra,
     )
-
-    print(
-        f"Summary saved: {summary}"
-    )
+    print(f"Summary saved: {summary}  (missing files: {missing})")
 
 
 def run_qmass_qflux():
 
-    directory = final_output_dir(
-        f"qmass_qflux_tE{format_number(QMQF_TE)}"
-    )
+    name = f"qmass_qflux_tE{format_number(QMQF_TE)}"
+    if N_QMQF_GEO > 0:
+        name += f"_n{N_QMQF}_geo{N_QMQF_GEO}"
+    directory = final_output_dir(name)
 
     tasks = [
-        (
-            i_qM,
-            float(qM),
-            i_qf,
-            float(qf),
-            str(directory),
-        )
-        for i_qM, qM
-        in enumerate(
-            QMQF_QM_GRID
-        )
-        for i_qf, qf
-        in enumerate(
-            QMQF_QF_GRID
-        )
+        (i_qM, float(qM), i_qf, float(qf), i_geo, tuple(geo), str(directory))
+        for i_qM, qM in enumerate(QMQF_QM_GRID)
+        for i_qf, qf in enumerate(QMQF_QF_GRID)
+        for i_geo, geo in enumerate(QMQF_GEO)
     ]
 
     print()
@@ -995,6 +845,8 @@ def run_qmass_qflux():
         f"P/tE        = "
         f"{P_OVER_TE_QMQF}"
     )
+
+    print(f"orientations = {len(QMQF_GEO)}")
 
     print(
         f"output      = {directory}"

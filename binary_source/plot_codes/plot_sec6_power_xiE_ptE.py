@@ -53,6 +53,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+import matplotlib.patheffects as pe
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from paper_style import (apply_paper_style, fig_width, heatmap, save_figure,  # noqa: E402
@@ -225,18 +226,19 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
                 ax.set_ylabel(L["u0"](d["u0_grid"][iu]) + "\n" + L["pte"])
             if r == len(rows) - 1:
                 ax.set_xlabel(L["xi"])
-    handles = [Line2D([], [], color="w", lw=1.1),
+    # key on a white background: white symbols with a black outline; the hatched
+    # box is a filled, white-hatched patch under a black frame (the hatch takes
+    # the edge colour of its own patch)
+    outline = [pe.Stroke(linewidth=2.6, foreground="k"), pe.Normal()]
+    handles = [Line2D([], [], color="w", lw=1.4, path_effects=outline),
                Line2D([], [], color="crimson", lw=1.4),
-               Patch(facecolor=plt.get_cmap(D_CMAP)(0.4), edgecolor="w", linewidth=0.6,
-                     hatch="\\\\\\\\")]
+               (Patch(facecolor=plt.get_cmap(D_CMAP)(0.4), edgecolor="w", linewidth=0.0,
+                      hatch="\\\\\\\\"),
+                Patch(facecolor="none", edgecolor="k", linewidth=0.8))]
     names = [r"$\varepsilon=0.5$ ($3\sigma$)", r"$D_{\rm BSPL-PSPL}=10^{-3}$",
              r"$\varepsilon<0.5$, $|\Delta t_E|/t_E\geq1\%$"]
-    leg = lax.legend(handles, names, loc="center", ncol=3, frameon=True,
-                     facecolor=plt.get_cmap(D_CMAP)(0.0), edgecolor="none",
-                     framealpha=1.0, handlelength=1.8, handleheight=1.2,
-                     columnspacing=1.5)
-    for t in leg.get_texts():
-        t.set_color("w")
+    lax.legend(handles, names, loc="center", ncol=3, frameon=False,
+               handlelength=1.8, handleheight=1.2, columnspacing=1.5)
     fig.colorbar(pcm, ax=list(axes.ravel()), shrink=0.9,
                  label=r"$D_{\rm Roman}=\sqrt{\lambda}/{\rm SNR}$, median over orientations, "
                        + L["g"](d["blend_ratio"][ib]))

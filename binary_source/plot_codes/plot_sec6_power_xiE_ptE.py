@@ -51,6 +51,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from paper_style import (apply_paper_style, fig_width, heatmap, save_figure,  # noqa: E402
@@ -149,9 +151,10 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
     """
     D_Roman = sqrt(lambda)/SNR (median over the random orientations) on the
     axes and colour scale of the intrinsic D maps, with the Roman detection
-    contour (orientation-mean efficiency 0.5 and 0.9 at the primary level) and the
-    intrinsic contours D = 1e-2 (solid) and 1e-3 (dashed). Hatched: undetected
-    (efficiency < 0.5) with intrinsic median |Delta tE/tE| >= bias_thr.
+    contour (orientation-mean efficiency 0.5 at the primary level) and the
+    intrinsic contour D = 1e-3. Hatched: undetected (efficiency < 0.5) with
+    intrinsic median |Delta tE/tE| >= bias_thr, edged by the dotted contour.
+    Key in the upper-left panel.
     """
     L = labels(tex)
     xi, pte, mags = d["xiE_grid"], d["PtE_grid"], d["F146"]
@@ -204,6 +207,16 @@ def droman_figure(d, summaries, ib, outdir, tex, primary, bias_thr=0.01):
                 ax.set_ylabel(L["u0"](d["u0_grid"][iu]) + "\n" + L["pte"])
             if r == len(rows) - 1:
                 ax.set_xlabel(L["xi"])
+    handles = [Line2D([], [], color="w", lw=1.1),
+               Line2D([], [], color="crimson", lw=1.0),
+               Patch(facecolor="none", edgecolor="w", linewidth=0.0,
+                     hatch="\\\\\\\\")]
+    names = [r"$\varepsilon=0.5$ ($3\sigma$)", r"$D_{\rm BSPL-PSPL}=10^{-3}$",
+             r"$\varepsilon<0.5$, $|\Delta t_E|/t_E\geq1\%$"]
+    leg = axes[0, 0].legend(handles, names, loc="upper left", frameon=False,
+                            fontsize="x-small", handlelength=1.6, borderaxespad=0.3)
+    for t in leg.get_texts():
+        t.set_color("w")
     fig.colorbar(pcm, ax=axes, shrink=0.9,
                  label=r"$D_{\rm Roman}=\sqrt{\lambda}/{\rm SNR}$, median over orientations, "
                        + L["g"](d["blend_ratio"][ib]))

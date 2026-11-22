@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Section 5: median over random orientations of D_BSPL-PSPL and of
-|Delta tE|/tE across the (q_M, q_f) plane, one row per P/tE.
+Section 5: median over random orientations of D_BSPL-PSPL across the
+(q_M, q_f) plane (colour), with contours of the median |Delta tE|/tE at
+0.1% (dotted) and 1% (solid); one panel per P/tE.
 
 Input : summary_qM_qf.npz written by
         run_final_scans.py --only qmass_qflux with BINARY_SOURCE_QMQF_NGEO > 0
         (orientations of scan_xiE_ptE.geometries, as the (xi_E, P/tE) maps).
-|Delta tE|/tE is shown only where the median D < BIAS_D_MAX, with the colour
-map of Figure 3 (plot_xiE_ptE_maps). Dashed: q_f = q_M. Delta t0 and Delta u0
-are not shown: they depend on taking star 1 as the reference, tE does not.
+Dashed white: q_f = q_M. Delta t0 and Delta u0 are not shown: they depend on
+taking star 1 as the reference, tE does not. Key above the panels.
 
 Usage:
     python binary_source/plot_codes/plot_qM_qf_orientations.py \\
@@ -21,16 +21,18 @@ import os
 import sys
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+import matplotlib.patheffects as pe
+from matplotlib.lines import Line2D
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from paper_style import (apply_paper_style, fig_width, heatmap, save_figure,  # noqa: E402
+from paper_style import (apply_paper_style, heatmap, save_figure,  # noqa: E402
                          d_norm, D_CMAP, D_LABEL)
-from plot_xiE_ptE_maps import BIAS_CMAP, BIAS_D_MAX  # noqa: E402
 from run_paper_figures import configure_log_map_axis  # noqa: E402
+from plot_sec6_power_xiE_ptE import panels_with_key_row  # noqa: E402
 
-BIAS_NORM = (1e-4, 1e-1)
+BIAS_LEVELS = (1e-3, 1e-2)          # |Delta tE|/tE contours
+BIAS_STYLES = (":", "-")
+BIAS_COLOR = "orange"
 
 
 def main():
@@ -52,25 +54,29 @@ def main():
         Bm = d["abs_dtE_over_tE_p16_p50_p84"][1]
         n_geo = int(d["n_random_geometries"])
     pos = qf > 0.0
-    Bm = np.where(Dm < BIAS_D_MAX, Bm, np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        lb = np.where(Bm > 0.0, np.log10(Bm), np.nan)
     print(f"{n_geo} random orientations, P/tE = {pte}")
 
-    fig, axes = plt.subplots(len(pte), 2, squeeze=False, constrained_layout=True,
-                             figsize=(fig_width(1.0), fig_width(0.42 * len(pte) + 0.1)))
-    for r in range(len(pte)):
-        pcm_d = heatmap(axes[r, 0], qM, qf[pos], Dm[:, pos, r].T, cmap=D_CMAP,
-                        norm=d_norm())
-        pcm_b = heatmap(axes[r, 1], qM, qf[pos], Bm[:, pos, r].T, cmap=BIAS_CMAP,
-                        norm=LogNorm(*BIAS_NORM))
-        for c, ax in enumerate(axes[r]):
-            configure_log_map_axis(ax, qM, qf[pos], show_xlabel=(r == len(pte) - 1),
-                                   show_ylabel=(c == 0), diag_color="w",
-                                   hide_last_xlabel=(c == 0))
-            ax.set_title(rf"$P/t_E={pte[r]:g}$", fontsize="small")
-    fig.colorbar(pcm_d, ax=list(axes[:, 0]), shrink=0.9,
+    fig, lax, axes = panels_with_key_row(1, len(pte), 0.58)
+    for c in range(len(pte)):
+        ax = axes[0, c]
+        pcm = heatmap(ax, qM, qf[pos], Dm[:, pos, c].T, cmap=D_CMAP, norm=d_norm())
+        ax.contour(qM, qf[pos], lb[:, pos, c].T, levels=np.log10(BIAS_LEVELS),
+                   colors=BIAS_COLOR, linestyles=BIAS_STYLES, linewidths=1.1)
+        configure_log_map_axis(ax, qM, qf[pos], show_xlabel=True, show_ylabel=(c == 0),
+                               diag_color="w", hide_last_xlabel=(c < len(pte) - 1))
+        ax.set_title(rf"$P/t_E={pte[c]:g}$", fontsize="small")
+    fig.colorbar(pcm, ax=list(axes.ravel()), shrink=0.9,
                  label=D_LABEL + ", median over orientations")
-    fig.colorbar(pcm_b, ax=list(axes[:, 1]), shrink=0.9, extend="both",
-                 label=r"$|\Delta t_E|/t_E$, median over orientations")
+
+    outline = [pe.Stroke(linewidth=2.6, foreground="k"), pe.Normal()]
+    handles = [Line2D([], [], color="w", lw=1.4, ls="--", path_effects=outline),
+               Line2D([], [], color=BIAS_COLOR, lw=1.4, ls=BIAS_STYLES[0]),
+               Line2D([], [], color=BIAS_COLOR, lw=1.4, ls=BIAS_STYLES[1])]
+    names = [r"$q_f=q_M$", r"$|\Delta t_E|/t_E=0.1\%$", r"$|\Delta t_E|/t_E=1\%$"]
+    lax.legend(handles, names, loc="center", ncol=3, frameon=False,
+               handlelength=2.2, columnspacing=1.5)
     for f in save_figure(fig, args.out):
         print("saved", f)
 

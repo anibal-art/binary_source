@@ -46,7 +46,7 @@ Outputs (<out>.*)
     _nodes.csv   per H0 node: c_alpha, k_local, N(c0), FPR of the reference rules;
     _table.csv   per (g, F146): fractions of cells with power >= 0.5, 0.9
                  (isotropic orientations and the reference geometry), fraction
-                 with lambda >= 100, and the longest period with median power
+                 with median lambda >= 100, and the longest period with mean power
                  >= 0.5 for some u0;
     .pdf/.png    orientation-averaged power maps (unless --no-plot).
 
@@ -510,15 +510,18 @@ def main():
           f"ref: pow>=0.5 pow>=0.9 | lam>=100 iso ref | P50 5% 3s [yr]")
     for ib, g in enumerate(blend):
         for im, mag in enumerate(mags):
-            def frac(x, thr, sl):
-                v = x[sl, ib, im]
+            def frac(v, thr):
                 ok = np.isfinite(v)
                 return float((v[ok] >= thr).mean()) if ok.any() else np.nan
-            row = [frac(pw05, 0.5, iso), frac(pw05, 0.9, iso), frac(pw3s, 0.5, iso),
-                   frac(pw3s, 0.9, iso), frac(pw05, 0.5, slice(0, 1)), frac(pw05, 0.9, slice(0, 1)),
-                   frac(lam, 100.0, iso), frac(lam, 100.0, slice(0, 1))]
-            p50 = [longest_period(np.nanmedian(x[iso, ib, im], axis=0), P) / 365.25
-                   for x in (pw05, pw3s)]
+            # efficiency = mean over the random orientations, as in the text and
+            # the figures; lambda: median over them. Fractions of the (u0, P) grid.
+            m05 = np.nanmean(pw05[iso, ib, im], axis=0)
+            m3s = np.nanmean(pw3s[iso, ib, im], axis=0)
+            lmed = np.nanmedian(lam[iso, ib, im], axis=0)
+            row = [frac(m05, 0.5), frac(m05, 0.9), frac(m3s, 0.5), frac(m3s, 0.9),
+                   frac(pw05[0, ib, im], 0.5), frac(pw05[0, ib, im], 0.9),
+                   frac(lmed, 100.0), frac(lam[0, ib, im], 100.0)]
+            p50 = [longest_period(m, P) / 365.25 for m in (m05, m3s)]
             n_fin = int(np.isfinite(lam[:, ib, im]).sum())
             lines.append(f"{g:g},{mag:g}," + ",".join(f"{x:.4f}" for x in row + p50) + f",{n_fin}")
             print(f"{g:3g} {mag:4g} | {row[0]:9.3f} {row[1]:9.3f} | {row[2]:8.3f} {row[3]:8.3f} | "

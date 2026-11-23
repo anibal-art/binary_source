@@ -310,13 +310,17 @@ def build_event_params(
     theta=THETA,
     xi_rel=None,
     blend_ratio=0.0,
+    q_mass=None,
 ):
+    # q_mass: M2/M1 of the binary (None: the module constants M2_MSUN/M1_MSUN).
+    # M1 stays M1_MSUN; with xi_rel given, only q_mass enters the light curve.
     g = float(blend_ratio)
     if not (np.isfinite(g) and g >= 0.0):
         raise ValueError(f"blend_ratio must be finite and >= 0, got {blend_ratio!r}")
 
     xal = xallarap_parameters(
         P_days=P_days,
+        M2_Msun=(M2_MSUN if q_mass is None else float(q_mass) * M1_MSUN),
         theta=theta,
         xi_rel_override=xi_rel,
     )
@@ -418,10 +422,15 @@ def simulate_roman_bspl(
     theta=THETA,
     xi_rel=None,
     blend_ratio=0.0,
+    q_mass=None,
 ):
     """
     Simulate a Roman BSPL/xallarap light curve entirely through
     roman_rubin.
+
+    q_flux, q_mass: flux and mass ratios of source 2 to source 1 (q_mass None:
+    module constants).  source_mag_ab is the magnitude of SOURCE 1; the total
+    source flux is F(source_mag_ab) (1 + q_flux) (lrt_catalog_io).
 
     blend_ratio: g = F_blend / F_source at fixed source magnitude
     (fsource from W149, ftotal = fsource (1 + g)), as in the LRT catalogues.
@@ -455,6 +464,7 @@ def simulate_roman_bspl(
             theta=theta,
             xi_rel=xi_rel,
             blend_ratio=blend_ratio,
+            q_mass=q_mass,
         )
     )
 

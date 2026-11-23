@@ -49,6 +49,18 @@ same conventions as the intrinsic maps of scan_xiE_ptE.py):
     free: the map holds for any companion mass and source distance at
     tE = 30 d, not for another tE.
 
+Grids xiP2lum_* (Section 6 experiment with two luminous sources): the
+(xi_rel, P/tE) maps of Section 5 (scan_xiE_ptE.py --qM --qf, Figure 4) for the
+same pairs (q_M, q_f) = (0.5, 0.05), (0.5, 0.5), (1, 1) and u0 = 0.01, 0.3, 1:
+    xi      : XI_E_GRID[::2] read as the RELATIVE amplitude xi_rel (as Figure 4)
+    F146    : 21, the TOTAL magnitude of the two stars (what Roman measures;
+              source 1 gets F146 + 2.5 log10(1 + q_f))
+    g       : 0
+    geometry: the same 25 rows.
+lambda is the chi2 of the PSPL fit to the noiseless light curve, the Asimov
+noncentrality of T when the alternative model has q_f and q_M free
+(fit_policy_test_a_luminous_v1.json): the true model is then nested in it.
+
 Every case is run_roman_bspl_asimov.run_case (roman_rubin simulation, pyLIMA
 TRF fits of PSPL and PSPL+parallax).  One task = (geometry, g, F146, u0),
 one NPZ with the P axis; existing valid NPZ are skipped.
@@ -117,6 +129,46 @@ GRIDS = {
                  "summary": "roman_sec6_asimov_xi_paper.npz"},
 }
 
+# Two luminous sources: the pairs and u0 of Section 5 (Figure 4).  Optional keys
+# of a grid: mags, blends (default MAGS, BLEND_RATIOS), q_mass, q_flux (default
+# Q_MASS, 0), xi_kind ("E": amplitude of the luminous star, converted to xi_rel;
+# "rel": xi_rel itself), mag_kind ("source1" or "total").
+for _name, (_qm, _qf), _seed in (("xiP2lum_q0p5_f0p05", (0.5, 0.05), 4_200_000_000),
+                                 ("xiP2lum_q0p5_f0p5", (0.5, 0.5), 4_250_000_000),
+                                 ("xiP2lum_q1_f1", (1.0, 1.0), 4_300_000_000)):
+    GRIDS[_name] = {"u0": np.array([0.01, 0.3, 1.0]), "xi": XI_E_GRID[::2],
+                    "seed_base": _seed, "mags": np.array([21.0]), "blends": np.array([0.0]),
+                    "q_mass": _qm, "q_flux": _qf, "xi_kind": "rel", "mag_kind": "total",
+                    "out": REPO_ROOT / "results/roman_sec6_asimov_2lum_v1" / _name,
+                    "summary": f"roman_sec6_asimov_{_name}.npz"}
+
+
+def mags(grid):
+    return GRIDS[grid].get("mags", MAGS)
+
+
+def blends(grid):
+    return GRIDS[grid].get("blends", BLEND_RATIOS)
+
+
+def q_pair(grid):
+    return float(GRIDS[grid].get("q_mass", Q_MASS)), float(GRIDS[grid].get("q_flux", 0.0))
+
+
+def source1_mag(grid, mag):
+    """Magnitude passed to the simulation (source 1) for the grid's convention."""
+    if GRIDS[grid].get("mag_kind", "source1") == "total":
+        return float(mag) + 2.5 * np.log10(1.0 + q_pair(grid)[1])
+    return float(mag)
+
+
+def xi_rel_of(grid, xi):
+    """xi_rel passed to run_case for a node of the grid's xi axis."""
+    if GRIDS[grid].get("xi_kind", "E") == "rel":
+        return float(xi)
+    qm = q_pair(grid)[0]
+    return float(xi) * (1.0 + qm) / qm
+
 KEYS = [
     "delta_chi2_pspl", "delta_chi2_pspl_parallax",
     "chi2_truth", "chi2_truth_fixed_flux", "chi2_pspl", "chi2_pspl_parallax", "n_data",
@@ -145,15 +197,15 @@ def tasks(grid="u0P"):
     """(geometry, blend, magnitude, u0, xi) indices, in a fixed order (xi = 0 for u0P)."""
     return [(ig, ib, im, iu, ix)
             for ig in range(len(GEO))
-            for ib in range(len(BLEND_RATIOS))
-            for im in range(len(MAGS))
+            for ib in range(len(blends(grid)))
+            for im in range(len(mags(grid)))
             for iu in range(len(GRIDS[grid]["u0"]))
             for ix in range(n_xi(grid))]
 
 
 def flat_index(grid, ig, ib, im, iu, ix, ip, n_p):
     nu = len(GRIDS[grid]["u0"])
-    return (((((ig * len(BLEND_RATIOS) + ib) * len(MAGS) + im) * nu + iu) * n_xi(grid) + ix)
+    return (((((ig * len(blends(grid)) + ib) * len(mags(grid)) + im) * nu + iu) * n_xi(grid) + ix)
             * n_p + ip)
 
 
@@ -190,15 +242,17 @@ def one_case(grid, ig, ib, im, iu, ix, ip, P):
         P_days=float(P[ip]),
         u0=float(GRIDS[grid]["u0"][iu]),
         tE=TE,
-        source_mag_ab=float(MAGS[im]),
+        source_mag_ab=source1_mag(grid, mags(grid)[im]),
         fit_window_tE=FIT_WINDOW_TE,
         phi=float(phi),
         inclination=float(inc),
         theta=float(theta),
         asimov=True,
         photometric_filter=PHOTOMETRIC_FILTER,
-        blend_ratio=float(BLEND_RATIOS[ib]),
-        xi_rel=(None if xi is None else float(xi[ix]) * (1.0 + Q_MASS) / Q_MASS),
+        blend_ratio=float(blends(grid)[ib]),
+        xi_rel=(None if xi is None else xi_rel_of(grid, xi[ix])),
+        q_flux=q_pair(grid)[1],
+        q_mass=q_pair(grid)[0],
     )
     r["seconds"] = time.time() - t1
     return r
@@ -222,9 +276,10 @@ def worker(job):
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         out, **res, error=err, P_days=P,
-        u0=GRIDS[grid]["u0"][iu], tE=TE, F146=MAGS[im], blend_ratio=BLEND_RATIOS[ib],
+        u0=GRIDS[grid]["u0"][iu], tE=TE, F146=mags(grid)[im], blend_ratio=blends(grid)[ib],
         xi_E=(np.nan if GRIDS[grid]["xi"] is None else GRIDS[grid]["xi"][ix]), grid=grid,
-        geometry=GEO[ig], t0=T0_DEFAULT, q_mass=Q_MASS, q_flux=0.0,
+        geometry=GEO[ig], t0=T0_DEFAULT, q_mass=q_pair(grid)[0], q_flux=q_pair(grid)[1],
+        xi_kind=GRIDS[grid].get("xi_kind", "E"), mag_kind=GRIDS[grid].get("mag_kind", "source1"),
         rEhat_AU=bs.REHAT_AU, fit_window="whole survey", photometric_filter=PHOTOMETRIC_FILTER,
         asimov=True, fit_policy=str(policy), **commits,
     )
@@ -270,6 +325,9 @@ def pilot(args):
     print(f"tasks = {len(tasks(grid))}, cases = {len(tasks(grid)) * len(P)}")
     if grid == "u0P":
         cases = [(0, 0, 1, 8, 0, 30), (0, 2, 1, 8, 0, 30), (1, 0, 2, 12, 0, 45), (5, 1, 0, 4, 0, 10)]
+    elif grid.startswith("xiP2lum"):
+        # (geometry, g, F146, u0, xi_rel, P) indices: every u0, short and long periods
+        cases = [(1, 0, 0, 0, 10, 14), (1, 0, 0, 1, 12, 5), (5, 0, 0, 2, 14, 25), (2, 0, 0, 1, 16, 20)]
     else:
         cases = [(0, 0, 1, 1, 10, 14), (0, 2, 1, 1, 10, 14), (1, 0, 2, 2, 6, 5), (5, 1, 0, 0, 14, 25)]
         if len(u0s) > 3:                                       # also the largest u0 (u0 = 1)
@@ -280,7 +338,7 @@ def pilot(args):
         t = np.asarray(plain(r["simulation"]["model"].event.telescopes[0].lightcurve["time"]), float)
         secs.append(r["seconds"])
         xs = "" if xis is None else f"xi_E {xis[ix]:.4g} "
-        print(f"geo {ig:2d} g {BLEND_RATIOS[ib]:g} F146 {MAGS[im]:g} u0 {u0s[iu]:.4g} {xs}"
+        print(f"geo {ig:2d} g {blends(grid)[ib]:g} F146 {mags(grid)[im]:g} u0 {u0s[iu]:.4g} {xs}"
               f"P {P[ip]:.1f} d | n_data {int(r['n_data'])} span {t.min():.1f}-{t.max():.1f} "
               f"({(t.max() - t.min()) / 365.25:.2f} yr) | lambda {r['delta_chi2_pspl']:.2f} "
               f"chi2_truth {r['chi2_truth']:.2e} | max Asimov diff "
@@ -295,7 +353,7 @@ def summarize(args):
     P = period_grid(args.fit_policy, grid)
     u0s, xis = GRIDS[grid]["u0"], GRIDS[grid]["xi"]
     # u0P: (geo, g, F146, u0, P), as before; xiP: (geo, g, F146, u0, xi_E, P)
-    shape = (len(GEO), len(BLEND_RATIOS), len(MAGS), len(u0s)) + \
+    shape = (len(GEO), len(blends(grid)), len(mags(grid)), len(u0s)) + \
         (() if xis is None else (len(xis),)) + (len(P),)
     out = {k: np.full(shape, np.nan) for k in KEYS}
     n_err = np.zeros(shape, dtype=int)
@@ -316,8 +374,10 @@ def summarize(args):
     extra = {} if xis is None else {"xiE_grid": xis, "PtE_grid": P / TE}
     np.savez_compressed(
         dest, **{k.upper(): v for k, v in out.items()}, N_ERROR=n_err, grid=grid, **extra,
-        geometry=GEO, blend_ratio=BLEND_RATIOS, F146=MAGS, u0_grid=u0s, P_days=P,
-        tE=TE, t0=T0_DEFAULT, q_mass=Q_MASS, q_flux=0.0, rEhat_AU=bs.REHAT_AU,
+        geometry=GEO, blend_ratio=blends(grid), F146=mags(grid), u0_grid=u0s, P_days=P,
+        tE=TE, t0=T0_DEFAULT, q_mass=q_pair(grid)[0], q_flux=q_pair(grid)[1],
+        xi_kind=GRIDS[grid].get("xi_kind", "E"), mag_kind=GRIDS[grid].get("mag_kind", "source1"),
+        rEhat_AU=bs.REHAT_AU,
         fit_window="whole survey", photometric_filter=PHOTOMETRIC_FILTER, asimov=True,
         fit_policy=str(args.fit_policy), commits=np.array(sorted(commits), dtype="<U64"),
     )
@@ -389,6 +449,8 @@ def cell_lambda(directory, grid, ig, im, iu, ix, ip, P):
 
 
 def umin(args):
+    if "q_flux" in GRIDS[args.grid]:
+        raise SystemExit("--umin is the dark-companion check (one luminous source)")
     grid = args.grid
     if GRIDS[grid]["xi"] is None:
         raise SystemExit("--umin needs a grid with a xi_E axis (xiP, xiPpaper)")
@@ -469,7 +531,8 @@ def main():
     elif args.list:
         P = period_grid(args.fit_policy, args.grid)
         nt = len(tasks(args.grid))
-        print(f"grid {args.grid}: {len(GEO)} geometries x {len(BLEND_RATIOS)} g x {len(MAGS)} F146 x "
+        print(f"grid {args.grid}: {len(GEO)} geometries x {len(blends(args.grid))} g x "
+              f"{len(mags(args.grid))} F146 x "
               f"{len(GRIDS[args.grid]['u0'])} u0 x {n_xi(args.grid)} xi = {nt} tasks, "
               f"x {len(P)} P = {nt * len(P)} cases")
     elif args.summarize:

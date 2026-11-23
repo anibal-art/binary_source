@@ -820,6 +820,58 @@ The rows are u0 = 0.01, 0.3, 1; the script stops if they differ (`--any-u0` to
 override). Do not use `results/roman_sec6_asimov_xi_v1` or the
 `results/final_*/xiE_ptE_maps` summaries (u0 = 0.03, 0.1, 0.3) for the paper.
 
+### Section 6, two luminous sources (in progress)
+
+Detectability of the Section 5 cases, (q_M, q_f) = (0.5, 0.05), (0.5, 0.5),
+(1, 1) at u0 = 0.01, 0.3, 1, in the (xi_rel, P/tE) plane of Figure 4.
+The alternative model of T has q_f and q_M free
+(`catalogs/roman_bspl_lrt_v1/fit_policy_test_a_luminous_v1.json`); F146 = 21 is
+the total magnitude of the two stars, g = 0.
+
+1. Null calibration. The H0 light curves are PSPL, so the events of the dark
+   calibration are reused (their runner JSON/NPZ are linked); only the omega
+   profile is recomputed with the luminous policy.
+
+```bash
+H0=/export/storage3/rubin/microlensing/romanrubin/binary_source/catalogs/roman_bspl_lrt_v1/h0_candidate_v5_blend.parquet
+RUN=results/roman_lrt/gv_sec6_h0_lum_v1
+python catalogs/roman_bspl_lrt_v1/lrt_tasks.py --config configs/lrt_tasks/gv_sec6_h0_lum_v1.json --h0 $H0
+for out in $(awk '{print $4}' $RUN/tasks.txt); do
+  b=$(basename $out .json)
+  for d in gv_sec6_h0_v1 gv_sec6_h0_u6_v1; do
+    src=results/roman_lrt/$d/json/$b
+    if [ -s $src.json ] && [ -s $src.npz ]; then
+      ln -sf "$(realpath $src.json)" $out; ln -sf "$(realpath $src.npz)" ${out%.json}.npz; break
+    fi
+  done
+done
+ls $RUN/json/*.json | wc -l; ls $RUN/json/*.npz | wc -l      # 250 and 250
+sbatch catalogs/roman_bspl_lrt_v1/run_omega_profiles.slurm $RUN catalogs/roman_bspl_lrt_v1/fit_policy_test_a_luminous_v1.json
+python binary_source/analysis/lrt_gross_vitells.py --profiles $RUN/omega_profile/*_omega_profile.json \
+    --out $RUN/gross_vitells --group-by-config --extra-alphas 0.00135 0.0027 --validate
+```
+
+   The dark model is nested in the luminous one, so for every event
+   T(luminous) >= T(dark) of `results/roman_lrt/gv_sec6_h0_v1/omega_profile`
+   (or `gv_sec6_h0_u6_v1`) up to optimizer failure.
+
+2. Asimov noncentrality (PSPL fits only; the true model is nested in the
+   alternative):
+
+```bash
+for G in xiP2lum_q0p5_f0p05 xiP2lum_q0p5_f0p5 xiP2lum_q1_f1; do
+  python binary_source/analysis/roman_sec6_asimov_cells.py --grid $G --list
+done
+sbatch binary_source/analysis/roman_sec6_asimov_cells.slurm --grid xiP2lum_q1_f1 --pilot
+sbatch --array=0-7 binary_source/analysis/roman_sec6_asimov_cells.slurm --grid <G> --workers 40
+python binary_source/analysis/roman_sec6_asimov_cells.py --grid <G> --summarize
+```
+
+   Outputs: `results/roman_sec6_asimov_2lum_v1/<G>/roman_sec6_asimov_<G>.npz`.
+
+3. Pending: noisy H1 validation of k for the luminous alternative, and the
+   power maps (`roman_sec6_power.py` with the luminous `gross_vitells_summary.json`).
+
 ### Roman F146 production
 
 Before the full Roman run, use the smoke test:

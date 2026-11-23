@@ -1,0 +1,22 @@
+{
+  "run_name": "gv_sec6_h0_lum_v1",
+  "description": "Test A null calibration with a LUMINOUS-companion alternative (Section 6 experiment with two luminous sources): q_f and q_M free in the BSPL (fit_policy_test_a_luminous_v1.json). The null light curves are PSPL, so this run uses the SAME H0 events as the dark-companion calibration: pi_E = 0 PSPL truths at tE = 30 d, F146 = 21, g = 0, u0 nodes 0, 1, 4, 5, 6 of the H0 catalog (0.005, 0.0136, 0.271, 0.737, 2.0; they bracket u0 = 0.01, 0.3, 1 of the two-luminous maps), 50 realizations each (the first 50, as gv_sec6_h0_v1 and gv_sec6_h0_u6_v1). The runner JSON/NPZ of those runs are linked into json/ (the PSPL fit does not depend on the alternative model); only lrt_omega_profile.py is run, with the luminous policy, then lrt_gross_vitells.py --group-by-config --extra-alphas 0.00135 0.0027.",
+  "outdir": "results/roman_lrt/gv_sec6_h0_lum_v1",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0_grid_index": [0, 1, 4, 5, 6],
+        "tE": 30.0,
+        "source_mag_F146_AB": [21.0],
+        "blend_ratio_W149": [0.0]
+      },
+      "n_per_config": 50,
+      "expect_n_configs": 5
+    }
+  ]
+}

@@ -107,6 +107,39 @@ def pspl_starts(features, rule, bounds):
     return starts
 
 
+# Start pairs with |B - eta| below this are skipped: the linear amplitude
+# divided by B - eta would put the start at the xi bounds.
+MIN_CENTROID_FACTOR = 0.05
+# q_flux below this is a dark companion (the dark policies hold q_flux in
+# [0, 1e-8] through bounds); the conversions then reduce exactly to the
+# dark-companion ones.
+DARK_Q_FLUX = 1e-6
+
+
+def start_pairs(rule):
+    """
+    (q_M, q_f) start pairs of the BSPL fit.  rule["start_pairs"] (luminous
+    companion policies) or, by default, the single pair
+    (rule["xi_mass_ratio"], rule["q_flux"]) of the dark-companion policies.
+    """
+    if "start_pairs" in rule:
+        return [(float(qm), float(qf)) for qm, qf in rule["start_pairs"]]
+    return [(float(rule["xi_mass_ratio"]), float(rule["q_flux"]))]
+
+
+def centroid_factor(mass_ratio, q_flux=0.0):
+    """
+    B - eta: displacement of the light centroid in units of the source-1
+    displacement amplitude xi (B = q_M/(1+q_M), eta = q_f/(1+q_f)).  The
+    linearized model sees the centroid, so the source-1 amplitude is the
+    linear one divided by B - eta (negative: opposite direction).
+    """
+    q, qf = float(mass_ratio), float(q_flux)
+    if qf < DARK_Q_FLUX:                      # dark policies: q_flux ~ 1e-8 by bounds
+        return q / (1.0 + q)
+    return q / (1.0 + q) - qf / (1.0 + qf)
+
+
 def bspl_starts(pspl_best, rule, bounds):
     """
     BSPL start bank built on the best observed PSPL (t0, u0, tE).
@@ -121,7 +154,7 @@ def bspl_starts(pspl_best, rule, bounds):
     """
     t0, u0, tE = (float(v) for v in pspl_best[:3])
     q = float(rule["xi_mass_ratio"])
-    frac = q / (1.0 + q)
+    frac = abs(centroid_factor(q, rule["q_flux"]))
     common = {
         "t0": clip_to_bounds(t0, bounds["t0"]),
         "u0": clip_to_bounds(u0, bounds["u0"]),
@@ -244,8 +277,14 @@ def linearized_xallarap_periodogram(t, resid, err, jac, i_t0, i_u0, tE, t0_xi,
     return dchi2, coef
 
 
-def xallarap_from_coefficients(coef, mass_ratio):
-    """(c1, c2, c3, c4) -> pyLIMA xi_para, xi_perp, xi_phase, xi_inclination."""
+def xallarap_from_coefficients(coef, mass_ratio, q_flux=0.0):
+    """
+    (c1, c2, c3, c4) -> pyLIMA xi_para, xi_perp, xi_phase, xi_inclination.
+
+    The coefficients describe the light centroid, which moves by (B - eta)
+    times the source-1 displacement (centroid_factor); q_flux = 0 gives the
+    dark-companion conversion (factor B = q_M/(1+q_M)).
+    """
     C = np.array([[coef[0], coef[1]], [coef[2], coef[3]]])
     U, S, Vt = np.linalg.svd(C)
     S = np.array(S, dtype=float)
@@ -255,8 +294,8 @@ def xallarap_from_coefficients(coef, mass_ratio):
     if np.linalg.det(Vt) < 0:
         Vt[1, :] *= -1.0
         S[1] *= -1.0
-    m1 = mass_ratio / (1.0 + mass_ratio)
-    xi = S[0] / m1
+    m1 = centroid_factor(mass_ratio, q_flux)
+    xi = S[0] / m1                              # signed: B < eta flips the orbit
     sin_i = S[1] / S[0] if S[0] > 0 else 0.0
     theta = np.arctan2(U[0, 1], U[0, 0])        # U = Rot(-theta)
     phi = np.arctan2(Vt[1, 0], Vt[0, 0])        # Vt = Rot(phi)
@@ -298,30 +337,47 @@ def candidates_at_omega(names, pspl_best, a, c, omega, rule, bounds):
     """
     i_t0, i_u0, i_tE = names.index("t0"), names.index("u0"), names.index("tE")
     tE = float(pspl_best[i_tE])
-    q = float(rule["xi_mass_ratio"])
+    pairs = start_pairs(rule)
     candidates = []
-    for alpha in rule.get("amplitude_scales", [1.0]):
-        xi = xallarap_from_coefficients(alpha * c, q)
-        tE_start = tE + alpha * a[i_tE]
-        t0_start = pspl_best[i_t0] + alpha * a[i_t0] - tE_start * alpha * c[0]
-        u0_start = pspl_best[i_u0] + alpha * a[i_u0] + alpha * c[2]
-        guess = {
-            "t0": clip_to_bounds(t0_start, bounds["t0"]),
-            "u0": clip_to_bounds(u0_start, bounds["u0"]),
-            "tE": clip_to_bounds(tE_start, bounds["tE"]),
-            "xi_para": clip_to_bounds(xi["xi_para"], bounds["xi_para"]),
-            "xi_perp": clip_to_bounds(xi["xi_perp"], bounds["xi_perp"]),
-            "xi_angular_velocity": clip_to_bounds(omega, bounds["xi_angular_velocity"]),
-            "xi_phase": clip_to_bounds(xi["xi_phase"], bounds["xi_phase"]),
-            "xi_inclination": clip_to_bounds(xi["xi_inclination"], bounds["xi_inclination"]),
-            "xi_mass_ratio": clip_to_bounds(q, bounds["xi_mass_ratio"]),
-            "q_flux_W149": clip_to_bounds(rule["q_flux"], bounds["q_flux_W149"]),
-        }
-        candidates.append({
-            "label": f"bspl_periodogram_P{2 * np.pi / omega:.4g}_a{alpha:g}",
-            "alpha": float(alpha),
-            "initial_guess": guess,
-        })
+    for q, qf in pairs:
+        m = centroid_factor(q, qf)
+        if abs(m) < MIN_CENTROID_FACTOR:              # on q_f ~ q_M: no linear start
+            continue
+        # The linear fit describes the light centroid.  pyLIMA anchors source 1
+        # at t0_xi; the centroid sits at source 1 - eta xi, so the constant
+        # term L(t0_xi) = (c1, c3) maps to the source-1 anchor with a factor
+        # B / (B - eta) if the companion keeps its offset at t0_xi, or 1 if both
+        # sources are anchored.  Both are tried (identical for q_flux = 0); the
+        # caller ranks the candidates by their full-model chi2.
+        eta = 0.0 if qf < DARK_Q_FLUX else qf / (1.0 + qf)
+        f_offset = (m + eta) / m                       # = B / (B - eta)
+        anchors = [1.0] if abs(f_offset - 1.0) < 1e-6 else [1.0, f_offset]
+        for f in anchors:
+            for alpha in rule.get("amplitude_scales", [1.0]):
+                xi = xallarap_from_coefficients(alpha * c, q, qf)
+                tE_start = tE + alpha * a[i_tE]
+                t0_start = pspl_best[i_t0] + alpha * a[i_t0] - tE_start * f * alpha * c[0]
+                u0_start = pspl_best[i_u0] + alpha * a[i_u0] + f * alpha * c[2]
+                guess = {
+                    "t0": clip_to_bounds(t0_start, bounds["t0"]),
+                    "u0": clip_to_bounds(u0_start, bounds["u0"]),
+                    "tE": clip_to_bounds(tE_start, bounds["tE"]),
+                    "xi_para": clip_to_bounds(xi["xi_para"], bounds["xi_para"]),
+                    "xi_perp": clip_to_bounds(xi["xi_perp"], bounds["xi_perp"]),
+                    "xi_angular_velocity": clip_to_bounds(omega, bounds["xi_angular_velocity"]),
+                    "xi_phase": clip_to_bounds(xi["xi_phase"], bounds["xi_phase"]),
+                    "xi_inclination": clip_to_bounds(xi["xi_inclination"],
+                                                     bounds["xi_inclination"]),
+                    "xi_mass_ratio": clip_to_bounds(q, bounds["xi_mass_ratio"]),
+                    "q_flux_W149": clip_to_bounds(qf, bounds["q_flux_W149"]),
+                }
+                # Dark policies (one pair, one anchor) keep their original labels.
+                tag = "" if len(pairs) == 1 else f"_qM{q:g}_qf{qf:g}_f{f:.3g}"
+                candidates.append({
+                    "label": f"bspl_periodogram_P{2 * np.pi / omega:.4g}_a{alpha:g}{tag}",
+                    "alpha": float(alpha),
+                    "initial_guess": guess,
+                })
     return candidates
 
 

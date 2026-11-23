@@ -89,6 +89,17 @@ def event_snr(simulation):
         ),
     )
 
+    # pyLIMA double source: baseline = ftotal + q_flux fsource
+    # (lrt_catalog_io); q_flux = 0 leaves the dark-companion value unchanged.
+    q_flux = float(
+        simulation["event_params"].get("q_flux", 0.0)
+    )
+    if q_flux != 0.0:
+        baseline_flux += q_flux * first_mapping_value(
+            params,
+            ("fsource_",),
+        )
+
     valid = (
         np.isfinite(flux)
         & np.isfinite(err_flux)
@@ -275,7 +286,13 @@ def run_case(
     asimov=True,
     photometric_filter=False,
     blend_ratio=0.0,
+    q_flux=0.0,
+    q_mass=None,
 ):
+    # q_flux, q_mass: second source luminous (Section 6 experiment with two
+    # luminous sources); defaults = dark companion and the module masses.
+    # source_mag_ab is the magnitude of source 1 (callers that fix the total
+    # magnitude convert it first).
     # fit_window_tE=None: whole Roman survey (as the LRT catalogue runner).
     # blend_ratio: g = F_blend/F_source at fixed source magnitude.
     # photometric_filter=True applies roman_rubin's Roman F146 policy:
@@ -294,7 +311,8 @@ def run_case(
             ),
             asimov=bool(asimov),
             truth_parallax=False,
-            q_flux=0.0,
+            q_flux=float(q_flux),
+            q_mass=q_mass,
             time_window_te=(
                 None
                 if fit_window_tE is None
@@ -523,6 +541,10 @@ def run_case(
             bool(photometric_filter),
         "blend_ratio":
             float(blend_ratio),
+        "q_flux":
+            float(q_flux),
+        "q_mass":
+            float(simulation["xallarap"]["q_mass"]),
     }
 
 

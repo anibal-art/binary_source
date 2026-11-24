@@ -826,7 +826,9 @@ Detectability of the Section 5 cases, (q_M, q_f) = (0.5, 0.05), (0.5, 0.5),
 (1, 1) at u0 = 0.01, 0.3, 1, in the (xi_rel, P/tE) plane of Figure 4.
 The alternative model of T has q_f and q_M free
 (`catalogs/roman_bspl_lrt_v1/fit_policy_test_a_luminous_v1.json`); F146 = 21 is
-the total magnitude of the two stars, g = 0.
+the total magnitude of the two stars, g = 0. On che, `python` below is
+`/home/anibalvarela/.conda/envs/pyLIMA_test/bin/python` (the base environment
+has no parquet engine), run from the repository root.
 
 1. Null calibration. The H0 light curves are PSPL, so the events of the dark
    calibration are reused (their runner JSON/NPZ are linked); only the omega
@@ -869,8 +871,27 @@ python binary_source/analysis/roman_sec6_asimov_cells.py --grid <G> --summarize
 
    Outputs: `results/roman_sec6_asimov_2lum_v1/<G>/roman_sec6_asimov_<G>.npz`.
 
-3. Pending: noisy H1 validation of k for the luminous alternative, and the
-   power maps (`roman_sec6_power.py` with the luminous `gross_vitells_summary.json`).
+3. Noisy H1 validation of k for the luminous alternative, (q_M, q_f) = (1, 1)
+   (after steps 1 and 2; `GV=$RUN/gross_vitells_summary.json`):
+
+```bash
+A2=results/roman_sec6_asimov_2lum_v1/xiP2lum_q1_f1/roman_sec6_asimov_xiP2lum_q1_f1.npz
+CELLS=results/roman_sec6_2lum/validation_cells_q1_f1.json
+VAL=results/roman_lrt/sec6_h1_validation_lum_v1
+POL=catalogs/roman_bspl_lrt_v1/fit_policy_test_a_luminous_v1.json
+python binary_source/analysis/roman_sec6_power.py --gv-summary $GV --asimov $A2 --select-validation $CELLS
+python catalogs/roman_bspl_lrt_v1/build_h1_bspl_catalog.py --sec6-validation $CELLS \
+    --output results/roman_sec6_2lum/h1_validation_q1_f1.parquet
+python catalogs/roman_bspl_lrt_v1/lrt_tasks.py --config configs/lrt_tasks/sec6_h1_validation_lum_v1.json \
+    --h1 results/roman_sec6_2lum/h1_validation_q1_f1.parquet
+SAVE_ARRAYS=1 sbatch catalogs/roman_bspl_lrt_v1/run_lrt_tasks.slurm $VAL/tasks.txt $POL
+sbatch catalogs/roman_bspl_lrt_v1/run_omega_profiles.slurm $VAL $POL
+python binary_source/analysis/roman_sec6_power.py --validate $CELLS --gv-summary $GV \
+    --profiles $VAL/omega_profile/*_omega_profile.json
+```
+
+4. Power maps: `roman_sec6_power.py --gv-summary $GV --asimov <npz of each grid>
+   --k-h1 <k from step 3> --out ...` (pending: figure).
 
 ### Roman F146 production
 

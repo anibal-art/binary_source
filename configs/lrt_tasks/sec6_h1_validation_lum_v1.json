@@ -1,0 +1,18 @@
+{
+  "run_name": "sec6_h1_validation_lum_v1",
+  "description": "Validation of the noncentral chi2 power for the Section 6 experiment with two luminous sources: H1 truths with (q_M, q_f) = (1, 1) at 12 cells of the Asimov grid xiP2lum_q1_f1 chosen by roman_sec6_power.py --select-validation with the luminous H0 summary (lambda 6-45, isotropic geometries, F146 = 21 total, g = 0), 100 noise realizations each at the cell geometry and (xi_rel, P). Catalog: build_h1_bspl_catalog.py --sec6-validation. Runner with --truth-kind h1a, SAVE_ARRAYS=1 and fit_policy_test_a_luminous_v1.json, then lrt_omega_profile.py with the same policy, as gv_sec6_h0_lum_v1. Compare with roman_sec6_power.py --validate (k under H1).",
+  "outdir": "results/roman_lrt/sec6_h1_validation_lum_v1",
+  "selections": [
+    {
+      "catalog": "h1",
+      "kinds": [
+        "h1a"
+      ],
+      "where": {
+        "scan_family": "sec6_validation"
+      },
+      "n_per_config": 100,
+      "expect_n_configs": 12
+    }
+  ]
+}

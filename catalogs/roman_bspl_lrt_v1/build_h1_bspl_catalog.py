@@ -207,11 +207,18 @@ def marginalized_geometries(n, geometry_seed):
 def make_row(*, scan_family, power_cell_id, realization_id, u0, period_days,
              te_days, q_mass, q_flux, f146_ab, geometry,
              u0_grid_index=-1, period_grid_index=-1, qM_grid_index=-1,
-             qf_grid_index=-1, ptE_grid_index=-1, config_name="", blend_ratio=0.0):
+             qf_grid_index=-1, ptE_grid_index=-1, config_name="", blend_ratio=0.0,
+             xi_rel_override=None):
+    # xi_rel_override: the relative amplitude of an (xi_rel, P) grid cell; then
+    # P and xi_rel are independent and a_rel = xi_rel rEhat (Kepler not used).
 
     m1, m2 = binary_component_masses(q_mass)
-    a_rel = kepler_a_rel_au(period_days, MTOT_SOURCE_MSUN)
-    xi_rel = a_rel / REHAT_AU
+    if xi_rel_override is None:
+        a_rel = kepler_a_rel_au(period_days, MTOT_SOURCE_MSUN)
+        xi_rel = a_rel / REHAT_AU
+    else:
+        xi_rel = float(xi_rel_override)
+        a_rel = xi_rel * REHAT_AU
     xi_e1 = q_mass / (1.0 + q_mass) * xi_rel
 
     alpha = float(geometry["orbit_alpha_rad"])
@@ -294,7 +301,9 @@ def sec6_validation_rows(cells_json):
     (theta, phi, inclination) of roman_bspl_roman_rubin maps one to one onto
     (orbit_alpha_rad, xi_phase, xi_inclination): xi_para = xi_rel cos(theta),
     xi_perp = xi_rel sin(theta); the masses (Mtot = 3, q = 0.5), rEhat = 5 AU,
-    t0 and tE are the same constants.
+    t0 and tE are the same constants.  Cells of an xi grid carry xi_rel
+    (used as is, Kepler not applied) and the spec carries q_flux (two luminous
+    sources; F146 is the total magnitude, as in make_row).
     """
     spec = json.loads(Path(cells_json).read_text())
     n = int(spec["n_realizations"])
@@ -307,9 +316,11 @@ def sec6_validation_rows(cells_json):
             rows.append(make_row(
                 scan_family="sec6_validation", power_cell_id=c["config_id"],
                 realization_id=r, u0=float(c["u0"]), period_days=float(c["P_days"]),
-                te_days=float(spec["tE"]), q_mass=float(spec["q_mass"]), q_flux=0.0,
+                te_days=float(spec["tE"]), q_mass=float(spec["q_mass"]),
+                q_flux=float(spec.get("q_flux", 0.0)),
                 f146_ab=float(c["F146"]), geometry=geometry,
-                blend_ratio=float(c["blend_ratio"]), config_name=c["config_id"]))
+                blend_ratio=float(c["blend_ratio"]), config_name=c["config_id"],
+                xi_rel_override=c.get("xi_rel")))
     return rows
 
 
@@ -341,12 +352,14 @@ def build_catalog(*, n_real, geometry_seed, smoke, include_te150,
 
     if sec6_cells is not None:
         spec = json.loads(Path(sec6_cells).read_text())
+        xi_cells = all("xi_rel" in c for c in spec["cells"])
         if (abs(float(spec["tE"]) - TE_MAIN_DAYS) > 1e-12
-                or abs(float(spec["q_mass"]) - Q_MASS_MAIN) > 1e-12
+                or (not xi_cells and abs(float(spec["q_mass"]) - Q_MASS_MAIN) > 1e-12)
                 or abs(float(spec["Mtot_Msun"]) - MTOT_SOURCE_MSUN) > 1e-12
                 or abs(float(spec["rEhat_AU"]) - REHAT_AU) > 1e-12
                 or abs(float(spec["t0"]) - T0) > 1e-9):
-            raise SystemExit("sec6 cells: tE, q_mass, Mtot, rEhat or t0 differ from this builder")
+            raise SystemExit("sec6 cells: tE, q_mass, Mtot, rEhat or t0 differ from this builder"
+                             " (q_mass may differ only for cells with xi_rel)")
         rows = sec6_validation_rows(sec6_cells)
         u0_grid, period_grid = np.array([]), np.array([])
         qM_grid, qf_grid, mags_main = np.array([]), np.array([]), np.array([])

@@ -152,9 +152,20 @@ VALIDATION_SEED = 20261117
 
 
 def select_validation(args, lam, I, A, blend, mags, u0, P):
-    """Cells of the isotropic geometries with lambda near the targets."""
+    """
+    Cells of the isotropic geometries with lambda near the targets.  u0P grid:
+    lam is (geo, g, F146, u0, P).  xi grids (xiP, xiPpaper, xiP2lum_*): lam is
+    (geo, g, F146, u0, xi, P) and the cells also carry xi_rel and q_flux.
+    """
     rng = np.random.default_rng(VALIDATION_SEED)
     geo = np.asarray(A["geometry"], float)
+    has_xi = "xiE_grid" in A.files
+    q_mass = float(A["q_mass"])
+    q_flux = float(A["q_flux"]) if "q_flux" in A.files else 0.0
+    if has_xi:
+        xi_axis = np.asarray(A["xiE_grid"], float)
+        xi_kind = str(A["xi_kind"]) if "xi_kind" in A.files else "E"
+        xi_rel_axis = xi_axis if xi_kind == "rel" else xi_axis * (1.0 + q_mass) / q_mass
     cells = []
     for j in range(args.n_cells):
         ib, im = j % len(blend), (j // len(blend)) % len(mags)
@@ -164,12 +175,17 @@ def select_validation(args, lam, I, A, blend, mags, u0, P):
         cand = np.argwhere(dist <= np.log(1.1))                 # within 10% of the target
         if len(cand) == 0:
             cand = np.argwhere(dist == np.nanmin(dist))
-        ig1, iu, ip = cand[rng.integers(len(cand))]
+        pick = cand[rng.integers(len(cand))]
+        if has_xi:
+            ig1, iu, ix, ip = pick
+        else:
+            ig1, iu, ip = pick
         ig = int(ig1) + 1
         th, ph, inc = geo[ig]
         k, c05, c3s = (float(I[key][ib, im, iu]) for key in ("k", "c05", "c3s"))
-        lv = float(lam[ig, ib, im, iu, ip])
-        cells.append({
+        lv = float(lam[(ig, ib, im, iu) + ((ix,) if has_xi else ()) + (ip,)])
+        extra = ({"xi_rel": float(xi_rel_axis[ix]), "xi_index": int(ix)} if has_xi else {})
+        cells.append({**extra,
             "config_id": f"sec6_validation:c{j:02d}", "geometry_index": ig,
             "theta": float(th), "phi": float(ph), "inclination": float(inc),
             "u0": float(u0[iu]), "u0_index": int(iu), "P_days": float(P[ip]), "P_index": int(ip),
@@ -179,7 +195,7 @@ def select_validation(args, lam, I, A, blend, mags, u0, P):
             "power05_pred": float(stats.ncx2.sf(c05, k, lv)),
             "power3s_pred": float(stats.ncx2.sf(c3s, k, lv))})
     spec = {"n_realizations": args.n_validation, "tE": float(A["tE"]), "t0": float(A["t0"]),
-            "q_mass": float(A["q_mass"]),
+            "q_mass": q_mass, "q_flux": q_flux,
             "Mtot_Msun": 3.0,                     # M1 + M2 of roman_bspl_roman_rubin (2 + 1)
             "rEhat_AU": float(A["rEhat_AU"]),
             "asimov": str(args.asimov), "gv_summary": str(args.gv_summary),
@@ -450,13 +466,11 @@ def main():
 
     nodes, u0_nodes = node_tables(summary, blend, mags)
     I = {k: interp_log_u0(v, u0_nodes, u0) for k, v in nodes.items()}
-    if "xiE_grid" in A.files:                                 # --grid xiP Asimov summary
-        if args.select_validation is not None:
-            raise SystemExit("--select-validation is defined on the u0P grid")
-        power_xi(args, A, I, c0)
-        return
     if args.select_validation is not None:
         select_validation(args, lam, I, A, blend, mags, u0, P)
+        return
+    if "xiE_grid" in A.files:                                 # xi-grid Asimov summary
+        power_xi(args, A, I, c0)
         return
 
     def b(x):                                                 # (g, F146, u0) -> broadcast

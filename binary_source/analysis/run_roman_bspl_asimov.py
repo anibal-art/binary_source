@@ -288,7 +288,10 @@ def run_case(
     blend_ratio=0.0,
     q_flux=0.0,
     q_mass=None,
+    pspl_h0_starts=None,
 ):
+    # pspl_h0_starts: None (one PSPL start at the truth, as the maps) or the
+    # policy starts of fit_pspl_comparison(h0_starts=...) (--audit-starts).
     # q_flux, q_mass: second source luminous (Section 6 experiment with two
     # luminous sources); defaults = dark companion and the module masses.
     # source_mag_ab is the magnitude of source 1 (callers that fix the total
@@ -355,6 +358,7 @@ def run_case(
             simulation,
             output_dir=tmp,
             seed=int(event_index),
+            h0_starts=pspl_h0_starts,
         )
 
     chi2_pspl = float(
@@ -545,6 +549,14 @@ def run_case(
             float(q_flux),
         "q_mass":
             float(simulation["xallarap"]["q_mass"]),
+        # lambda from the truth start alone (= delta_chi2_pspl without
+        # pspl_h0_starts), and which start gave the kept PSPL optimum
+        "delta_chi2_pspl_truth_start":
+            float(fit["chi2_h0_truth_start"]) - chi2_truth,
+        "pspl_best_start":
+            str(fit["h0_best_start"]),
+        "pspl_n_starts":
+            int(len(fit["chi2_h0_starts"])),
     }
 
 

@@ -636,6 +636,7 @@ def fit_pspl_comparison(
     simulation,
     output_dir,
     seed=20261019,
+    h0_starts=None,
 ):
     """
     Fit the SAME Roman realization with:
@@ -644,6 +645,13 @@ def fit_pspl_comparison(
         B: PSPL + annual parallax
 
     Both fits use roman_rubin -> pyLIMA TRFfit.
+
+    h0_starts: None (default) -> fit A from the true (t0, u0, tE) only.
+    Otherwise {"start_rule": ..., "features": ...} of a fit policy
+    (PSPL.start_rule, features): fit A is also started from the u0 x tE grid
+    of roman_lrt_start_bank.pspl_starts around the light-curve guesses, the
+    same starts as the LRT catalogue runner, and the lowest chi2 is kept.
+    B starts from the kept A optimum in both cases.
     """
     (
         _,
@@ -797,6 +805,40 @@ def fit_pspl_comparison(
         )
     )
 
+    chi2_h0_truth_start = _chi2(fit_h0)
+    chi2_h0_starts = [chi2_h0_truth_start]
+    h0_best_start = "truth"
+
+    if h0_starts is not None:
+        from binary_source.analysis import roman_lrt_start_bank as start_bank
+
+        bounds = {k: v["bounds"] for k, v in common_bounds.items()}
+        features = start_bank.light_curve_features(
+            np.asarray(roman_lc, dtype=float), **h0_starts["features"]
+        )
+        chi2_best = chi2_h0_truth_start
+        for k, start in enumerate(
+            start_bank.pspl_starts(features, h0_starts["start_rule"], bounds)
+        ):
+            sub = output_dir / f"H0_start_{k:02d}"
+            sub.mkdir(parents=True, exist_ok=True)
+            try:
+                fit_try, _, _ = fit_lc.fit_rubin_roman(
+                    Source=int(seed), event_params=params, path_save=sub,
+                    path_ephemerides=str(ephemerides), model="PSPL", algo="TRF",
+                    Origin=origin, rango=0, wfirst_lc=roman_lc,
+                    lsst_u=[], lsst_g=[], lsst_r=[], lsst_i=[], lsst_z=[], lsst_y=[],
+                    fit_model="PSPL", fit_parallax=False, fit_bounds=common_bounds,
+                    initial_guess=start["initial_guess"], random_state=int(seed),
+                    event_ra=event_ra, event_dec=event_dec,
+                )
+                chi2_try = _chi2(fit_try)
+            except Exception:
+                chi2_try = np.nan
+            chi2_h0_starts.append(chi2_try)
+            if np.isfinite(chi2_try) and chi2_try < chi2_best:
+                fit_h0, chi2_best, h0_best_start = fit_try, chi2_try, start["label"]
+
     best_h0 = np.asarray(
         fit_h0.fit_results[
             "best_model"
@@ -937,6 +979,15 @@ def fit_pspl_comparison(
 
         "h1_attempts":
             int(h1_attempts),
+
+        "chi2_h0_truth_start":
+            chi2_h0_truth_start,
+
+        "chi2_h0_starts":
+            np.asarray(chi2_h0_starts, dtype=float),
+
+        "h0_best_start":
+            h0_best_start,
 
         "cov_h0":
             pylima_covariance(fit_h0),

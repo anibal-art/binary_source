@@ -237,7 +237,7 @@ def cell_values(grid, iu, ix):
     return float(GRIDS[grid]["u0"][iu]), (None if xi is None else float(xi[ix]))
 
 
-def one_case(grid, ig, ib, im, iu, ix, ip, P):
+def one_case(grid, ig, ib, im, iu, ix, ip, P, pspl_h0_starts=None):
     theta, phi, inc = GEO[ig]
     xi = GRIDS[grid]["xi"]
     t1 = time.time()
@@ -260,9 +260,90 @@ def one_case(grid, ig, ib, im, iu, ix, ip, P):
         xi_rel=(None if xi is None else xi_rel_of(grid, xi[ix])),
         q_flux=q_pair(grid)[1],
         q_mass=q_pair(grid)[0],
+        pspl_h0_starts=pspl_h0_starts,
     )
     r["seconds"] = time.time() - t1
     return r
+
+
+# --audit-starts: lambda of the maps (one PSPL start, at the truth) against
+# the lowest chi2 over that start and the 9 policy starts of the LRT runner.
+AUDIT_SEED = 20261124
+AUDIT_BAND = (5.0, 100.0)          # lambda range that sets the 50% contour
+
+
+def audit_case(job):
+    grid, idx, policy = job
+    pol = json.loads(Path(policy).read_text())
+    P = period_grid(policy, grid)
+    ig, ib, im, iu, ix, ip = idx
+    try:
+        r = one_case(grid, ig, ib, im, iu, ix, ip, P,
+                     pspl_h0_starts={"start_rule": pol["PSPL"]["start_rule"],
+                                     "features": pol["features"]})
+        return idx, float(r["delta_chi2_pspl"]), float(r["delta_chi2_pspl_truth_start"]), \
+            str(r["pspl_best_start"]), float(r["seconds"]), ""
+    except Exception as exc:
+        return idx, np.nan, np.nan, "", np.nan, f"{type(exc).__name__}: {exc}"[:300]
+
+
+def audit_starts(args):
+    """
+    Re-fit a sample of cells of the grid's summary with the policy PSPL starts.
+    Sample: up to N cells of the random orientations with lambda in AUDIT_BAND
+    and N/4 outside it (fixed seed).  Saves audit_starts_<grid>.npz next to
+    the summary.
+    """
+    grid = args.grid
+    A = np.load(Path(args.out) / GRIDS[grid]["summary"], allow_pickle=False)
+    lam = np.asarray(A["DELTA_CHI2_PSPL"], float)
+    if lam.ndim == 5:                                   # u0P: no xi axis
+        lam = lam[:, :, :, :, None, :]
+    rng = np.random.default_rng(AUDIT_SEED)
+    cells = np.argwhere(np.isfinite(lam))
+    cells = cells[cells[:, 0] >= 1]                     # random orientations only
+    lv = lam[tuple(cells.T)]
+    band = (lv >= AUDIT_BAND[0]) & (lv <= AUDIT_BAND[1])
+    n = int(args.audit_starts)
+    pick_in = rng.choice(np.flatnonzero(band), size=min(n, band.sum()), replace=False)
+    pick_out = rng.choice(np.flatnonzero(~band), size=min(n // 4, (~band).sum()), replace=False)
+    sel = cells[np.concatenate([pick_in, pick_out])]
+    print(f"provenance: {provenance()}")
+    print(f"grid {grid}: {band.sum()} cells with lambda in {AUDIT_BAND}, {(~band).sum()} outside; "
+          f"auditing {len(pick_in)} + {len(pick_out)}")
+    jobs = [(grid, tuple(int(v) for v in c), str(args.fit_policy)) for c in sel]
+    res = []
+    t0 = time.time()
+    with ProcessPoolExecutor(max_workers=args.workers) as ex:
+        for k, f in enumerate(as_completed([ex.submit(audit_case, j) for j in jobs]), 1):
+            res.append(f.result())
+            if k % 50 == 0:
+                print(f"  {k}/{len(jobs)}  {time.time() - t0:.0f} s", flush=True)
+    idx = np.array([r[0] for r in res], int)
+    lam_map = lam[tuple(idx.T)]
+    lam_multi = np.array([r[1] for r in res])
+    lam_truth = np.array([r[2] for r in res])
+    best = np.array([r[3] for r in res], dtype="<U40")
+    err = np.array([r[5] for r in res], dtype="<U300")
+    dest = Path(args.out) / f"audit_starts_{grid}.npz"
+    np.savez_compressed(dest, index=idx, lambda_map=lam_map, lambda_multistart=lam_multi,
+                        lambda_truth_start=lam_truth, best_start=best,
+                        seconds=np.array([r[4] for r in res]), error=err, grid=grid,
+                        band=np.array(AUDIT_BAND), fit_policy=str(args.fit_policy),
+                        **provenance())
+    ok = np.isfinite(lam_multi) & np.isfinite(lam_map)
+    inb = ok & (lam_map >= AUDIT_BAND[0]) & (lam_map <= AUDIT_BAND[1])
+    rel = (lam_map - lam_multi) / np.maximum(lam_map, 1e-12)
+    print(f"errors: {int((err != '').sum())} / {len(res)}")
+    print(f"truth start reproduces the map: max |lambda_truth - lambda_map| = "
+          f"{np.nanmax(np.abs(lam_truth - lam_map)):.3g}")
+    for name, m in (("band", inb), ("outside", ok & ~inb)):
+        if m.any():
+            print(f"{name:8s}: {m.sum()} cells; another start lower in {int((best[m] != 'truth').sum())}; "
+                  f"relative decrease of lambda: median {np.median(rel[m]):.2e}, "
+                  f"95% {np.quantile(rel[m], 0.95):.2e}, max {rel[m].max():.2e}; "
+                  f"> 1%: {int((rel[m] > 0.01).sum())}")
+    print(f"saved {dest}")
 
 
 def worker(job):
@@ -526,6 +607,9 @@ def main():
     g.add_argument("--pilot", action="store_true")
     g.add_argument("--list", action="store_true")
     g.add_argument("--summarize", action="store_true")
+    g.add_argument("--audit-starts", type=int, default=None, metavar="N",
+                   help="re-fit N cells with lambda in [5, 100] (and N/4 others) with the "
+                        "policy PSPL starts; compare with the one-start lambda of the summary")
     g.add_argument("--umin", action="store_true",
                    help="finite-source check: closest approach of the luminous source (no fits)")
     ap.add_argument("--umin-limit", type=int, default=None,
@@ -544,6 +628,8 @@ def main():
               f"x {len(P)} P = {nt * len(P)} cases")
     elif args.summarize:
         summarize(args)
+    elif args.audit_starts is not None:
+        audit_starts(args)
     elif args.umin:
         umin(args)
     else:

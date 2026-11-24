@@ -890,6 +890,19 @@ python binary_source/analysis/roman_sec6_power.py --validate $CELLS --gv-summary
     --profiles $VAL/omega_profile/*_omega_profile.json
 ```
 
+   Before step 3, `--audit-starts N` re-fits N cells with lambda in [5, 100]
+   (plus N/4 others) of a grid's summary with the 9 PSPL starts of the policy
+   (those of the LRT runner, `roman_lrt_start_bank.pspl_starts`) and compares
+   with the one-start lambda of the maps:
+
+```bash
+for G in xiPpaper u0P xiP2lum_q0p5_f0p05 xiP2lum_q0p5_f0p5 xiP2lum_q1_f1; do
+  sbatch binary_source/analysis/roman_sec6_asimov_cells.slurm --grid $G --audit-starts 400 --workers 40
+done
+```
+
+   Output: `audit_starts_<G>.npz` next to each summary.
+
 4. Power maps: `roman_sec6_power.py --gv-summary $GV --asimov <npz of each grid>
    --k-h1 <k from step 3> --out ...` (pending: figure).
 

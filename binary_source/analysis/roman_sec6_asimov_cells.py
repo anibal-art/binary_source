@@ -134,13 +134,17 @@ GRIDS = {
 # Q_MASS, 0), xi_kind ("E": amplitude of the luminous star, converted to xi_rel;
 # "rel": xi_rel itself), mag_kind ("source1" or "total").
 for _name, (_qm, _qf), _seed in (("xiP2lum_q0p5_f0p05", (0.5, 0.05), 4_200_000_000),
-                                 ("xiP2lum_q0p5_f0p5", (0.5, 0.5), 4_250_000_000),
-                                 ("xiP2lum_q1_f1", (1.0, 1.0), 4_300_000_000)):
+                                 ("xiP2lum_q0p5_f0p5", (0.5, 0.5), 4_225_000_000),
+                                 ("xiP2lum_q1_f1", (1.0, 1.0), 4_250_000_000)):
     GRIDS[_name] = {"u0": np.array([0.01, 0.3, 1.0]), "xi": XI_E_GRID[::2],
                     "seed_base": _seed, "mags": np.array([21.0]), "blends": np.array([0.0]),
                     "q_mass": _qm, "q_flux": _qf, "xi_kind": "rel", "mag_kind": "total",
                     "out": REPO_ROOT / "results/roman_sec6_asimov_2lum_v1" / _name,
                     "summary": f"roman_sec6_asimov_{_name}.npz"}
+
+
+# Every event_index (seed_base + flat index) is a numpy legacy seed, < 2**32.
+SEED_MAX = 2**32 - 1
 
 
 def mags(grid):
@@ -237,8 +241,11 @@ def one_case(grid, ig, ib, im, iu, ix, ip, P):
     theta, phi, inc = GEO[ig]
     xi = GRIDS[grid]["xi"]
     t1 = time.time()
+    seed = GRIDS[grid]["seed_base"] + flat_index(grid, ig, ib, im, iu, ix, ip, len(P))
+    if seed > SEED_MAX:
+        raise ValueError(f"{grid}: event_index {seed} exceeds 2**32 - 1")
     r = run_case(
-        event_index=GRIDS[grid]["seed_base"] + flat_index(grid, ig, ib, im, iu, ix, ip, len(P)),
+        event_index=seed,
         P_days=float(P[ip]),
         u0=float(GRIDS[grid]["u0"][iu]),
         tE=TE,
@@ -320,7 +327,7 @@ def pilot(args):
     print(f"provenance: {provenance()}")
     print(f"grid {grid}: u0 ({len(u0s)}): {np.round(u0s, 5).tolist()}")
     if xis is not None:
-        print(f"xi_E ({len(xis)}): {xis[0]:.4g} .. {xis[-1]:.4g};  P/tE {P[0] / TE:.3g} .. {P[-1] / TE:.3g}")
+        print(f"{'xi_rel' if GRIDS[grid].get('xi_kind', 'E') == 'rel' else 'xi_E'} ({len(xis)}): {xis[0]:.4g} .. {xis[-1]:.4g};  P/tE {P[0] / TE:.3g} .. {P[-1] / TE:.3g}")
     print(f"P grid ({len(P)}): {P[0]:.1f} .. {P[-1]:.1f} d")
     print(f"tasks = {len(tasks(grid))}, cases = {len(tasks(grid)) * len(P)}")
     if grid == "u0P":

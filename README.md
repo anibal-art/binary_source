@@ -917,6 +917,37 @@ python binary_source/analysis/lrt_omega_profile.py --json $(cat /tmp/tc.txt) \
    continuation between nodes); the policy note of fit_policy_test_a_luminous_v1
    mentions continuation, which applies only with `--search sweep`.
 
+   **v2 (second-order starts, 100 H0 realizations per u0).** The truth check
+   showed that in cells c09/c10 the v1 profile ends in q_f ~ 0, xi_rel >> u0
+   solutions. `fit_policy_test_a_luminous_v2.json` adds starts on the
+   cancellation line (`second_order_candidates`) and the profile fits the best
+   start of each family. Everything luminous is redone with v2:
+
+```bash
+POL2=catalogs/roman_bspl_lrt_v1/fit_policy_test_a_luminous_v2.json
+DARK=catalogs/roman_bspl_lrt_v1/fit_policy_test_a_dark_v4.json
+VAL=results/roman_lrt/sec6_h1_validation_lum_v1
+VAL2=results/roman_lrt/sec6_h1_validation_lum_v2
+# pilot: cell c10 (catalog rows 1000-1099), then the truth check
+mkdir -p $VAL2/json
+for f in $VAL/json/*.json; do ln -sf "$(realpath $f)" $VAL2/json/; ln -sf "$(realpath ${f%.json}.npz)" $VAL2/json/; done
+for i in $(seq 1000 1099); do echo $VAL2/json/h1a_h1_$i.json; done > $VAL2/pilot_c10.txt
+sbatch -p milliways-int -c 40 -J prof_c10 -o prof_c10_%j.log --export=ALL --wrap \
+  "xargs -P 40 -n 3 python binary_source/analysis/lrt_omega_profile.py --fit-policy $POL2 \
+   --out-dir $VAL2/omega_profile --no-plot --json < $VAL2/pilot_c10.txt"
+python binary_source/analysis/lrt_omega_profile.py --json $(cat $VAL2/pilot_c10.txt) \
+    --fit-policy $POL2 --out-dir $VAL2/omega_profile --truth-check
+# H0 with 100 realizations per u0 node
+RUN2=results/roman_lrt/gv_sec6_h0_lum_v2
+python catalogs/roman_bspl_lrt_v1/lrt_tasks.py --config configs/lrt_tasks/gv_sec6_h0_lum_v2.json --h0 $H0
+(link the first 50 per node from gv_sec6_h0_v1 / gv_sec6_h0_u6_v1 as in step 1)
+SAVE_ARRAYS=1 sbatch catalogs/roman_bspl_lrt_v1/run_lrt_tasks.slurm $RUN2/tasks.txt $DARK
+sbatch catalogs/roman_bspl_lrt_v1/run_omega_profiles.slurm $RUN2 $POL2
+sbatch catalogs/roman_bspl_lrt_v1/run_omega_profiles.slurm $VAL2 $POL2
+```
+
+   Then Gross-Vitells on `$RUN2`, `--validate` and `--truth-check` on `$VAL2`.
+
 4. Power maps: `roman_sec6_power.py --gv-summary $GV --asimov <npz of each grid>
    --k-h1 <k from step 3> --out ...` (pending: figure).
 

@@ -1,0 +1,153 @@
+{
+ "schema_version": "roman_bspl_lrt_fit_policy_derived_v1",
+ "start_mode": "data_derived",
+ "production_ready": false,
+ "note": "Test A, luminous companion, v2 (2026-11-26): luminous v1 plus BSPL starts on the cancellation line q_f ~ q_M (start_rule.second_order_starts; roman_lrt_start_bank.second_order_candidates). In the v1 validation, cells c09/c10 ((q_M, q_f) = (1, 1), u0 = 0.01) gave T below lambda: the profile, started only from the linearized periodogram (zero first-order signal on that line), ended in q_f ~ 0, xi_rel >> u0 solutions (--truth-check: 26% and 64% of the events at least 1 below the fit started at the truth). Second-order starts: (q_M, q_f) = (1, 1), xi_rel = |u0_PSPL| x {0.1, 0.3, 1, 3}, 4 orientations of (xi_para, xi_perp) in [0, pi), 4 phases, inclinations 0 and 60 deg (128 candidates, ranked by chi2 with linear fluxes). At every trial period the omega profile fits the best candidate of EACH family (linear and second_order) and keeps the lower chi2 (lrt_omega_profile.family_bests). Default --search grid: no continuation between trial periods. v1 note: Test A, luminous companion, v1 (2026-11-23): fit_policy_test_a_dark_v4.json with q_flux_W149 and xi_mass_ratio free, for the Section 6 experiment with two luminous sources (the cases (q_M, q_f) = (0.5, 0.05), (0.5, 0.5), (1, 1) of Section 5). Bounds: q_flux_W149 in [0, 2] (above 1 the labels of the two sources are swapped; the upper bound keeps q_f = 1 inside), xi_mass_ratio in [0.01, 100]. BSPL starts: the linearized periodogram gives the light-centroid orbit; for each start pair (q_M, q_f) of start_rule.start_pairs the source-1 amplitude is the linear one divided by B - eta (roman_lrt_start_bank.centroid_factor), with both anchorings of the constant term; pairs with |B - eta| < 0.05 are skipped, and the omega profile keeps the candidate with the lowest full-model chi2 (continuation then carries q_M, q_f between nodes). start_rule.xi_mass_ratio and q_flux are the default pair of pspl_start_guess. Everything else as dark v4, so the H0 light curves and the PSPL fits are the same; only the alternative model changes. v4 note: Test A, dark companion, v4 (2026-11-17): identical to fit_policy_test_a_dark_v3.json except the PSPL start grid, u0_factors [1, 0.5, 0.2] x tE_factors [1, 2, 4] (was a single start at the light-curve guesses). The light-curve features assume no blending, so with a blended source (g = F_blend/F_source = 1, 4 in gv_sec6_h0_v1) the apparent peak magnification is lower, u0 is overestimated by up to the source-fraction effect and the half-maximum tE underestimated; the factors span source fractions down to ~0.2. The best PSPL over the 9 starts is kept, so chi2_PSPL can only decrease with respect to v3. v3 note: Test A, dark companion, v3 (2026-11-16): identical to fit_policy_test_a_dark_v2.json except the bounds that fix xi_mass_ratio ([1 - 1e-6, 1 + 1e-6], was 1 +/- 1e-9) and q_flux ([0, 1e-8], was [0, 1e-10]; start 5e-9, was 5e-11). With the narrower bounds, and omega fixed to 1e-9 in lrt_omega_profile.py (now OMEGA_FIX_RTOL = 1e-6), TRF accepted no step in 25-59% of the fixed-omega fits of gv_axes_v1; from the same starts the wider bounds converged in 4-7 function evaluations (lrt_omega_profile.py --diagnose-stuck, u0 = 0.737). Use with lrt_omega_profile.py at OMEGA_FIX_RTOL = 1e-6. The effect on the light curve is negligible: the curve depends on xi q/(1+q), changed by < 3e-7 relative, and a second source with < 1e-8 of the flux. v2 note: Test A, dark companion, v2 (2026-11-16): identical to fit_policy_test_a_dark_v1.json except optimizer_options.max_nfev = 500 (was 10000). In the dark pilot the median fit needed 11-70 function evaluations (per period band) and the 50 profile maxima 4-64, while 6% of the fixed-omega fits (21% at P >= 150 d) reached 10000 without moving from their start; lrt_omega_profile.py treats a fit that reaches max_nfev as stuck and tries other starts. v1 note: Test A, original design (2026-11-05): dark companion. q_flux_W149 = 0 and xi_mass_ratio = 1 are held fixed by narrow bounds (roman_rubin cannot fix a parameter); with q_flux = 0 the light curve depends only on xi * q/(1+q), so xi_mass_ratio = 1 loses no generality. H1 adds xi_para, xi_perp, xi_angular_velocity, xi_phase, xi_inclination to the PSPL. Everything else as fit_policy_test_a_data_start_v1.json: PSPL start from light-curve features; BSPL start from the linearized periodogram; xtol = 1e-15.",
+ "optimizer_options": {
+  "xtol": 1e-15,
+  "ftol": 1e-08,
+  "gtol": 1e-08,
+  "max_nfev": 500,
+  "x_scale": "jac"
+ },
+ "features": {
+  "bin_days": 0.25,
+  "min_points_per_bin": 3,
+  "tE_fallback": 30.0
+ },
+ "PSPL": {
+  "fit_parallax": false,
+  "fit_double_source": false,
+  "bounds": {
+   "t0": [
+    2461700.0,
+    2462000.0
+   ],
+   "u0": [
+    -3.0,
+    3.0
+   ],
+   "tE": [
+    1.0,
+    300.0
+   ]
+  },
+  "start_rule": {
+   "u0_factors": [
+    1.0,
+    0.5,
+    0.2
+   ],
+   "tE_factors": [
+    1.0,
+    2.0,
+    4.0
+   ]
+  }
+ },
+ "PSPL_PI": {
+  "fit_parallax": true,
+  "fit_double_source": false,
+  "note": "data_derived PSPL_PI starts not defined yet (Test B)."
+ },
+ "BSPL": {
+  "fit_parallax": false,
+  "fit_double_source": true,
+  "bounds": {
+   "t0": [
+    2461700.0,
+    2462000.0
+   ],
+   "u0": [
+    -3.0,
+    3.0
+   ],
+   "tE": [
+    1.0,
+    300.0
+   ],
+   "xi_para": [
+    -100.0,
+    100.0
+   ],
+   "xi_perp": [
+    -100.0,
+    100.0
+   ],
+   "xi_angular_velocity": [
+    6.283185307179586e-05,
+    0.6283185307179586
+   ],
+   "xi_phase": [
+    -3.141592653589793,
+    9.42477796076938
+   ],
+   "xi_inclination": [
+    -1.5707963267948966,
+    1.5707963267948966
+   ],
+   "xi_mass_ratio": [
+    0.01,
+    100.0
+   ],
+   "q_flux_W149": [
+    0.0,
+    2.0
+   ]
+  },
+  "start_rule": {
+   "mode": "linearized_periodogram",
+   "period_min_days": 10.0,
+   "period_max_days": 10000.0,
+   "oversample": 10,
+   "window_tE": 3.0,
+   "xi_mass_ratio": 1.0,
+   "q_flux": 0.25,
+   "amplitude_scales": [
+    1.0,
+    0.5,
+    0.25,
+    0.1,
+    0.05
+   ],
+   "start_pairs": [
+    [
+     1.0,
+     0.0
+    ],
+    [
+     1.0,
+     0.25
+    ],
+    [
+     0.25,
+     1.0
+    ],
+    [
+     4.0,
+     1.0
+    ]
+   ],
+   "second_order_starts": {
+    "pairs": [
+     [
+      1.0,
+      1.0
+     ]
+    ],
+    "xi_over_u0": [
+     0.1,
+     0.3,
+     1.0,
+     3.0
+    ],
+    "n_orientation": 4,
+    "n_phase": 4,
+    "inclinations": [
+     0.0,
+     1.0471975511965976
+    ]
+   }
+  }
+ }
+}

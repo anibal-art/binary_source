@@ -275,6 +275,17 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
         g["xi_angular_velocity"] = float(omega)
         return g
 
+    def family_bests(cands):
+        """Best candidate (lowest chi2_linear_fluxes) of each start family, in order.
+        Dark policies have only the linear family: the single best candidate."""
+        seen, out = set(), []
+        for c in cands:
+            fam = c.get("family", "linear")
+            if fam not in seen:
+                seen.add(fam)
+                out.append(c)
+        return out
+
     def is_stuck(nfev, limit):
         return nfev is not None and limit is not None and int(nfev) >= int(limit)
 
@@ -348,7 +359,8 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
             n_refit += 1
             cands = candidates(om)
             base = cands[0]["initial_guess"]
-            use = list(cands[:1 + N_FALLBACK_STARTS])
+            use = family_bests(cands)
+            use += [c for c in cands[:1 + N_FALLBACK_STARTS] if c not in use]
             for kk, lab in ((k - 1, "neighbour_longP"), (k + 1, "neighbour_shortP")):
                 if 0 <= kk < len(omegas) and good[kk]:
                     use.append({"label": lab, "alpha": None,
@@ -378,7 +390,7 @@ def event_profile(json_path, arrays_path, policy_path, oversample=2.0,
             P = 2 * np.pi / om
             cands = candidates(om)
             many = all_starts_above_days is not None and P > all_starts_above_days
-            use = cands if (many or (search == "sweep" and k == 0)) else cands[:1]
+            use = cands if (many or (search == "sweep" and k == 0)) else family_bests(cands)
             if search == "sweep" and prev is not None:
                 use = [from_row(prev, om, "continuation")] + use
             t_node = time.perf_counter()

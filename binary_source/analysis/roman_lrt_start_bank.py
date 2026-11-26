@@ -140,6 +140,57 @@ def centroid_factor(mass_ratio, q_flux=0.0):
     return q / (1.0 + q) - qf / (1.0 + qf)
 
 
+def second_order_candidates(names, pspl_best, omega, rule, bounds):
+    """
+    BSPL starts that do not use the linearized periodogram, for companions on
+    the cancellation line q_f ~ q_M (Section 5): there the light centroid does
+    not move, the first-order (linear) term vanishes, and the light curve
+    depends on the separation term eta(1-eta) xi_rel^2.  rule["second_order_starts"]:
+
+        pairs        : (q_M, q_f) start pairs, e.g. [[1, 1]]
+        xi_over_u0   : xi_rel = factor * |u0 of the best PSPL| (the separation
+                       term matters when xi_rel ~ u0)
+        n_orientation: angles of (xi_para, xi_perp) in [0, pi)
+        n_phase      : orbital phases in [0, 2 pi)
+        inclinations : xi_inclination values
+
+    t0, u0, tE from the best PSPL.  Returns [] without the key (dark policies).
+    Every candidate has family "second_order"; the omega profile fits the best
+    one of each family (lrt_omega_profile).
+    """
+    so = rule.get("second_order_starts")
+    if not so:
+        return []
+    i_t0, i_u0, i_tE = names.index("t0"), names.index("u0"), names.index("tE")
+    t0, u0, tE = (float(pspl_best[i]) for i in (i_t0, i_u0, i_tE))
+    angles = np.pi * np.arange(int(so["n_orientation"])) / int(so["n_orientation"])
+    phases = 2.0 * np.pi * np.arange(int(so["n_phase"])) / int(so["n_phase"])
+    out = []
+    for q, qf in so["pairs"]:
+        for fac in so["xi_over_u0"]:
+            xi = float(fac) * max(abs(u0), 1e-4)
+            for th in angles:
+                for ph in phases:
+                    for inc in so["inclinations"]:
+                        g = {
+                            "t0": clip_to_bounds(t0, bounds["t0"]),
+                            "u0": clip_to_bounds(u0, bounds["u0"]),
+                            "tE": clip_to_bounds(tE, bounds["tE"]),
+                            "xi_para": clip_to_bounds(xi * np.cos(th), bounds["xi_para"]),
+                            "xi_perp": clip_to_bounds(xi * np.sin(th), bounds["xi_perp"]),
+                            "xi_angular_velocity": clip_to_bounds(omega, bounds["xi_angular_velocity"]),
+                            "xi_phase": clip_to_bounds(ph, bounds["xi_phase"]),
+                            "xi_inclination": clip_to_bounds(float(inc), bounds["xi_inclination"]),
+                            "xi_mass_ratio": clip_to_bounds(float(q), bounds["xi_mass_ratio"]),
+                            "q_flux_W149": clip_to_bounds(float(qf), bounds["q_flux_W149"]),
+                        }
+                        out.append({
+                            "label": (f"bspl_second_order_P{2 * np.pi / omega:.4g}_qM{q:g}_qf{qf:g}"
+                                      f"_x{fac:g}_th{th:.3g}_ph{ph:.3g}_i{inc:.3g}"),
+                            "alpha": None, "family": "second_order", "initial_guess": g})
+    return out
+
+
 def bspl_starts(pspl_best, rule, bounds):
     """
     BSPL start bank built on the best observed PSPL (t0, u0, tE).
@@ -376,9 +427,10 @@ def candidates_at_omega(names, pspl_best, a, c, omega, rule, bounds):
                 candidates.append({
                     "label": f"bspl_periodogram_P{2 * np.pi / omega:.4g}_a{alpha:g}{tag}",
                     "alpha": float(alpha),
+                    "family": "linear",
                     "initial_guess": guess,
                 })
-    return candidates
+    return candidates + second_order_candidates(names, pspl_best, omega, rule, bounds)
 
 
 def bspl_start_candidates(t, resid, err, jac, names, pspl_best, t0_xi, rule, bounds):

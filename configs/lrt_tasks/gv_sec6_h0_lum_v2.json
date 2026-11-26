@@ -1,0 +1,32 @@
+{
+  "run_name": "gv_sec6_h0_lum_v2",
+  "description": "Test A null calibration, luminous-companion alternative v2 (fit_policy_test_a_luminous_v2.json, second-order starts). Same H0 events as gv_sec6_h0_lum_v1 but 100 realizations per u0 node (the full H0 catalogue): u0 nodes 0, 1, 4, 5, 6, F146 = 21, g = 0, 500 events. Runner JSON/NPZ of the first 50 are linked from gv_sec6_h0_v1 / gv_sec6_h0_u6_v1; the other 50 per node are run with the dark v4 policy (only their PSPL fit and arrays are used). Then lrt_omega_profile.py with the luminous v2 policy and lrt_gross_vitells.py.",
+  "outdir": "results/roman_lrt/gv_sec6_h0_lum_v2",
+  "selections": [
+    {
+      "catalog": "h0",
+      "kinds": [
+        "h0a"
+      ],
+      "where": {
+        "is_zero_parallax": true,
+        "u0_grid_index": [
+          0,
+          1,
+          4,
+          5,
+          6
+        ],
+        "tE": 30.0,
+        "source_mag_F146_AB": [
+          21.0
+        ],
+        "blend_ratio_W149": [
+          0.0
+        ]
+      },
+      "n_per_config": 100,
+      "expect_n_configs": 5
+    }
+  ]
+}

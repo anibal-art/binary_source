@@ -903,6 +903,20 @@ done
 
    Output: `audit_starts_<G>.npz` next to each summary.
 
+   Truth check of the validation profiles (H1 only): `lrt_omega_profile.py
+   --truth-check` compares each stored T_profile with the Delta chi2 of the true
+   BSPL and of a fit started at the truth (`*.truthcheck.json`):
+
+```bash
+for i in $(seq 900 1099) $(seq 300 499); do echo $VAL/json/h1a_h1_$i.json; done > /tmp/tc.txt
+python binary_source/analysis/lrt_omega_profile.py --json $(cat /tmp/tc.txt) \
+    --fit-policy $POL --out-dir $VAL/omega_profile --truth-check
+```
+
+   Note: the omega profile default is `--search grid` (one start per node, no
+   continuation between nodes); the policy note of fit_policy_test_a_luminous_v1
+   mentions continuation, which applies only with `--search sweep`.
+
 4. Power maps: `roman_sec6_power.py --gv-summary $GV --asimov <npz of each grid>
    --k-h1 <k from step 3> --out ...` (pending: figure).
 

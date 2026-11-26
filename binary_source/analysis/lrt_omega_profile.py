@@ -69,7 +69,7 @@ import numpy as np
 
 from binary_source.analysis import roman_bspl_lrt_catalog_runner as runner
 from binary_source.analysis import roman_lrt_start_bank as start_bank
-from binary_source.analysis.lrt_catalog_io import roman_rubin_commit
+from binary_source.analysis.lrt_catalog_io import load_event_from_catalog, roman_rubin_commit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BAD_Q_TOL = 0.1           # q below -tol makes a node bad
@@ -554,6 +554,62 @@ def _run(job):
     print(f"[ok]   {out_json}", flush=True)
 
 
+# --truth-check (H1 events only): is T_profile at least the Delta chi2 of the
+# true BSPL?  chi2 of the true parameters (fluxes by linear LS) and of one TRF fit
+# started there at the true omega, against the stored profile.  T_profile below
+# T_truth means the profile missed a solution that exists.  The fit model takes
+# its xallarap reference epoch from fit_reference (data-derived t0), not the true
+# t0, so T_truth is approximate (exact for P >> |t0_ref - t0|); T_truth_fit, the
+# fit started at the truth, is the reference.
+TRUTH_KEYS = ("t0", "u0", "tE", "xi_para", "xi_perp", "xi_angular_velocity", "xi_phase",
+              "xi_inclination", "xi_mass_ratio", "q_flux_W149")
+
+
+def truth_check(json_path, arrays_path, profile_path, policy_path):
+    d = json.loads(Path(json_path).read_text())
+    prof = json.loads(Path(profile_path).read_text())
+    a = np.load(arrays_path)
+    lc = np.column_stack([a["time"], a["mag"], a["err_mag"]])
+    policy = runner.load_policy(Path(policy_path))
+    spec = dict(policy["BSPL"])
+    ra, dec, ref = d["event_ra_deg"], d["event_dec_deg"], d["fit_reference"]
+    chi2_pspl = float(d["fits"]["PSPL"]["best"]["chi2"])
+    ev = load_event_from_catalog(d["catalog_path"], d["catalog_event_index"])
+    guess = {k: float(ev[k]) for k in TRUTH_KEYS}
+    bspl_model = runner.build_fit_model(lc, ra, dec, ref, True)
+    chi2_truth = runner.chi2_linear_fluxes(bspl_model, guess)
+    om = guess["xi_angular_velocity"]
+    s = dict(spec)
+    s["bounds"] = dict(spec["bounds"], xi_angular_velocity=[om * (1 - OMEGA_FIX_RTOL),
+                                                            om * (1 + OMEGA_FIX_RTOL)])
+    # the truth may sit on a bound (q_flux = 1 is inside [0, 2]); clip for TRF
+    g = {k: start_bank.clip_to_bounds(v, s["bounds"][k]) if k in s["bounds"] else v
+         for k, v in guess.items()}
+    try:
+        row = runner.run_one_fit(
+            source_id=int(d["simulation_seed"]), data={"W149": lc}, ra=ra, dec=dec,
+            fit_key="BSPL", spec=s, start={"label": "truth", "initial_guess": g},
+            fit_reference=ref, optimizer_options=dict(policy.get("optimizer_options") or {}))
+        chi2_fit, fit_best = float(row["chi2"]), dict(zip(row["fit_parameter_names"],
+                                                          map(float, row["best_model"])))
+    except Exception as exc:
+        chi2_fit, fit_best = np.nan, {"error": repr(exc)}
+    # the profile node closest to the true period
+    P_true = 2 * np.pi / om
+    nodes = prof["profile"]
+    k = int(np.argmin([abs(np.log(n["period_days"] / P_true)) for n in nodes]))
+    return {"event_json": str(json_path), "catalog_event_index": int(d["catalog_event_index"]),
+            "config_name": ev.get("config_name"), "P_true_days": P_true,
+            "T_profile": float(prof["T_profile"]), "T_truth": chi2_pspl - chi2_truth,
+            "T_truth_fit": chi2_pspl - chi2_fit,
+            "node_at_P_true": {"period_days": nodes[k]["period_days"],
+                               "delta_chi2": nodes[k]["delta_chi2"],
+                               "start_label": nodes[k].get("start_label"),
+                               "stuck": nodes[k].get("stuck")},
+            "truth": guess, "truth_fit_best": fit_best, "fit_policy": str(policy_path),
+            **code_commits()}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", type=Path, nargs="+", required=True,
@@ -589,9 +645,31 @@ def main():
                     help="diagnostic: refit the N shortest-period stuck nodes of existing profile "
                          "JSONs (start-bank starts only) with the variants in STUCK_VARIANTS; "
                          "writes <profile>.stuckdiag.json, the profile is not changed")
+    ap.add_argument("--truth-check", action="store_true",
+                    help="H1 events: compare the stored T_profile with the Delta chi2 of the true "
+                         "BSPL and of a fit started at the truth; writes <profile>.truthcheck.json")
     args = ap.parse_args()
 
     inputs = [p for p in args.json if not p.name.endswith("_omega_profile.json")]
+    if args.truth_check:
+        print(f"{'event':>16s} {'P_true':>8s} {'T_profile':>9s} {'T_truth':>9s} "
+              f"{'T_truth_fit':>11s} {'node(P_true)':>12s}", flush=True)
+        for p in inputs:
+            prefix = (args.out_dir or p.parent) / f"{p.stem}_omega_profile"
+            prof = Path(str(prefix) + ".json")
+            if not prof.exists():
+                print(f"[skip] {prof} does not exist", flush=True)
+                continue
+            try:
+                r = truth_check(p, args.arrays or p.with_suffix(".npz"), prof, args.fit_policy)
+            except Exception as exc:
+                print(f"[FAIL] {p}: {exc!r}", flush=True)
+                continue
+            Path(str(prefix) + ".truthcheck.json").write_text(json.dumps(r, indent=2) + "\n")
+            nd = r["node_at_P_true"]["delta_chi2"]
+            print(f"{p.stem:>16s} {r['P_true_days']:8.1f} {r['T_profile']:9.2f} {r['T_truth']:9.2f} "
+                  f"{r['T_truth_fit']:11.2f} {float('nan') if nd is None else nd:12.2f}", flush=True)
+        return
     if (args.arrays or args.out) and len(inputs) != 1:
         raise SystemExit("--arrays and --out need exactly one --json")
     kw = dict(policy_path=args.fit_policy, oversample=args.oversample,

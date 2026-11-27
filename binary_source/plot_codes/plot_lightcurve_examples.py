@@ -1814,6 +1814,89 @@ def check_starts(ids, workers=1):
               f"dt0 {(s0[0] - T0_TRUE) / TE_TRUE:+.1f}  ({out['n_starts']} starts)")
 
 
+# Physical systems with a small mismatch and a biased tE (reply to Fig. 3 comments):
+# luminous 1 Msun star, dark companion M2 [Msun], period [d]; tE = 30 d, rEhat = 5 AU.
+BIAS_SYSTEMS = (("white dwarf", 0.6, 365.25), ("neutron star", 1.4, 365.25),
+                ("black hole", 10.0, 730.5), ("Gaia BH2-like", 8.9, 1277.0))
+BIAS_U0 = 0.3
+BIAS_REHAT_AU = 5.0
+BIAS_D_MAX = 1.0e-2
+
+
+def bias_examples():
+    """For each system, fit the 32 grid orientations; keep D < BIAS_D_MAX; print the
+    median and largest |dtE|/tE and plot the orientation with the largest offset,
+    with the PSPL of the true (t0, u0, tE) for comparison."""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import plot_xiE_ptE_maps as maps                                   # xi_family (Eq. 14)
+    from binary_source.analysis.intrinsic_fit_tools import pspl_magnification
+    fig = plt.figure(figsize=(7.1, 5.2))
+    outer = fig.add_gridspec(2, 2, hspace=0.12, wspace=0.22, left=0.08, right=0.985,
+                             bottom=0.085, top=0.99)
+    lines = []
+    for j, (name, m2, P) in enumerate(BIAS_SYSTEMS):
+        xi = float(maps.xi_family(P / TE_TRUE, TE_TRUE, mtot=1.0 + m2, qM=m2,
+                                  rehat=BIAS_REHAT_AU))
+        vorb = 2.0 * np.pi * xi * TE_TRUE / P
+        rows = []
+        for th, ph, la in GALLERY_ORIENT:
+            c = {"P_days": P, "u0_true": BIAS_U0, "theta": th, "phi0": ph,
+                 "lambda_xi": la, "q_mass": m2, "q_flux": 0.0, "xi_E": xi}
+            out = compute_case(c)
+            dte = out["best_fit"][2] / TE_TRUE - 1.0
+            rows.append((abs(dte), dte, out["D"], (th, ph, la), out))
+        ok = [r for r in rows if r[2] < BIAS_D_MAX]
+        med = float(np.median([r[0] for r in ok])) if ok else np.nan
+        best = max(ok if ok else rows, key=lambda r: r[0])
+        line = (f"{name:14s} M2={m2:5.2f} P={P:7.1f} d  xi_E={xi:.3f} P/tE={P / TE_TRUE:5.1f} "
+                f"v_orb={vorb:.3f} | {len(ok):2d}/{len(rows)} with D<{BIAS_D_MAX:g}: "
+                f"median |dtE|/tE={med:.3f}, max {best[0]:.3f} (dtE/tE={best[1]:+.3f}, "
+                f"D={best[2]:.4f}, theta,phi0,lambda/pi={np.array(best[3]) / np.pi})")
+        print(line)
+        lines.append(line)
+
+        out = best[4]
+        tau = (out["t"] - T0_TRUE) / TE_TRUE
+        A_true = pspl_magnification(out["t"], T0_TRUE, BIAS_U0, TE_TRUE)
+        inner = outer[j // 2, j % 2].subgridspec(2, 1, height_ratios=[3, 1], hspace=0.06)
+        ax = fig.add_subplot(inner[0])
+        axr = fig.add_subplot(inner[1], sharex=ax)
+        ax.plot(tau, out["A"], color="black", lw=1.1, label="BSPL")
+        ax.plot(tau, out["A_fit"], color="crimson", lw=1.0, ls="--", label="best PSPL")
+        ax.plot(tau, A_true, color="0.5", lw=0.9, ls=":", label=r"PSPL, true $t_E$")
+        axr.plot(tau, out["A"] - out["A_fit"], color="crimson", lw=0.9)
+        axr.plot(tau, out["A"] - A_true, color="0.5", lw=0.8, ls=":")
+        axr.axhline(0.0, color="0.7", lw=0.5)
+        for a in (ax, axr):
+            a.set_xlim(-METRIC_WINDOW_TE, METRIC_WINDOW_TE)
+        ax.set_ylim(top=1.0 + (np.max(out["A"]) - 1.0) * 1.5)
+        ax.text(0.03, 0.96,
+                f"{name}, " + rf"$M_{{S,2}}={m2:g}\,M_\odot$, $P={P:.0f}\,$d" + "\n"
+                + rf"$\xi_E={xi:.2f}$, $v_{{\rm orb}}={vorb:.2f}$" + "\n"
+                + rf"$D_{{\rm BSPL-PSPL}}={best[2]:.1e}$" + "\n"
+                + rf"$t_{{E,\rm fit}}/t_E={1.0 + best[1]:.2f}$",
+                transform=ax.transAxes, va="top", ha="left", fontsize=7)
+        ax.text(0.97, 0.96, f"({'abcd'[j]})", transform=ax.transAxes, ha="right",
+                va="top", fontsize=8)
+        ax.tick_params(labelbottom=False)
+        if j // 2 == 0:
+            axr.tick_params(labelbottom=False)
+        else:
+            axr.set_xlabel(r"$(t-t_0)/t_E$")
+        if j % 2 == 0:
+            ax.set_ylabel(r"$A$")
+            axr.set_ylabel(r"$\Delta A$")
+        if j == 1:
+            ax.legend(loc="center right", fontsize=6.5, frameon=False)
+    png, pdf = OUTDIR / "bias_examples.png", OUTDIR / "bias_examples.pdf"
+    fig.savefig(png, dpi=300)
+    fig.savefig(pdf)
+    plt.close(fig)
+    (OUTDIR / "bias_examples.txt").write_text("\n".join(lines) + "\n")
+    print(f"saved {png} {pdf}")
+
+
 def plot_gallery(ids):
     cases = read_gallery_rows(ids)
     n = len(cases)
@@ -1857,8 +1940,14 @@ def main():
                     help="gallery figure of the chosen candidate IDs")
     ap.add_argument("--check-starts", type=int, nargs="+", default=None, metavar="ID",
                     help="PSPL fit from the truth vs a multistart grid, for gallery IDs")
+    ap.add_argument("--bias-examples", action="store_true",
+                    help="physical systems with D < 1e-2 and a biased tE (Fig. 3 comments)")
     ap.add_argument("--workers", type=int, default=8)
     args = ap.parse_args()
+    if args.bias_examples:
+        set_paper_style()
+        bias_examples()
+        return
     if args.check_starts:
         check_starts(args.check_starts, args.workers)
         return

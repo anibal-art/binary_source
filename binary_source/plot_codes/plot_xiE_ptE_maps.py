@@ -189,19 +189,19 @@ def family_legend(ax, y0=0.84):
     leg.set_zorder(30)
 
 
-def draw_D_contours(ax, xi, pte, Dmed, label=True):
+def draw_D_contours(ax, xi, pte, Dmed, label=True, color="crimson"):
     """Crimson D_BSPL-PSPL contours at D_LEVELS (dashed, solid); returns the contour sets."""
     X, Y = np.meshgrid(xi, pte, indexing="ij")
     logD = np.log10(np.where(np.isfinite(Dmed), Dmed, np.nan))
     cs = []
     for lev, ls in zip(D_LEVELS, ("--", "-")):
-        c = ax.contour(X, Y, logD, levels=[np.log10(lev)], colors="crimson",
+        c = ax.contour(X, Y, logD, levels=[np.log10(lev)], colors=color,
                        linewidths=LW_MAIN, linestyles=ls, zorder=10)
         cs.append(c)
     if label:
         for c, txt in zip(cs, (r"$10^{-3}$", r"$10^{-2}$")):
             cx, cy = contour_xy(c)
-            label_on_curve(ax, cx, cy, 2.2, txt, "crimson", above=True)
+            label_on_curve(ax, cx, cy, 2.2, txt, color, above=True)
     return cs
 
 
@@ -457,7 +457,7 @@ def bias_figure(S, outdir):
     ax_a.set_facecolor("white")
     pcm = heatmap(ax_a, log_edges(xi), log_edges(pte), np.ma.masked_invalid(med).T,
                   norm=LogNorm(1e-5, 1.0), cmap=BIAS_CMAP)
-    draw_D_contours(ax_a, xi, pte, Dmed, label=False)
+    draw_D_contours(ax_a, xi, pte, Dmed, label=False, color="#00c853")  # contrast on magma
     draw_unreachable(ax_a, xi, pte)
     x_line = np.logspace(np.log10(xi[0]), np.log10(xi[-1]), 50)
     for a_val in A_LINES:

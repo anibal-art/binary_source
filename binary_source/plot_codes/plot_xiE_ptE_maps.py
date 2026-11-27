@@ -441,12 +441,12 @@ def bias_figure(S, outdir):
     import warnings
     with warnings.catch_warnings():                       # all-NaN cells stay NaN
         warnings.simplefilter("ignore", RuntimeWarning)
-        med = 100.0 * np.nanmedian(dte, axis=1)          # percent, (xi, P/tE)
+        med = np.nanmedian(dte, axis=1)                  # fraction, (xi, P/tE)
     Dmed = S["D_p16_p50_p84"][1, k]                    # median at u0 index k
     med = np.where(Dmed < BIAS_D_MAX, med, np.nan)
     ax_a.set_facecolor("0.82")
     pcm = heatmap(ax_a, log_edges(xi), log_edges(pte), np.ma.masked_invalid(med).T,
-                  norm=LogNorm(1e-3, 10.0), cmap=BIAS_CMAP)
+                  norm=LogNorm(1e-5, 0.1), cmap=BIAS_CMAP)
     X, Y = np.meshgrid(xi, pte, indexing="ij")
     ax_a.contour(X, Y, np.log10(Dmed), levels=[np.log10(BIAS_D_MAX)], colors="crimson",
                  linewidths=LW_MAIN, linestyles="-", zorder=10)
@@ -467,10 +467,10 @@ def bias_figure(S, outdir):
               va="bottom", color="white", fontsize=FS_ANNOT, zorder=30,
               path_effects=halo(1.5, "black"))
     panel_label(ax_a, "a", color="white")
-    cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal")
+    cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal", extend="max")  # >= 0.1
     cbar.ax.xaxis.set_ticks_position("top"); cbar.ax.xaxis.set_label_position("top")
     cbar.ax.tick_params(which="both", direction="in", pad=1.5)
-    cbar.set_label(r"median $|\Delta t_E|/t_E\ (\%)$", labelpad=3)
+    cbar.set_label(r"median $|\Delta t_E|/t_E$", labelpad=3)
 
     # (b) per-orientation medians against the first-order prediction (Eqs. 8-9)
     v_par, v_perp = projected_unit_velocity(np.asarray(S["geometries"], float)[1:])

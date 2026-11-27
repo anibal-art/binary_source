@@ -27,10 +27,16 @@ Checks (all on the median D over the random orientations):
     C(u0) is calibrated as the mean of check 2c over the --summaries rows and
     the two-term model
         D_model = sqrt( D_one(xi_ph)^2 + [C(u0) eta(1-eta) xi_rel^2]^2 ),
-    restricted to xi_rel <= --xi-pert, is compared with the measured map
+    restricted to xi_rel <= xi_pert (see below), is compared with the measured map
     (median |log10 D - log10 D_model| by bands of P/tE), together with the
     long-period floor alone and the xi_rel where it reaches 1e-3. Adding the
     two terms in quadrature is an assumption of the model, tested here.
+Window and validity (2026-11-26): the separation term is quadratic only while
+xi_rel is small compared with u0 (for u0 = 0.01 the floor turns over near
+xi_rel ~ u0; the old fixed window 0.01-0.1 lay beyond it). By default the fit
+window is xi_rel in [A u0, B u0] (--xi-window-u0 A B, default 1/30, 1/3) and the
+two-term model is limited to xi_rel <= --xi-pert-u0 * u0 (default 0.5), both
+clipped to the grid. --fixed-window restores --xi-window and --xi-pert.
 Optional figure (--figure): D_floor / eta(1-eta) vs xi_rel, one panel per
 u0, one curve per (q_M, q_f), with a xi^2 reference; with --validate also the
 measured map of the validation pair with the model contours.
@@ -95,6 +101,12 @@ def main():
                     help="xi_rel range of the perturbative fit")
     ap.add_argument("--d-min", type=float, default=2e-5,
                     help="ignore D below this value in the fit (numerical floor)")
+    ap.add_argument("--xi-window-u0", type=float, nargs=2, default=(1 / 30, 1 / 3),
+                    help="fit window [A u0, B u0] (default; see --fixed-window)")
+    ap.add_argument("--xi-pert-u0", type=float, default=0.5,
+                    help="two-term model limited to xi_rel <= this * u0 (default)")
+    ap.add_argument("--fixed-window", action="store_true",
+                    help="use the fixed --xi-window and --xi-pert instead")
     ap.add_argument("--xi-pert", type=float, default=0.2,
                     help="largest xi_rel where the two-term model is applied")
     ap.add_argument("--validate", default=None,
@@ -137,14 +149,27 @@ def main():
 
     # ---------------- 2. long-period floor ----------------
     long = pte >= args.pte_static
-    lo_xi, hi_xi = args.xi_window
-    print(f"\n2. Long-period floor, P/tE >= {args.pte_static:g} ({int(long.sum())} values); "
-          f"fit window xi_rel = {lo_xi:g}-{hi_xi:g}, D >= {args.d_min:g}")
+
+    def window(k):
+        """Fit window of the floor at u0 index k."""
+        if args.fixed_window:
+            return tuple(args.xi_window)
+        a, b = args.xi_window_u0
+        return max(a * u0s[k], xi[0]), min(b * u0s[k], xi[-1])
+
+    def xi_pert(k):
+        """Largest xi_rel of the two-term model at u0 index k."""
+        return args.xi_pert if args.fixed_window else args.xi_pert_u0 * u0s[k]
+
+    print(f"\n2. Long-period floor, P/tE >= {args.pte_static:g} ({int(long.sum())} values); fit window "
+          + ", ".join(f"u0={u0:g}: {window(k)[0]:.3g}-{window(k)[1]:.3g}" for k, u0 in enumerate(u0s))
+          + f"; D >= {args.d_min:g}")
     print("   q_M   q_f   b(1-b)  u0    spread  slope  rms    C=D/[b(1-b)xi^2]  "
           "xi(1e-3)  xi(1e-2)")
     floors, Cs = {}, {}
     for r in rows:
         for k, u0 in enumerate(u0s):
+            lo_xi, hi_xi = window(k)
             Dl = r["D"][k][:, long]
             with np.errstate(invalid="ignore", divide="ignore"):
                 floor = np.nanmedian(Dl, axis=1)
@@ -193,13 +218,15 @@ def main():
               f"|B-eta|={vfac:.3f}, b(1-b)={vb1b:.4f}")
         print("   C(u0) calibrated on the rows above: " +
               ", ".join(f"u0={u0:g}: {c:.3g}" for u0, c in zip(u0s, C_cal)))
-        print(f"   model: D = sqrt(D_one(xi_ph)^2 + (C b(1-b) xi^2)^2) for xi_rel <= "
-              f"{args.xi_pert:g}; median |log10 D - log10 D_model| (cells >= 1e-4)")
+        print("   model: D = sqrt(D_one(xi_ph)^2 + (C b(1-b) xi^2)^2) for xi_rel <= "
+              + ", ".join(f"{xi_pert(k):.3g} (u0={u0:g})" for k, u0 in enumerate(u0s))
+              + "; median |log10 D - log10 D_model| (cells >= 1e-4)")
         print("   u0    " + "  ".join(f"P/tE {lo:g}-{hi:g}" for lo, hi in PTE_BANDS) +
               "   floor alone   xi(1e-3) measured / predicted")
         models = []
-        pert = xi <= args.xi_pert
         for k, u0 in enumerate(u0s):
+            pert = xi <= xi_pert(k)
+            lo_xi = window(k)[0]
             D_one = np.nan_to_num(predicted_from_one(D1[k], xiE1, xi, vfac))
             D_sep = C_cal[k] * vb1b * xi[:, None] ** 2
             model = np.sqrt(D_one ** 2 + D_sep ** 2)
@@ -228,6 +255,7 @@ def main():
             floor = floors[(r["qm"], r["qf"], k)][0]
             ax.loglog(xi, floor / r["b1b"], lw=1.2,
                       label=rf"$q_M={r['qm']:g}$, $q_f={r['qf']:g}$")
+        lo_xi, hi_xi = window(k)
         w = (xi >= lo_xi) & (xi <= hi_xi)
         ref_floor = floors[(ref["qm"], ref["qf"], k)][0] / ref["b1b"]
         x0 = xi[w][len(xi[w]) // 2]
@@ -262,7 +290,7 @@ def main():
         with np.errstate(divide="ignore", invalid="ignore"):
             ax.contour(X, Y, np.log10(models[k]), levels=np.log10(base.D_LEVELS),
                        colors="white", linewidths=LW_THIN + 0.3, linestyles=":", zorder=11)
-        ax.axvline(args.xi_pert, color="white", lw=0.6, ls="-", alpha=0.6, zorder=10)
+        ax.axvline(xi_pert(k), color="white", lw=0.6, ls="-", alpha=0.6, zorder=10)
         ax.set_xlabel(r"$\xi_{\rm rel}$")
         if k == 0:
             ax.set_ylabel(r"$P/t_E$")

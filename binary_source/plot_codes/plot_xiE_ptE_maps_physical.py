@@ -72,6 +72,51 @@ def draw_companions(ax, pte):
     return avoid
 
 
+CROSS_LEVELS = (1e-3, 1e-2)
+CROSS_PTE = (1.0, 10.0, 30.0, 100.0, 300.0)
+
+
+def _log_interp(xi, pte, Dmed):
+    from scipy.interpolate import RegularGridInterpolator
+    with np.errstate(divide="ignore", invalid="ignore"):
+        L = np.log10(np.where(Dmed > 0, Dmed, np.nan))
+    return RegularGridInterpolator((np.log10(xi), np.log10(pte)), L, bounds_error=False)
+
+
+def print_crossings(u0s, xi, pte, Dmed):
+    """Numbers for the text, read from the median maps (not from the figure):
+    1. along each companion line, the longest P/tE (and P for tE = REF_TE) with
+       median D >= level;
+    2. at fixed P/tE, the smallest xi_E with median D >= level."""
+    p_line = np.logspace(np.log10(pte[0]), np.log10(pte[-1]), 2000)
+    x_line = np.logspace(np.log10(xi[0]), np.log10(xi[-1]), 2000)
+    for k, u0 in enumerate(u0s):
+        f = _log_interp(xi, pte, Dmed[k])
+        print(f"\n== u0 = {u0:g}: longest P/tE on each line with D >= level")
+        for label, m2, *_ in COMPANIONS:
+            x = companion_xi(p_line, m2)
+            inside = (x >= xi[0]) & (x <= xi[-1])
+            logD = f(np.c_[np.log10(x[inside]), np.log10(p_line[inside])])
+            cells = []
+            for lev in CROSS_LEVELS:
+                ok = np.flatnonzero(logD >= np.log10(lev))
+                if ok.size == 0:
+                    cells.append(f"D={lev:g}: never")
+                    continue
+                pmax = p_line[inside][ok[-1]]
+                tag = " (to the edge of the map)" if ok[-1] == inside.sum() - 1 else ""
+                cells.append(f"D={lev:g}: P/tE {pmax:7.3g} = {pmax * REF_TE:8.4g} d{tag}")
+            print(f"  {label:12s} M2={m2:5.2f}:  " + ";  ".join(cells))
+        print(f"   smallest xi_E with D >= level at fixed P/tE")
+        for pt in CROSS_PTE:
+            logD = f(np.c_[np.log10(x_line), np.full_like(x_line, np.log10(pt))])
+            cells = []
+            for lev in CROSS_LEVELS:
+                ok = np.flatnonzero(logD >= np.log10(lev))
+                cells.append(f"D={lev:g}: " + (f"xi_E {x_line[ok[0]]:.3g}" if ok.size else "never"))
+            print(f"  P/tE = {pt:6g}:  " + ";  ".join(cells))
+
+
 def add_period_axis(ax, right):
     ax.tick_params(which="both", right=False)
     if right:
@@ -96,6 +141,9 @@ def main():
     ap.add_argument("--out", default=os.path.join(os.path.expanduser("~"),
                                                   "binary_source", "figures", "current"))
     ap.add_argument("--no-usetex", action="store_true")
+    ap.add_argument("--crossings", action="store_true",
+                    help="print where the D = 1e-3, 1e-2 contours cross the companion lines "
+                         "and fixed P/tE (numbers for the text), then exit")
     args = ap.parse_args()
     apply_paper_style(usetex=not args.no_usetex)
 
@@ -119,6 +167,9 @@ def main():
     Dmed = np.concatenate(D_list, axis=0)
     order = np.argsort(u0s)
     u0s, Dmed = u0s[order], Dmed[order]
+    if args.crossings:
+        print_crossings(u0s, xi, pte, Dmed)
+        return
     for label, m2, *_ in COMPANIONS:
         print(f"  {label:13s} M2={m2:5.2f}: xi_E(P=1 yr) = {companion_xi(base.YEAR_D / REF_TE, m2):.3f}")
 

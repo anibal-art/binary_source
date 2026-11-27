@@ -820,6 +820,24 @@ The rows are u0 = 0.01, 0.3, 1; the script stops if they differ (`--any-u0` to
 override). Do not use `results/roman_sec6_asimov_xi_v1` or the
 `results/final_*/xiE_ptE_maps` summaries (u0 = 0.03, 0.1, 0.3) for the paper.
 
+### Coauthor requests (2026-11-26): Figure 2 and a light-curve gallery
+
+Figure 2 with a 60 Msun black-hole line (grey bound now M1 + M2 <= 100 Msun)
+and a fourth panel at u0 = 3 (the u0 trend of the long-period contours must
+turn over once u0 is comparable to the +/-3.5 tE window):
+
+```bash
+python binary_source/scan_codes/scan_xiE_ptE.py --u0 3 --refine 2 --estimate
+python binary_source/scan_codes/scan_xiE_ptE.py --u0 3 --refine 2 --workers 40
+python binary_source/scan_codes/scan_xiE_ptE.py --u0 3 --refine 2 --summarize
+python binary_source/plot_codes/plot_xiE_ptE_maps_physical.py --summary \
+    results/final_52468b04987a/xiE_ptE_maps_u0_0p01_0p3_1_refine2/summary_xiE_ptE.npz \
+    results/final_<commit>/xiE_ptE_maps_u0_3_refine2/summary_xiE_ptE.npz
+```
+
+Gallery of light curves with D = 0.1-1 (`plot_lightcurve_examples.py`):
+`--candidates --workers 40` (CSV and contact sheet), then `--gallery ID ...`.
+
 ### Section 6, two luminous sources (in progress)
 
 Detectability of the Section 5 cases, (q_M, q_f) = (0.5, 0.05), (0.5, 0.5),

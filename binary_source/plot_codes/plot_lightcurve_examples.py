@@ -22,6 +22,18 @@ The intrinsic mismatch D_BSPL-PSPL is evaluated over
 t0 +/- 3.5 t_E using the same normalized trapezoidal metric used
 throughout the manuscript.
 
+Gallery of strongly perturbed light curves (coauthor request: show readers
+what BSPL light curves with D_BSPL-PSPL = 0.1-1 look like, not only double
+peaks):
+
+    python binary_source/plot_codes/plot_lightcurve_examples.py --candidates --workers 40
+        grid in (u0, xi_E or xi_rel, P/tE, orientation) for a dark companion and
+        two luminous pairs; keeps 0.1 <= D <= 1, classifies the shape, writes
+        figures/figures_lightcurves/gallery_candidates.csv and a contact sheet
+        gallery_contact_sheet.pdf with the candidate IDs
+    python binary_source/plot_codes/plot_lightcurve_examples.py --gallery ID ID ...
+        the chosen candidates at full resolution: bspl_gallery.{pdf,png}
+
 Outputs
 -------
 figures/figures_lightcurves/example_1.png
@@ -32,6 +44,10 @@ figures/figures_lightcurves/example_2_confused.pdf
 
 from pathlib import Path
 from fractions import Fraction
+
+import argparse
+import csv
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -635,6 +651,19 @@ def compute_case(case, n_points=N_POINTS):
     phi0 = float(case.get("phi0", PHI0))
     lambda_xi = float(case.get("lambda_xi", LAMBDA_XI))
     rEhat_AU = float(case.get("rEhat_AU", REHAT_AU))
+    q_mass = float(case.get("q_mass", Q_MASS))
+    q_flux = float(case.get("q_flux", Q_FLUX))
+    # Gallery cases give the amplitude instead of rEhat: xi_E of the luminous
+    # star (Figure 2 axis, dark companion) or xi_rel (Figure 4 axis); rEhat
+    # follows from xi_rel = a_rel / rEhat with a_rel from Kepler.
+    if "xi_E" in case or "xi_rel" in case:
+        xi_rel_1au, _ = kepler_binary_source_xiE(
+            P_days=P_days, q_mass=q_mass, Mtot_source_Msun=MTOT_SOURCE,
+            M_lens_Msun=M_LENS, Dl_kpc=DL_KPC, Ds_kpc=DS_KPC, tE_days=TE_TRUE,
+            rEhat_AU=1.0, xi_source=XI_SOURCE)
+        target = (float(case["xi_rel"]) if "xi_rel" in case
+                  else float(case["xi_E"]) * (1.0 + q_mass) / q_mass)
+        rEhat_AU = xi_rel_1au / target
 
     t = np.linspace(
         T0_TRUE - METRIC_WINDOW_TE * TE_TRUE,
@@ -657,8 +686,8 @@ def compute_case(case, n_points=N_POINTS):
         theta=theta,
         phi0=phi0,
         lambda_xi=lambda_xi,
-        q_mass=Q_MASS,
-        qflux=Q_FLUX,
+        q_mass=q_mass,
+        qflux=q_flux,
     )
 
     fit = fit_pspl(
@@ -876,6 +905,9 @@ def compute_case(case, n_points=N_POINTS):
 
         "P_days": P_days,
         "u0_true": u0_true,
+        "q_mass": q_mass,
+        "q_flux": q_flux,
+        "rEhat_AU": rEhat_AU,
         "theta": theta,
         "phi0": phi0,
         "lambda_xi": lambda_xi,
@@ -1557,7 +1589,220 @@ def plot_case(case, out):
 # Main
 # =============================================================================
 
+# =============================================================================
+# Gallery of strongly perturbed light curves (D = 0.1 - 1)
+# =============================================================================
+
+GALLERY_D_RANGE = (0.1, 1.0)
+GALLERY_U0 = [0.01, 0.1, 0.3, 1.0]
+GALLERY_P_OVER_TE = [0.5, 1.0, 2.0, 4.0, 8.0]
+GALLERY_XI = [0.01, 0.03, 0.1, 0.3, 1.0]
+GALLERY_ORIENT = [(th, ph, la) for th in SEARCH_THETA for ph in SEARCH_PHI0
+                  for la in SEARCH_LAMBDA]                       # 32
+GALLERY_PAIRS = [(Q_MASS, 0.0), (0.5, 0.05), (1.0, 1.0)]        # (q_M, q_f)
+GALLERY_N_POINTS = 2000
+GALLERY_CSV = OUTDIR / "gallery_candidates.csv"
+
+
+def gallery_grid():
+    """Dark companion: xi = xi_E of the luminous star.  Luminous pairs: xi = xi_rel,
+    8 of the 32 orientations (every fourth)."""
+    cases, k = [], 0
+    for qm, qf in GALLERY_PAIRS:
+        orients = GALLERY_ORIENT if qf == 0.0 else GALLERY_ORIENT[::4]
+        for u0 in GALLERY_U0:
+            for pte in GALLERY_P_OVER_TE:
+                for xi in GALLERY_XI:
+                    for th, ph, la in orients:
+                        c = {"id": k, "name": f"gallery {k}", "P_days": pte * TE_TRUE,
+                             "u0_true": u0, "theta": th, "phi0": ph, "lambda_xi": la,
+                             "q_mass": qm, "q_flux": qf}
+                        c["xi_E" if qf == 0.0 else "xi_rel"] = xi
+                        cases.append(c)
+                        k += 1
+    return cases
+
+
+def asymmetry(t, A, t_peak):
+    """Integrated |A(t_peak + d) - A(t_peak - d)| / integrated (A - 1), over the window."""
+    d = np.linspace(0.0, METRIC_WINDOW_TE * TE_TRUE, 400)
+    a_plus = np.interp(t_peak + d, t, A, left=1.0, right=1.0)
+    a_minus = np.interp(t_peak - d, t, A, left=1.0, right=1.0)
+    den = np.trapezoid(a_plus + a_minus - 2.0, d)
+    return float(np.trapezoid(np.abs(a_plus - a_minus), d) / den) if den > 0 else np.nan
+
+
+def shape_class(out):
+    """Coarse shape label, only to spread the gallery over different shapes."""
+    n, r2 = out["n_lightcurve_peaks"], out["lightcurve_second_ratio"]
+    if n >= 3:
+        return "oscillating"
+    if n == 2 and r2 >= 0.1:
+        return "double peak"
+    if n == 2:
+        return "shoulder"
+    # one peak: wider than the PSPL fit? asymmetric?
+    t, A, Af = out["t"], out["A"], out["A_fit"]
+    half = lambda y: np.ptp(t[y >= 1.0 + 0.5 * (y.max() - 1.0)])
+    if half(A) > 1.3 * half(Af):
+        return "broadened"
+    if out["asymmetry"] > 0.15:
+        return "asymmetric"
+    return "single peak"
+
+
+def gallery_one(case):
+    try:
+        out = compute_case(case, n_points=GALLERY_N_POINTS)
+    except Exception as exc:
+        return {**case, "D": np.nan, "error": repr(exc)[:200]}
+    tp = float(out["t"][np.argmax(out["A"])])
+    out["asymmetry"] = asymmetry(out["t"], out["A"], tp)
+    return {**{k: case[k] for k in case if k != "name"},
+            "D": out["D"], "shape": shape_class(out), "asymmetry": out["asymmetry"],
+            "n_lc_peaks": out["n_lightcurve_peaks"],
+            "second_ratio": out["lightcurve_second_ratio"],
+            "A_max": float(np.max(out["A"])), "rEhat_AU": out["rEhat_AU"], "error": ""}
+
+
+def gallery_candidates(workers):
+    cases = gallery_grid()
+    print(f"gallery grid: {len(cases)} cases, {workers} workers", flush=True)
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        rows = list(ex.map(gallery_one, cases, chunksize=8))
+    lo, hi = GALLERY_D_RANGE
+    keep = [r for r in rows if np.isfinite(r["D"]) and lo <= r["D"] <= hi]
+    cols = ["id", "D", "shape", "u0_true", "xi_E", "xi_rel", "P_days", "q_mass", "q_flux",
+            "theta", "phi0", "lambda_xi", "asymmetry", "n_lc_peaks", "second_ratio",
+            "A_max", "rEhat_AU"]
+    with open(GALLERY_CSV, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        for r in keep:
+            w.writerow({c: r.get(c, "") for c in cols})
+    n_err = sum(1 for r in rows if r.get("error"))
+    print(f"errors: {n_err};  kept {len(keep)} with {lo} <= D <= {hi} -> {GALLERY_CSV}")
+    by = {}
+    for r in keep:
+        by.setdefault((r["shape"], r["q_flux"] > 0), []).append(r)
+    for (shape, lum), rr in sorted(by.items()):
+        print(f"  {shape:12s} {'luminous' if lum else 'dark':8s}: {len(rr)}")
+    contact_sheet(keep)
+
+
+def read_gallery_rows(ids):
+    rows = {int(r["id"]): r for r in csv.DictReader(open(GALLERY_CSV))}
+    out = []
+    for i in ids:
+        r = rows[int(i)]
+        c = {"name": f"gallery {i}", "P_days": float(r["P_days"]), "u0_true": float(r["u0_true"]),
+             "theta": float(r["theta"]), "phi0": float(r["phi0"]),
+             "lambda_xi": float(r["lambda_xi"]), "q_mass": float(r["q_mass"]),
+             "q_flux": float(r["q_flux"]), "id": int(i), "shape": r["shape"]}
+        c["xi_rel" if c["q_flux"] > 0 else "xi_E"] = float(r["xi_rel"] if c["q_flux"] > 0
+                                                          else r["xi_E"])
+        out.append(c)
+    return out
+
+
+def case_label(case, D):
+    xi = (rf"$\xi_{{\rm rel}}={case['xi_rel']:g}$" if case["q_flux"] > 0
+          else rf"$\xi_E={case['xi_E']:g}$")
+    lum = (rf", $q_M={case['q_mass']:g}$, $q_f={case['q_flux']:g}$" if case["q_flux"] > 0 else "")
+    return (rf"$u_0={case['u0_true']:g}$, {xi}, $P/t_E={case['P_days'] / TE_TRUE:g}$" + lum
+            + "\n" + rf"$D_{{\rm BSPL-PSPL}}={D:.2f}$")
+
+
+def draw_lc(ax, axr, out, case, small=False):
+    tau = (out["t"] - T0_TRUE) / TE_TRUE
+    ax.plot(tau, out["A"], color="black", lw=0.9 if small else 1.1, label="BSPL")
+    ax.plot(tau, out["A_fit"], color="crimson", lw=0.8 if small else 1.0, ls="--",
+            label="best PSPL")
+    axr.plot(tau, out["A"] - out["A_fit"], color="black", lw=0.7 if small else 0.9)
+    axr.axhline(0.0, color="0.6", lw=0.5)
+    for a in (ax, axr):
+        a.set_xlim(-METRIC_WINDOW_TE, METRIC_WINDOW_TE)
+    ax.set_yscale("log" if np.max(out["A"]) > 30 else "linear")
+    ax.text(0.03, 0.96, case_label(case, out["D"]), transform=ax.transAxes, va="top",
+            ha="left", fontsize=5 if small else 7.5)
+
+
+def contact_sheet(rows, per_page=24):
+    """Thumbnails of up to 4 candidates per (shape, dark/luminous), with their IDs."""
+    from matplotlib.backends.backend_pdf import PdfPages
+    rng = np.random.default_rng(20261126)
+    by = {}
+    for r in rows:
+        by.setdefault((r["shape"], r["q_flux"] > 0), []).append(r)
+    pick = []
+    for key in sorted(by):
+        rr = by[key]
+        pick += [rr[i] for i in rng.choice(len(rr), size=min(4, len(rr)), replace=False)]
+    cases = read_gallery_rows([r["id"] for r in pick])
+    dest = OUTDIR / "gallery_contact_sheet.pdf"
+    with PdfPages(dest) as pdf:
+        for p0 in range(0, len(cases), per_page):
+            fig = plt.figure(figsize=(11, 8.5))
+            gs = fig.add_gridspec(8, 6, height_ratios=[3, 1] * 4, hspace=0.15, wspace=0.25)
+            for j, c in enumerate(cases[p0:p0 + per_page]):
+                out = compute_case(c, n_points=GALLERY_N_POINTS)
+                ax = fig.add_subplot(gs[2 * (j // 6), j % 6])
+                axr = fig.add_subplot(gs[2 * (j // 6) + 1, j % 6], sharex=ax)
+                draw_lc(ax, axr, out, c, small=True)
+                ax.set_title(f"ID {c['id']}  ({c['shape']})", fontsize=6, pad=1.5)
+                ax.tick_params(labelsize=5, labelbottom=False)
+                axr.tick_params(labelsize=5)
+            pdf.savefig(fig)
+            plt.close(fig)
+    print(f"contact sheet: {dest}  ({len(cases)} candidates)")
+
+
+def plot_gallery(ids):
+    cases = read_gallery_rows(ids)
+    n = len(cases)
+    ncol = 3 if n > 4 else n
+    nrow = int(np.ceil(n / ncol))
+    fig = plt.figure(figsize=(7.1, 2.35 * nrow))
+    gs = fig.add_gridspec(2 * nrow, ncol, height_ratios=[3, 1] * nrow, hspace=0.08,
+                          wspace=0.28, left=0.07, right=0.985, bottom=0.07, top=0.985)
+    for j, c in enumerate(cases):
+        out = compute_case(c)
+        print(f"ID {c['id']:5d} {c['shape']:12s} D = {out['D']:.3f}")
+        ax = fig.add_subplot(gs[2 * (j // ncol), j % ncol])
+        axr = fig.add_subplot(gs[2 * (j // ncol) + 1, j % ncol], sharex=ax)
+        draw_lc(ax, axr, out, c)
+        ax.tick_params(labelbottom=False)
+        ax.text(0.97, 0.96, f"({'abcdefghi'[j]})", transform=ax.transAxes, ha="right",
+                va="top", fontsize=8)
+        if j % ncol == 0:
+            ax.set_ylabel(r"$A$")
+            axr.set_ylabel(r"$\Delta A$")
+        if j // ncol == nrow - 1:
+            axr.set_xlabel(r"$(t-t_0)/t_E$")
+        if j == 0:
+            ax.legend(loc="center right", fontsize=6.5, frameon=False)
+    png, pdf = OUTDIR / "bspl_gallery.png", OUTDIR / "bspl_gallery.pdf"
+    fig.savefig(png, dpi=300)
+    fig.savefig(pdf)
+    plt.close(fig)
+    print(f"saved {png} {pdf}")
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--candidates", action="store_true",
+                    help="gallery candidates with 0.1 <= D <= 1 and a contact sheet")
+    ap.add_argument("--gallery", type=int, nargs="+", default=None, metavar="ID",
+                    help="gallery figure of the chosen candidate IDs")
+    ap.add_argument("--workers", type=int, default=8)
+    args = ap.parse_args()
+    if args.candidates or args.gallery:
+        set_paper_style()
+        if args.candidates:
+            gallery_candidates(args.workers)
+        if args.gallery:
+            plot_gallery(args.gallery)
+        return
     print("=" * 80)
     print("FIXED BSPL--PSPL LIGHT-CURVE EXAMPLES")
     print("=" * 80)

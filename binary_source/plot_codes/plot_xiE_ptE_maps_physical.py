@@ -17,7 +17,11 @@ Other tE or rEhat shift every line parallel to itself, by
 (tE/REF_TE)^(2/3) (REF_REHAT/rEhat) in xi_E at fixed P/tE.
 
 Usage:
-    python binary_source/plot_codes/plot_xiE_ptE_maps_physical.py --summary PATH
+    python binary_source/plot_codes/plot_xiE_ptE_maps_physical.py --summary PATH [PATH ...]
+
+Several summaries (same xi_E and P/tE grids and geometries, e.g. the u0 = 0.01,
+0.3, 1 run and a later u0 = 3 run) are joined along u0, one panel per u0.
+With more than three panels the figure is wider (full page in landscape).
 Output (--out, default as plot_xiE_ptE_maps.py): D_xiE_ptE_three_u0_physical.{pdf,png}
 """
 
@@ -42,6 +46,7 @@ COMPANIONS = (           # kind (console only), M2 [Msun], P/tE of the M2 label,
     ("white dwarf", 0.6, 0.8, True),        # 0.6 and 1.4 Msun lines do not share a height;
     ("neutron star", 1.4, 5.0, False),      # contour labels are placed away from lines
     ("black hole", 10.0, 0.8, False),       # and labels (base.label_contours_avoiding)
+    ("black hole", 60.0, 20.0, True),       # massive BHs, as found in GW mergers
 )
 PERIOD_TICKS = ((10.0, "10 d"), (100.0, "100 d"), (base.YEAR_D, "1 yr"),   # plain text:
                 (10 * base.YEAR_D, "10 yr"), (100 * base.YEAR_D, "100 yr"))  # works without usetex
@@ -86,25 +91,41 @@ def add_period_axis(ax, right):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--summary", default=None)
+    ap.add_argument("--summary", nargs="+", default=None,
+                    help="one or more summary_xiE_ptE.npz, joined along u0")
     ap.add_argument("--out", default=os.path.join(os.path.expanduser("~"),
                                                   "binary_source", "figures", "current"))
     ap.add_argument("--no-usetex", action="store_true")
     args = ap.parse_args()
     apply_paper_style(usetex=not args.no_usetex)
 
-    path = args.summary or base.find_summary()
-    S = np.load(path, allow_pickle=False)
-    u0s, xi, pte = S["u0"], S["xi_E"], S["P_over_tE"]
-    Dmed = S["D_p16_p50_p84"][:, 1]
-    print("summary:", path, "| commit", S["code_commit"], "dirty", bool(S["code_dirty"]),
-          "| u0", u0s, "| grid", len(xi), "x", len(pte))
+    paths = args.summary or [base.find_summary()]
+    u0_list, D_list, xi, pte, geo = [], [], None, None, None
+    for path in paths:
+        S = np.load(path, allow_pickle=False)
+        if xi is None:
+            xi, pte = S["xi_E"], S["P_over_tE"]
+            geo = S["geometries"] if "geometries" in S.files else None
+        elif not (np.allclose(S["xi_E"], xi) and np.allclose(S["P_over_tE"], pte)):
+            raise SystemExit(f"{path}: xi_E or P/tE grid differs from {paths[0]}")
+        elif geo is not None and "geometries" in S.files and not np.allclose(S["geometries"], geo):
+            raise SystemExit(f"{path}: orbital geometries differ from {paths[0]}")
+        u0_list.append(np.atleast_1d(S["u0"]))
+        D_list.append(S["D_p16_p50_p84"][:, 1])
+        print("summary:", path, "| commit", S["code_commit"], "dirty", bool(S["code_dirty"]),
+              "| u0", S["u0"], "| grid", len(xi), "x", len(pte))
+    u0s = np.concatenate(u0_list)
+    Dmed = np.concatenate(D_list, axis=0)
+    order = np.argsort(u0s)
+    u0s, Dmed = u0s[order], Dmed[order]
     for label, m2, *_ in COMPANIONS:
         print(f"  {label:13s} M2={m2:5.2f}: xi_E(P=1 yr) = {companion_xi(base.YEAR_D / REF_TE, m2):.3f}")
 
     n = len(u0s)
-    fig = plt.figure(figsize=(fig_width(1.0), 3.35))
-    left, right, gap, bottom, top = 0.075, 0.90, 0.025, 0.125, 0.83
+    width = fig_width(1.0) * max(1.0, n / 3.0)      # 4 panels: landscape, full page
+    fig = plt.figure(figsize=(width, 3.35))
+    scale = fig_width(1.0) / width                   # keep the margins in inches
+    left, right, gap, bottom, top = 0.075 * scale, 1 - 0.10 * scale, 0.025 * scale, 0.125, 0.83
     w = (right - left - (n - 1) * gap) / n
     axes = [fig.add_axes([left + k * (w + gap), bottom, w, top - bottom]) for k in range(n)]
     cax = fig.add_axes([left, 0.875, right - left, 0.025])

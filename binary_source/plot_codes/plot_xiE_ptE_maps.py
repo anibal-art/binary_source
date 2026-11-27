@@ -72,7 +72,8 @@ FAMILY_MTOT, FAMILY_QM, FAMILY_REHAT = 3.0, 0.5, 5.0
 FAMILY_TE = (30.0, 150.0)
 
 # limits for the reachable region (hatched outside)
-MTOT_MAX, TE_MAX, REHAT_MIN = 20.0, 300.0, 1.0
+# MTOT_MAX = 100 Msun (was 20): Figure 2 shows a 60 Msun black-hole companion.
+MTOT_MAX, TE_MAX, REHAT_MIN = 100.0, 300.0, 1.0
 
 PERIOD_MARKS = ((10.0, r"10\,d"), (100.0, r"100\,d"), (YEAR_D, r"1\,yr"),
                 (10 * YEAR_D, r"10\,yr"), (100 * YEAR_D, r"100\,yr"))

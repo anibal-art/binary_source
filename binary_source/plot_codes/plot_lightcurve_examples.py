@@ -50,6 +50,7 @@ import csv
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
+_trapz = getattr(np, "trapezoid", None) or np.trapz   # numpy < 2.0 on che
 import matplotlib.pyplot as plt
 import scipy.optimize as so
 from scipy.signal import find_peaks
@@ -525,7 +526,7 @@ def objective_trapezoid(
     telescope = target_model.event.telescopes[0]
     A_model = target_model.model_magnification(telescope, py_params)
     residual = A_true - A_model
-    return float(np.trapezoid(residual**2, x=t))
+    return float(_trapz(residual**2, x=t))
 
 
 def fit_pspl(ev, A_truth, t, t0_true, u0_true, tE_true, fs, ftotal):
@@ -630,8 +631,8 @@ def measure_residual_fwhm(t, residual):
 
 def intrinsic_distance(t, A_bspl, A_pspl):
     residual = A_bspl - A_pspl
-    numerator = np.trapezoid(residual**2, x=t)
-    denominator = np.trapezoid((A_bspl - 1.0) ** 2, x=t)
+    numerator = _trapz(residual**2, x=t)
+    denominator = _trapz((A_bspl - 1.0) ** 2, x=t)
 
     if denominator <= 0 or not np.isfinite(denominator):
         return np.nan
@@ -1628,8 +1629,8 @@ def asymmetry(t, A, t_peak):
     d = np.linspace(0.0, METRIC_WINDOW_TE * TE_TRUE, 400)
     a_plus = np.interp(t_peak + d, t, A, left=1.0, right=1.0)
     a_minus = np.interp(t_peak - d, t, A, left=1.0, right=1.0)
-    den = np.trapezoid(a_plus + a_minus - 2.0, d)
-    return float(np.trapezoid(np.abs(a_plus - a_minus), d) / den) if den > 0 else np.nan
+    den = _trapz(a_plus + a_minus - 2.0, d)
+    return float(_trapz(np.abs(a_plus - a_minus), d) / den) if den > 0 else np.nan
 
 
 def shape_class(out):
@@ -1682,6 +1683,8 @@ def gallery_candidates(workers):
             w.writerow({c: r.get(c, "") for c in cols})
     n_err = sum(1 for r in rows if r.get("error"))
     print(f"errors: {n_err};  kept {len(keep)} with {lo} <= D <= {hi} -> {GALLERY_CSV}")
+    for msg in sorted({r["error"] for r in rows if r.get("error")})[:5]:
+        print("  error:", msg)
     by = {}
     for r in keep:
         by.setdefault((r["shape"], r["q_flux"] > 0), []).append(r)

@@ -6,17 +6,17 @@ one luminous: commit 52468b04987a; two luminous: commit e98901c85f7a; u0 = [0.01
    0.5   0.05  0.3          0.002         0.008         0.513         1.572
    0.5   0.05  1            0.000         0.002         0.182         1.363
 
-2. Long-period floor, P/tE >= 100 (29 values); fit window xi_rel = 0.01-0.1, D >= 2e-05
+2. Long-period floor, P/tE >= 100 (29 values); fit window u0=0.01: 0.001-0.00333, u0=0.3: 0.01-0.1, u0=1: 0.0333-0.333; D >= 2e-05
    q_M   q_f   b(1-b)  u0    spread  slope  rms    C=D/[b(1-b)xi^2]  xi(1e-3)  xi(1e-2)
-   0.5   0.05  0.0454  0.01   0.000   0.60  0.038        157.3         0.0058    0.0590
+   0.5   0.05  0.0454  0.01   0.000   1.80  0.004        808.4         0.0058    0.0590
    0.5   0.05  0.0454  0.3    0.002   1.82  0.006        1.176         0.1468       nan
-   0.5   0.05  0.0454  1      0.040   1.91  0.000       0.1459         0.4164       nan
-   0.5   0.5   0.2222  0.01   0.000   0.81  0.036        202.4         0.0024    0.0085
+   0.5   0.05  0.0454  1      0.030   1.90  0.007       0.1355         0.4164       nan
+   0.5   0.5   0.2222  0.01   0.000   1.84  0.004        841.9         0.0024    0.0085
    0.5   0.5   0.2222  0.3    0.001   1.90  0.008        1.277         0.0620    0.2098
-   0.5   0.5   0.2222  1      0.008   1.95  0.002       0.1552         0.1808    0.5920
-   1     1     0.2500  0.01   0.000   0.92  0.032        233.1         0.0022    0.0078
+   0.5   0.5   0.2222  1      0.008   1.90  0.006       0.1463         0.1808    0.5920
+   1     1     0.2500  0.01   0.000   1.86  0.003        862.1         0.0022    0.0078
    1     1     0.2500  0.3    0.001   1.92  0.006        1.305         0.0569    0.2000
-   1     1     0.2500  1      0.007   1.97  0.001       0.1582         0.1656    0.5658
+   1     1     0.2500  1      0.008   1.92  0.006       0.1523         0.1656    0.5658
 
    Ratios xi(level) / xi_ref(level), reference q_M=1, q_f=1; prediction [b(1-b)_ref / b(1-b)]^(1/2)
    q_M=0.5  q_f=0.05  u0=0.01  measured (1e-3, 1e-2):   2.66    7.61   predicted:  2.35
@@ -30,9 +30,11 @@ one luminous: commit 52468b04987a; two luminous: commit e98901c85f7a; u0 = [0.01
    q_M=1    q_f=1     u0=1     measured (1e-3, 1e-2):   1.00    1.00   predicted:  1.00
 
 3. Validation: q_M=0.8, q_f=0.3 (commit e98901c85f7a, dirty False, failed fits 63); |B-eta|=0.214, b(1-b)=0.1775
-   C(u0) calibrated on the rows above: u0=0.01: 198, u0=0.3: 1.25, u0=1: 0.153
-   model: D = sqrt(D_one(xi_ph)^2 + (C b(1-b) xi^2)^2) for xi_rel <= 0.2; median |log10 D - log10 D_model| (cells >= 1e-4)
+   C(u0) calibrated on the rows above: u0=0.01: 837, u0=0.3: 1.25, u0=1: 0.145
+   model: D = sqrt(D_one(xi_ph)^2 + (C b(1-b) xi^2)^2) for xi_rel <= 0.005 (u0=0.01), 0.15 (u0=0.3), 0.5 (u0=1); median |log10 D - log10 D_model| (cells >= 1e-4)
    u0    P/tE 0-1  P/tE 1-10  P/tE 10-100  P/tE 100-inf   floor alone   xi(1e-3) measured / predicted
-   0.01         0.379         0.514         0.514         0.519         0.411   0.0027 / 0.0053
-   0.3          0.003         0.015         0.051         0.046         0.032   0.0713 / 0.0671
-   1            0.000         0.003         0.046         0.027         0.014   0.2071 / 0.1918
+   0.01         0.236         0.034         0.027         0.027         0.027   0.0027 / 0.0026
+   0.3          0.002         0.013         0.047         0.032         0.029   0.0713 / 0.0671
+   1            0.001         0.004         0.068         0.033         0.030   0.2071 / 0.1973
+saved: figures/release/two_luminous_static_floor.pdf figures/release/two_luminous_static_floor.png
+saved: figures/release/two_luminous_validation.pdf figures/release/two_luminous_validation.png

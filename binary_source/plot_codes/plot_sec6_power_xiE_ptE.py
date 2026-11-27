@@ -259,6 +259,92 @@ def rows_with_intrinsic(d, summaries):
     return rows
 
 
+PAIR_BACKGROUNDS = ("D", "power", "fap")
+
+
+def pairs_figure(pairs, outdir, tex, primary, background):
+    """
+    Two luminous sources (Section 6): rows (q_M, q_f), columns u0, as Figure 4.
+    pairs: list of (power npz of roman_sec6_power.py on a xiP2lum grid,
+    two-luminous summary_xiE_ptE.npz of the same pair). Background:
+      D     : intrinsic median D_BSPL-PSPL of Figure 4 (colour scale of the D maps);
+      power : orientation-mean detection efficiency at the primary level;
+      fap   : median over orientations of the false-alarm probability of the
+              median T under H1 (Gross-Vitells, PVALUE_MEDIAN).
+    Always: white, Roman efficiency 0.5 (thick) and 0.9 (thin) at the primary
+    level; crimson, intrinsic D = 1e-3 (dashed) and 1e-2 (solid); grey, unreachable.
+    """
+    import plot_xiE_ptE_maps as base
+    from matplotlib.colors import LogNorm
+    rows = []
+    for ppath, spath in pairs:
+        d, S = np.load(ppath), np.load(spath, allow_pickle=False)
+        qm, qf = float(S["q_mass_used"]), float(S["q_flux_used"])
+        if qf <= 0.0 or "xi_rel" not in S.files:
+            raise SystemExit(f"{spath} is not a two-luminous-source summary")
+        rows.append((qm, qf, d, S))
+        print(f"(q_M, q_f) = ({qm:g}, {qf:g}): power {ppath} | intrinsic {spath}")
+    u0s = rows[0][3]["u0"]
+    nr, nc = len(rows), len(u0s)
+    fig, lax, axes = panels_with_key_row(nr, nc, 1.0)
+    for r, (qm, qf, d, S) in enumerate(rows):
+        xs, ps, Dmed = S["xi_rel"], S["P_over_tE"], S["D_p16_p50_p84"][1]
+        xr, pr = d["xiE_grid"], d["PtE_grid"]                 # Roman grid (xi_rel nodes)
+        if len(d["blend_ratio"]) != 1 or len(d["F146"]) != 1:
+            raise SystemExit("pairs figure expects one blend ratio and one F146 per power file")
+        pw = efficiency_levels(d, primary)[0]                 # (geo, g, F146, u0, xi, P)
+        iso = slice(1, pw.shape[0])
+        for k, u0 in enumerate(u0s):
+            ax = axes[r, k]
+            ju = np.flatnonzero(np.isclose(d["u0_grid"], u0, rtol=1e-9, atol=0.0))
+            if len(ju) != 1:
+                raise SystemExit(f"u0 = {u0:g} is not in the power file of row {r}")
+            m = np.nanmean(pw[iso, 0, 0, ju[0]], axis=0)       # (xi, P)
+            if background == "D":
+                pcm = base.draw_map(ax, xs, ps, Dmed[k], label_contours=False,
+                                    period_labels=None, label_unreachable=False,
+                                    show_families=False)
+            else:
+                if background == "power":
+                    z, kw = m, dict(vmin=0.0, vmax=1.0, cmap="viridis")
+                else:
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", RuntimeWarning)
+                        z = np.nanmedian(d["PVALUE_MEDIAN"][iso, 0, 0, ju[0]], axis=0)
+                    z = np.clip(z, 1e-8, 1.0)
+                    kw = dict(norm=LogNorm(1e-8, 1.0), cmap="magma")
+                pcm = heatmap(ax, log_edges(xr), log_edges(pr), z.T, **kw)
+                base.draw_D_contours(ax, xs, ps, Dmed[k], label=False)
+                base.draw_unreachable(ax, xs, ps)
+                ax.set_xscale("log"); ax.set_yscale("log")
+                ax.set_xlim(log_edges(xs)[0], log_edges(xs)[-1])
+                ax.set_ylim(log_edges(ps)[0], log_edges(ps)[-1])
+            ax.contour(xr, pr, m.T, levels=[0.5, 0.9], colors="w",
+                       linewidths=[1.3, 0.7], zorder=13)
+            if r == 0:
+                ax.set_title(rf"$u_0 = {u0:g}$")
+            if k == 0:
+                ax.set_ylabel(rf"$(q_M,q_f)=({qm:g},{qf:g})$" + "\n" + r"$P/t_E$")
+            if r == nr - 1:
+                ax.set_xlabel(r"$\xi_{\rm rel}$")
+    lev = LEVELS[primary][1]
+    outline = [pe.Stroke(linewidth=2.6, foreground="k"), pe.Normal()]
+    handles = [Line2D([], [], color="w", lw=1.4, path_effects=outline),
+               Line2D([], [], color="w", lw=0.8, path_effects=outline),
+               Line2D([], [], color="crimson", lw=1.2, ls="--"),
+               Line2D([], [], color="crimson", lw=1.2)]
+    names = [r"$\varepsilon=0.5$", r"$\varepsilon=0.9$",
+             r"$D_{\rm BSPL-PSPL}=10^{-3}$", r"$D_{\rm BSPL-PSPL}=10^{-2}$"]
+    lax.legend(handles, names, loc="center", ncol=4, frameon=False, handlelength=1.8,
+               columnspacing=1.2, title=f"Roman, F146 = {float(rows[0][2]['F146'][0]):g}, {lev}")
+    label = {"D": r"$D_{\rm BSPL-PSPL}$ (intrinsic, median over orientations)",
+             "power": f"Detection efficiency ({lev}), mean over orientations",
+             "fap": r"False-alarm probability of the median $T$ under $H_1$"}[background]
+    fig.colorbar(pcm, ax=list(axes.ravel()), shrink=0.9, label=label)
+    return save_figure(fig, Path(outdir) / f"sec6_pairs_{background}_xirel_ptE")
+
+
 def regions_figure(d, summaries, ib, bias_thr, outdir, tex, primary):
     L = labels(tex)
     xi, pte, mags = d["xiE_grid"], d["PtE_grid"], d["F146"]
@@ -354,10 +440,24 @@ def main():
                     help="false-alarm level of the detection contours and regions")
     ap.add_argument("--any-u0", action="store_true",
                     help="accept rows other than the paper's u0 = 0.01, 0.3, 1")
+    ap.add_argument("--pairs-power", nargs="+", default=None,
+                    help="two luminous sources: power npz of each (q_M, q_f) pair, in row order")
+    ap.add_argument("--pairs-summary", nargs="+", default=None,
+                    help="two-luminous summaries of the same pairs, same order")
+    ap.add_argument("--pairs-background", nargs="+", choices=PAIR_BACKGROUNDS,
+                    default=list(PAIR_BACKGROUNDS))
     ap.add_argument("--no-usetex", action="store_true")
     args = ap.parse_args()
     tex = not args.no_usetex
     apply_paper_style(usetex=tex)
+    if args.pairs_power:
+        if not args.pairs_summary or len(args.pairs_summary) != len(args.pairs_power):
+            raise SystemExit("--pairs-summary must give one summary per --pairs-power file")
+        for bg in args.pairs_background:
+            for f in pairs_figure(list(zip(args.pairs_power, args.pairs_summary)),
+                                  args.outdir, tex, args.primary, bg):
+                print("saved", f)
+        return
 
     d = np.load(args.power)
     if "xiE_grid" not in d.files:

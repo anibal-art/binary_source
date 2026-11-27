@@ -189,11 +189,8 @@ def family_legend(ax, y0=0.84):
     leg.set_zorder(30)
 
 
-def draw_map(ax, xi, pte, Dmed, label_family=False, label_contours=True,
-             period_labels="full", label_unreachable=True, show_families=True,
-             max_label_P=np.inf, return_contours=False):
-    pcm = heatmap(ax, log_edges(xi), log_edges(pte), np.ma.masked_invalid(Dmed).T,
-                  norm=d_norm(), cmap=D_CMAP)
+def draw_D_contours(ax, xi, pte, Dmed, label=True):
+    """Crimson D_BSPL-PSPL contours at D_LEVELS (dashed, solid); returns the contour sets."""
     X, Y = np.meshgrid(xi, pte, indexing="ij")
     logD = np.log10(np.where(np.isfinite(Dmed), Dmed, np.nan))
     cs = []
@@ -201,17 +198,32 @@ def draw_map(ax, xi, pte, Dmed, label_family=False, label_contours=True,
         c = ax.contour(X, Y, logD, levels=[np.log10(lev)], colors="crimson",
                        linewidths=LW_MAIN, linestyles=ls, zorder=10)
         cs.append(c)
-    if label_contours:
+    if label:
         for c, txt in zip(cs, (r"$10^{-3}$", r"$10^{-2}$")):
             cx, cy = contour_xy(c)
             label_on_curve(ax, cx, cy, 2.2, txt, "crimson", above=True)
+    return cs
 
-    # unreachable region
+
+def draw_unreachable(ax, xi, pte):
+    """Grey region beyond xi_reachable_max; returns the P/tE samples of its edge."""
     p_line = np.logspace(np.log10(pte[0]) - 0.1, np.log10(pte[-1]) + 0.1, 400)
     xmax = xi_reachable_max(p_line)
     ax.fill_betweenx(p_line, xmax, xi[-1] * 10, facecolor="0.82", edgecolor="none",
                      zorder=12)
     ax.plot(xmax, p_line, color="0.45", lw=LW_THIN, zorder=12)
+    return p_line
+
+
+def draw_map(ax, xi, pte, Dmed, label_family=False, label_contours=True,
+             period_labels="full", label_unreachable=True, show_families=True,
+             max_label_P=np.inf, return_contours=False):
+    pcm = heatmap(ax, log_edges(xi), log_edges(pte), np.ma.masked_invalid(Dmed).T,
+                  norm=d_norm(), cmap=D_CMAP)
+    cs = draw_D_contours(ax, xi, pte, Dmed, label=label_contours)
+
+    # unreachable region
+    p_line = draw_unreachable(ax, xi, pte)
     if label_unreachable:
         ax.text(0.97, 0.03, "not\nreachable", transform=ax.transAxes, ha="right",
                 va="bottom", fontsize=FS_ANNOT - 1.5, color="0.25", zorder=13,
@@ -433,23 +445,20 @@ def bias_figure(S, outdir):
     ax_b = fig.add_axes([0.435, 0.15, 0.235, 0.70])
     ax_c = fig.add_axes([0.755, 0.15, 0.215, 0.70])
 
-    # (a) median |Delta tE/tE| at one u0, where the PSPL fit is acceptable
+    # (a) median |Delta tE/tE| at one u0 over the whole plane (no cut in D); the D
+    # contours of Figure 2 show where a given offset coexists with a given mismatch
     k = int(np.argmin(np.abs(np.log(u0s / U0_BIAS_MAP))))
-    D = S["D_all"][k, :, 1:, :]
     dte = np.abs(S["dtE_over_tE_all"][k, :, 1:, :])
-    dte = np.where(D < BIAS_D_MAX, dte, np.nan)
     import warnings
     with warnings.catch_warnings():                       # all-NaN cells stay NaN
         warnings.simplefilter("ignore", RuntimeWarning)
         med = np.nanmedian(dte, axis=1)                  # fraction, (xi, P/tE)
     Dmed = S["D_p16_p50_p84"][1, k]                    # median at u0 index k
-    med = np.where(Dmed < BIAS_D_MAX, med, np.nan)
-    ax_a.set_facecolor("0.82")
+    ax_a.set_facecolor("white")
     pcm = heatmap(ax_a, log_edges(xi), log_edges(pte), np.ma.masked_invalid(med).T,
-                  norm=LogNorm(1e-5, 0.1), cmap=BIAS_CMAP)
-    X, Y = np.meshgrid(xi, pte, indexing="ij")
-    ax_a.contour(X, Y, np.log10(Dmed), levels=[np.log10(BIAS_D_MAX)], colors="crimson",
-                 linewidths=LW_MAIN, linestyles="-", zorder=10)
+                  norm=LogNorm(1e-5, 1.0), cmap=BIAS_CMAP)
+    draw_D_contours(ax_a, xi, pte, Dmed, label=False)
+    draw_unreachable(ax_a, xi, pte)
     x_line = np.logspace(np.log10(xi[0]), np.log10(xi[-1]), 50)
     for a_val in A_LINES:
         y_line = 2.0 * np.pi * x_line / a_val
@@ -467,7 +476,7 @@ def bias_figure(S, outdir):
               va="bottom", color="white", fontsize=FS_ANNOT, zorder=30,
               path_effects=halo(1.5, "black"))
     panel_label(ax_a, "a", color="white")
-    cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal", extend="max")  # >= 0.1
+    cbar = fig.colorbar(pcm, cax=cax, orientation="horizontal", extend="max")  # >= 1
     cbar.ax.xaxis.set_ticks_position("top"); cbar.ax.xaxis.set_label_position("top")
     cbar.ax.tick_params(which="both", direction="in", pad=1.5)
     cbar.set_label(r"median $|\Delta t_E|/t_E$", labelpad=3)

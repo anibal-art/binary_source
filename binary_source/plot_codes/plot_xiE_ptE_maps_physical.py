@@ -41,7 +41,7 @@ import plot_xiE_ptE_maps as base  # noqa: E402
 REF_TE = 30.0            # d
 REF_REHAT = 5.0          # AU
 LUMINOUS_M1 = 1.0        # Msun
-LABEL_PTE = 1.0          # all M2 labels at the same P/tE, above their lines
+LABEL_PTE = 1.5          # all M2 labels at the same P/tE, above their lines
 COMPANIONS = (           # kind (console only), M2 [Msun], P/tE of the M2 label, label above line
     ("brown dwarf", 0.05, LABEL_PTE, True),     # contour labels are placed away from lines
     ("white dwarf", 0.6, LABEL_PTE, True),      # and labels (base.label_contours_avoiding)
@@ -62,14 +62,12 @@ def draw_companions(ax, pte):
     positions (data coordinates), which the contour labels must avoid."""
     p_line = np.logspace(np.log10(pte[0]) - 0.1, np.log10(pte[-1]) + 0.1, 400)
     avoid = []
-    m_last = COMPANIONS[-1][1]
     for _, m2, p_lab, above in COMPANIONS:
         x = companion_xi(p_line, m2)
         x_lab = float(companion_xi(p_lab, m2))
         ax.plot(x, p_line, color="white", lw=LW_MAIN, zorder=15)
-        # numbers only (unit on the last label and in the caption): the 0.6 and 1.4 Msun
-        # lines are ~8 pt apart, too close for full labels at a common P/tE
-        text = rf"${m2:g}\,M_\odot$" if m2 == m_last else rf"${m2:g}$"
+        # smaller font: the 0.6 and 1.4 Msun lines are ~8 pt apart at a common P/tE
+        text = rf"${m2:g}\,M_\odot$"
         base.label_on_curve(ax, x, p_line, x_lab, text, "white", above=above, dark=True,
                             fontsize=FS_ANNOT - 2)
         avoid.append(np.c_[x, p_line])

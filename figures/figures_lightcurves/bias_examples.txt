@@ -1,0 +1,4 @@
+white dwarf    M2= 0.60 P=  365.2 d  xi_E=0.088 P/tE= 12.2 v_orb=0.045 | 32/32 with D<0.01: median |dtE|/tE=0.031, max 0.050 (dtE/tE=+0.050, D=0.0014, theta,phi0,lambda/pi=[0.  0.5 0.5])
+neutron star   M2= 1.40 P=  365.2 d  xi_E=0.156 P/tE= 12.2 v_orb=0.081 | 32/32 with D<0.01: median |dtE|/tE=0.055, max 0.092 (dtE/tE=+0.092, D=0.0028, theta,phi0,lambda/pi=[0.  0.5 0.5])
+black hole     M2=10.00 P=  730.5 d  xi_E=0.642 P/tE= 24.4 v_orb=0.166 | 26/32 with D<0.01: median |dtE|/tE=0.109, max 0.207 (dtE/tE=+0.207, D=0.0021, theta,phi0,lambda/pi=[0.  0.5 0.5])
+Gaia BH2-like  M2= 8.90 P= 1277.0 d  xi_E=0.889 P/tE= 42.6 v_orb=0.131 | 32/32 with D<0.01: median |dtE|/tE=0.089, max 0.155 (dtE/tE=+0.155, D=0.0005, theta,phi0,lambda/pi=[0.  0.5 0.5])

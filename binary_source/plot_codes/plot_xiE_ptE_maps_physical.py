@@ -73,7 +73,7 @@ def draw_companions(ax, pte):
 
 
 CROSS_LEVELS = (1e-3, 1e-2)
-CROSS_PTE = (1.0, 10.0, 30.0, 100.0, 300.0)
+CROSS_PTE = (0.3, 0.5, 1.0, 3.0, 10.0, 30.0, 100.0, 300.0)
 
 
 def _log_interp(xi, pte, Dmed):

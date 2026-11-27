@@ -1,4 +1,5 @@
 summary: results/final_52468b04987a/xiE_ptE_maps_u0_0p01_0p3_1_refine2/summary_xiE_ptE.npz | commit 52468b04987a dirty False | u0 [0.01 0.3  1.  ] | grid 79 x 79
+summary: results/final_752cba75f77e/xiE_ptE_maps_u0_3_refine2/summary_xiE_ptE.npz | commit 752cba75f77e dirty False | u0 [3.] | grid 79 x 79
 
 == u0 = 0.01: longest P/tE on each line with D >= level
   brown dwarf  M2= 0.05:  D=0.001: P/tE    1.17 =    35.04 d;  D=0.01: never
@@ -7,7 +8,10 @@ summary: results/final_52468b04987a/xiE_ptE_maps_u0_0p01_0p3_1_refine2/summary_x
   black hole   M2=10.00:  D=0.001: P/tE    22.6 =    677.9 d;  D=0.01: P/tE    4.42 =    132.7 d
   black hole   M2=60.00:  D=0.001: P/tE    40.2 =     1206 d;  D=0.01: P/tE    7.72 =    231.7 d
    smallest xi_E with D >= level at fixed P/tE
+  P/tE =    0.3:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.00269
+  P/tE =    0.5:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.0055
   P/tE =      1:  D=0.001: xi_E 0.00157;  D=0.01: xi_E 0.0158
+  P/tE =      3:  D=0.001: xi_E 0.0118;  D=0.01: xi_E 0.104
   P/tE =     10:  D=0.001: xi_E 0.12;  D=0.01: xi_E 1.21
   P/tE =     30:  D=0.001: xi_E 1.04;  D=0.01: never
   P/tE =    100:  D=0.001: never;  D=0.01: never
@@ -20,7 +24,10 @@ summary: results/final_52468b04987a/xiE_ptE_maps_u0_0p01_0p3_1_refine2/summary_x
   black hole   M2=10.00:  D=0.001: P/tE    81.7 =     2452 d;  D=0.01: P/tE      14 =    419.8 d
   black hole   M2=60.00:  D=0.001: P/tE     100 =     3003 d (to the edge of the map);  D=0.01: P/tE    25.4 =    760.7 d
    smallest xi_E with D >= level at fixed P/tE
+  P/tE =    0.3:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.00434
+  P/tE =    0.5:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.00486
   P/tE =      1:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.00785
+  P/tE =      3:  D=0.001: xi_E 0.00254;  D=0.01: xi_E 0.0256
   P/tE =     10:  D=0.001: xi_E 0.0248;  D=0.01: xi_E 0.226
   P/tE =     30:  D=0.001: xi_E 0.206;  D=0.01: xi_E 1.78
   P/tE =    100:  D=0.001: xi_E 2.16;  D=0.01: never
@@ -33,8 +40,27 @@ summary: results/final_52468b04987a/xiE_ptE_maps_u0_0p01_0p3_1_refine2/summary_x
   black hole   M2=10.00:  D=0.001: P/tE     122 =     3661 d;  D=0.01: P/tE      21 =    629.7 d
   black hole   M2=60.00:  D=0.001: P/tE     100 =     3003 d (to the edge of the map);  D=0.01: P/tE    34.5 =     1036 d
    smallest xi_E with D >= level at fixed P/tE
+  P/tE =    0.3:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.00834
+  P/tE =    0.5:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.00834
   P/tE =      1:  D=0.001: xi_E 0.001;  D=0.01: xi_E 0.00844
+  P/tE =      3:  D=0.001: xi_E 0.00179;  D=0.01: xi_E 0.0181
   P/tE =     10:  D=0.001: xi_E 0.0152;  D=0.01: xi_E 0.154
   P/tE =     30:  D=0.001: xi_E 0.128;  D=0.01: xi_E 1.2
   P/tE =    100:  D=0.001: xi_E 1.28;  D=0.01: never
+  P/tE =    300:  D=0.001: never;  D=0.01: never
+
+== u0 = 3: longest P/tE on each line with D >= level
+  brown dwarf  M2= 0.05:  D=0.001: P/tE    8.01 =    240.4 d;  D=0.01: never
+  white dwarf  M2= 0.60:  D=0.001: P/tE    38.4 =     1152 d;  D=0.01: P/tE    7.34 =    220.3 d
+  neutron star M2= 1.40:  D=0.001: P/tE      60 =     1800 d;  D=0.01: P/tE    10.6 =    318.4 d
+  black hole   M2=10.00:  D=0.001: P/tE     129 =     3869 d;  D=0.01: P/tE    20.3 =    609.8 d
+  black hole   M2=60.00:  D=0.001: P/tE     100 =     3003 d (to the edge of the map);  D=0.01: P/tE    37.2 =     1115 d
+   smallest xi_E with D >= level at fixed P/tE
+  P/tE =    0.3:  D=0.001: xi_E 0.00155;  D=0.01: xi_E 0.0155
+  P/tE =    0.5:  D=0.001: xi_E 0.00155;  D=0.01: xi_E 0.0155
+  P/tE =      1:  D=0.001: xi_E 0.00155;  D=0.01: xi_E 0.0155
+  P/tE =      3:  D=0.001: xi_E 0.00169;  D=0.01: xi_E 0.0169
+  P/tE =     10:  D=0.001: xi_E 0.0125;  D=0.01: xi_E 0.125
+  P/tE =     30:  D=0.001: xi_E 0.118;  D=0.01: xi_E 1.1
+  P/tE =    100:  D=0.001: xi_E 1.19;  D=0.01: never
   P/tE =    300:  D=0.001: never;  D=0.01: never

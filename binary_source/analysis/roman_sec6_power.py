@@ -430,6 +430,87 @@ def power_xi(args, A, I, c0):
     print("\nsaved", str(args.out) + ".npz", str(args.out) + "_boundary.csv")
 
 
+def ddet(args):
+    """
+    Intrinsic D_BSPL-PSPL on the Roman detection contour: for every power file
+    (--ddet, a --grid xiP* output made with --k-h1) and its intrinsic summary
+    (--ddet-summary, same order), g = 0, every F146 and u0, and every P/tE node,
+    xi_50 is where the orientation-mean efficiency at 3 sigma reaches 0.5
+    (boundary_xi); there the intrinsic median D, the median SNR_event and the
+    median Asimov lambda are interpolated in log xi. Reported: D_det = D(xi_50),
+    D_det * SNR, sqrt(lambda_50), r = sqrt(lambda_50)/(D_det * SNR) and the
+    prediction sqrt(c_3sigma - k_H1). Nodes where the contour lies at the first
+    xi node (not resolved) are skipped.
+    """
+    if not args.ddet_summary or len(args.ddet_summary) != len(args.ddet):
+        raise SystemExit("--ddet-summary must give one intrinsic summary per --ddet file")
+    lines = ["source,F146,g,u0,P_over_tE,xi_50,D_det,SNR_event,D_det_x_SNR,sqrt_lambda_50,r,"
+             "sqrt_c3s_minus_kH1"]
+    print("D_det = intrinsic median D on the Roman contour (efficiency 0.5, 3 sigma):")
+    print(f"{'source':>16s} {'F146':>4s} {'u0':>5s} {'n':>3s} | {'D_det med [min, max]':>28s} | "
+          f"{'D_det*SNR med [min, max]':>24s} | {'r med':>5s} | sqrt(c-k)")
+    for ppath, spath in zip(args.ddet, args.ddet_summary):
+        d, S = np.load(ppath), np.load(spath, allow_pickle=False)
+        if "SNR_EVENT" not in d.files or not np.isfinite(float(d["k_h1"])):
+            raise SystemExit(f"{ppath}: needs SNR_EVENT and --k-h1 (rerun roman_sec6_power.py)")
+        two = "q_flux_used" in S.files and float(S["q_flux_used"]) > 0.0
+        xs = np.asarray(S["xi_rel"] if two else S["xi_E"], float)
+        name = (f"qM{float(S['q_mass_used']):g}_qf{float(S['q_flux_used']):g}" if two
+                else "dark")
+        xi, pte = np.asarray(d["xiE_grid"], float), np.asarray(d["PtE_grid"], float)
+        jp = []
+        for v in pte:
+            j = np.flatnonzero(np.isclose(S["P_over_tE"], v, rtol=1e-9, atol=0.0))
+            jp.append(int(j[0]) if len(j) == 1 else None)
+        pw = d["POWER_3SIGMA"]
+        iso = slice(1, pw.shape[0])                           # row 0 = reference geometry
+        k1 = float(d["k_h1"])
+        for ib, g in enumerate(d["blend_ratio"]):
+            if not np.isclose(g, 0.0):
+                continue
+            for im, mag in enumerate(d["F146"]):
+                for iu, u0 in enumerate(d["u0_grid"]):
+                    js = np.flatnonzero(np.isclose(S["u0"], u0, rtol=1e-9, atol=0.0))
+                    if len(js) != 1:
+                        continue
+                    Dm = np.asarray(S["D_p16_p50_p84"][1][js[0]], float)   # (xi_s, P_s)
+                    m = np.nanmean(pw[iso, ib, im, iu], axis=0)            # (xi, P)
+                    x50 = boundary_xi(m, xi, 0.5)                          # (P,)
+                    snr = np.nanmedian(d["SNR_EVENT"][iso, ib, im, iu], axis=0)
+                    lam = np.nanmedian(d["LAMBDA"][iso, ib, im, iu], axis=0)
+                    c3 = float(d["C_3SIGMA"][ib, im, iu])
+                    pred = np.sqrt(max(c3 - k1, 0.0))
+                    vals = []
+                    for j, P in enumerate(pte):
+                        if jp[j] is None or not np.isfinite(x50[j]) or x50[j] <= xi[0] * (1 + 1e-9):
+                            continue
+                        lx = np.log(x50[j])
+                        col = Dm[:, jp[j]]
+                        ok = np.isfinite(col) & (col > 0)
+                        okl = np.isfinite(lam[:, j]) & (lam[:, j] > 0) & np.isfinite(snr[:, j])
+                        if ok.sum() < 2 or okl.sum() < 2:
+                            continue
+                        Dd = float(np.exp(np.interp(lx, np.log(xs[ok]), np.log(col[ok]))))
+                        sn = float(np.exp(np.interp(lx, np.log(xi[okl]), np.log(snr[okl, j]))))
+                        sl = float(np.sqrt(np.exp(np.interp(lx, np.log(xi[okl]),
+                                                            np.log(lam[okl, j])))))
+                        r = sl / (Dd * sn)
+                        vals.append((Dd, Dd * sn, r))
+                        lines.append(f"{name},{mag:g},{g:g},{u0:g},{P:.6g},{x50[j]:.6g},{Dd:.6g},"
+                                     f"{sn:.6g},{Dd * sn:.6g},{sl:.6g},{r:.4g},{pred:.4g}")
+                    if not vals:
+                        print(f"{name:>16s} {mag:4g} {u0:5g}   0 | contour not resolved")
+                        continue
+                    v = np.array(vals)
+                    print(f"{name:>16s} {mag:4g} {u0:5g} {len(v):3d} | "
+                          f"{np.median(v[:, 0]):8.2e} [{v[:, 0].min():8.2e}, {v[:, 0].max():8.2e}] | "
+                          f"{np.median(v[:, 1]):6.2f} [{v[:, 1].min():6.2f}, {v[:, 1].max():6.2f}] | "
+                          f"{np.median(v[:, 2]):5.2f} | {pred:.2f}")
+    if args.out is not None:
+        Path(str(args.out) + ".csv").write_text("\n".join(lines) + "\n")
+        print("saved", str(args.out) + ".csv")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gv-summary", type=Path)
@@ -444,11 +525,18 @@ def main():
     ap.add_argument("--validate", type=Path, default=None,
                     help="cells JSON: compare predicted and measured power (needs --profiles)")
     ap.add_argument("--profiles", nargs="*", default=[])
+    ap.add_argument("--ddet", nargs="+", type=Path, default=None,
+                    help="power files (--grid xiP*): intrinsic D on the 3 sigma, 0.5 contour")
+    ap.add_argument("--ddet-summary", nargs="+", type=Path, default=None,
+                    help="intrinsic summaries for --ddet, same order")
     ap.add_argument("--k-h1", type=float, default=None,
                     help="degrees of freedom of the noncentral chi2 under H1 (from --validate); "
                          "default: H0 k_local of each node")
     args = ap.parse_args()
 
+    if args.ddet:
+        ddet(args)
+        return
     if args.validate is not None:
         validate(args)
         return

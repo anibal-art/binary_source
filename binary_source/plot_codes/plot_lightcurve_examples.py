@@ -1743,7 +1743,8 @@ def read_gallery_rows(ids):
 def case_label(case, D):
     xi = (rf"$\xi_{{\rm rel}}={case['xi_rel']:g}$" if case["q_flux"] > 0
           else rf"$\xi_E={case['xi_E']:g}$")
-    lum = (rf", $q_M={case['q_mass']:g}$, $q_f={case['q_flux']:g}$" if case["q_flux"] > 0 else "")
+    lum = ("\n" + rf"$q_M={case['q_mass']:g}$, $q_f={case['q_flux']:g}$"
+           if case["q_flux"] > 0 else "")
     return (rf"$u_0={case['u0_true']:g}$, {xi}, $P/t_E={case['P_days'] / TE_TRUE:g}$" + lum
             + "\n" + rf"$D_{{\rm BSPL-PSPL}}={D:.2f}$")
 
@@ -1757,7 +1758,12 @@ def draw_lc(ax, axr, out, case, small=False):
     axr.axhline(0.0, color="0.6", lw=0.5)
     for a in (ax, axr):
         a.set_xlim(-METRIC_WINDOW_TE, METRIC_WINDOW_TE)
-    ax.set_yscale("log" if np.max(out["A"]) > 30 else "linear")
+    amax = float(np.max(np.r_[out["A"], out["A_fit"]]))
+    if amax > 30:
+        ax.set_yscale("log")
+        ax.set_ylim(top=amax * (3.0 if small else 8.0))
+    else:
+        ax.set_ylim(top=1.0 + (amax - 1.0) * (1.15 if small else 1.45))
     ax.text(0.03, 0.96, case_label(case, out["D"]), transform=ax.transAxes, va="top",
             ha="left", fontsize=5 if small else 7.5)
 
@@ -1813,16 +1819,20 @@ def plot_gallery(ids):
     n = len(cases)
     ncol = 3 if n > 4 else n
     nrow = int(np.ceil(n / ncol))
-    fig = plt.figure(figsize=(7.1, 2.35 * nrow))
-    gs = fig.add_gridspec(2 * nrow, ncol, height_ratios=[3, 1] * nrow, hspace=0.08,
-                          wspace=0.28, left=0.07, right=0.985, bottom=0.07, top=0.985)
+    fig = plt.figure(figsize=(7.1, 2.6 * nrow))
+    outer = fig.add_gridspec(nrow, ncol, hspace=0.12, wspace=0.28, left=0.07,
+                             right=0.985, bottom=0.085, top=0.99)
     for j, c in enumerate(cases):
         out = compute_case(c)
         print(f"ID {c['id']:5d} {c['shape']:12s} D = {out['D']:.3f}")
-        ax = fig.add_subplot(gs[2 * (j // ncol), j % ncol])
-        axr = fig.add_subplot(gs[2 * (j // ncol) + 1, j % ncol], sharex=ax)
+        inner = outer[j // ncol, j % ncol].subgridspec(2, 1, height_ratios=[3, 1],
+                                                      hspace=0.06)
+        ax = fig.add_subplot(inner[0])
+        axr = fig.add_subplot(inner[1], sharex=ax)
         draw_lc(ax, axr, out, c)
         ax.tick_params(labelbottom=False)
+        if j // ncol < nrow - 1:
+            axr.tick_params(labelbottom=False)
         ax.text(0.97, 0.96, f"({'abcdefghi'[j]})", transform=ax.transAxes, ha="right",
                 va="top", fontsize=8)
         if j % ncol == 0:

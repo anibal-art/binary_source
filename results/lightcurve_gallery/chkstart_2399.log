@@ -1,0 +1,6 @@
+   ID  D_truth  D_multi | truth start: t0/tE  u0  tE/tE | multistart best: t0/tE  u0  tE/tE | start
+/home/anibalvarela/.conda/envs/pyLIMA_test/lib/python3.11/site-packages/pyLIMA/models/ML_model.py:759: RuntimeWarning: divide by zero encountered in divide
+  tau = (time - pyLIMA_parameters['t0']) / pyLIMA_parameters['tE']
+/home/anibalvarela/.conda/envs/pyLIMA_test/lib/python3.11/site-packages/pyLIMA/models/ML_model.py:823: RuntimeWarning: invalid value encountered in multiply
+  lens_trajectory_y1 = tau1 * np.sin(alpha) + beta1 * np.cos(alpha)
+ 2399    0.269    0.269 | +0.240  0.2013  1.284 | +0.240  0.2013  1.284 | tE x2.0 u0 x0.3 dt0 +0.0  (54 starts)

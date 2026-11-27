@@ -1,0 +1,2 @@
+   ID  D_truth  D_multi | truth start: t0/tE  u0  tE/tE | multistart best: t0/tE  u0  tE/tE | start
+ 2868    0.487    0.487 | +0.000  0.6629  1.206 | +0.000  0.6629  1.206 | tE x0.3 u0 x0.3 dt0 -0.5  (54 starts)

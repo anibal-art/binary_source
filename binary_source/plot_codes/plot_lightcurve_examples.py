@@ -529,7 +529,13 @@ def objective_trapezoid(
     return float(_trapz(residual**2, x=t))
 
 
-def fit_pspl(ev, A_truth, t, t0_true, u0_true, tE_true, fs, ftotal):
+# Multistart grid for the gallery check: factors on (tE, u0) and shifts of t0 in tE.
+MULTISTART_TE = (0.3, 0.5, 0.7, 1.0, 1.4, 2.0)
+MULTISTART_U0 = (0.3, 1.0, 3.0)
+MULTISTART_DT0 = (-0.5, 0.0, 0.5)
+
+
+def fit_pspl(ev, A_truth, t, t0_true, u0_true, tE_true, fs, ftotal, multistart=False):
     model_pspl = PSPL_model.PSPLmodel(
         ev,
         parallax=["None", 0.0],
@@ -537,22 +543,32 @@ def fit_pspl(ev, A_truth, t, t0_true, u0_true, tE_true, fs, ftotal):
     )
     model_pspl.define_model_parameters()
 
-    x0 = np.array([t0_true, u0_true, tE_true], dtype=float)
-
-    res = so.minimize(
-        objective_trapezoid,
-        x0=x0,
-        args=(model_pspl, A_truth, t, fs, ftotal),
-        method="Nelder-Mead",
-        options={
-            "maxiter": 200_000,
-            "xatol": 1.0e-10,
-            "fatol": 1.0e-12,
-        },
-    )
-
+    starts = [np.array([t0_true, u0_true, tE_true], dtype=float)]
+    if multistart:
+        starts += [np.array([t0_true + d * tE_true, u0_true * fu, tE_true * ft])
+                   for ft in MULTISTART_TE for fu in MULTISTART_U0 for d in MULTISTART_DT0
+                   if not (ft == 1.0 and fu == 1.0 and d == 0.0)]
+    results = []
+    for x0 in starts:
+        r = so.minimize(
+            objective_trapezoid,
+            x0=x0,
+            args=(model_pspl, A_truth, t, fs, ftotal),
+            method="Nelder-Mead",
+            options={
+                "maxiter": 200_000,
+                "xatol": 1.0e-10,
+                "fatol": 1.0e-12,
+            },
+        )
+        results.append(r)
+    res = results[0]
     if not res.success:
         raise RuntimeError(f"PSPL fit failed: {res.message}")
+    truth_start = {"obj": float(res.fun), "best_fit": np.asarray(res.x, dtype=float)}
+    ok = [k for k, r in enumerate(results) if r.success and np.isfinite(r.fun)]
+    k_best = min(ok, key=lambda k: results[k].fun)
+    res = results[k_best]
 
     best = np.asarray(res.x, dtype=float)
     best_full = np.concatenate([best, [fs, ftotal]])
@@ -570,6 +586,10 @@ def fit_pspl(ev, A_truth, t, t0_true, u0_true, tE_true, fs, ftotal):
         "best_fit": best,
         "model": model_pspl,
         "py_params": py_best,
+        "obj": float(res.fun),
+        "truth_start": truth_start,
+        "best_start": starts[k_best],
+        "n_starts": len(starts),
         "x": _arr(traj[0]),
         "y": _arr(traj[1]),
     }
@@ -644,7 +664,7 @@ def intrinsic_distance(t, A_bspl, A_pspl):
 # Full case
 # =============================================================================
 
-def compute_case(case, n_points=N_POINTS):
+def compute_case(case, n_points=N_POINTS, multistart=False):
 
     P_days = float(case["P_days"])
     u0_true = float(case.get("u0_true", U0_TRUE))
@@ -700,6 +720,7 @@ def compute_case(case, n_points=N_POINTS):
         TE_TRUE,
         state["fs"],
         state["ftotal"],
+        multistart=multistart,
     )
 
     residual = state["A"] - fit["A_fit"]
@@ -895,6 +916,11 @@ def compute_case(case, n_points=N_POINTS):
         **state,
 
         "A_fit": fit["A_fit"],
+        "D_truth_start": float(np.sqrt(fit["truth_start"]["obj"]
+                                       / _trapz((state["A"] - 1.0) ** 2, x=t))),
+        "best_fit_truth_start": fit["truth_start"]["best_fit"],
+        "best_start": fit["best_start"],
+        "n_starts": fit["n_starts"],
         "fit_x": fit["x"],
         "fit_y": fit["y"],
         "best_fit": best,
@@ -1760,6 +1786,20 @@ def contact_sheet(rows, per_page=24):
     print(f"contact sheet: {dest}  ({len(cases)} candidates)")
 
 
+def check_starts(ids):
+    """Is the PSPL fitted from the true (t0, u0, tE) the best one? Multistart per case."""
+    print(f"{'ID':>5s} {'D_truth':>8s} {'D_multi':>8s} | truth start: t0/tE  u0  tE/tE"
+          f" | multistart best: t0/tE  u0  tE/tE | start")
+    for c in read_gallery_rows(ids):
+        out = compute_case(c, multistart=True)
+        a, b, s0 = out["best_fit_truth_start"], out["best_fit"], out["best_start"]
+        print(f"{c['id']:5d} {out['D_truth_start']:8.3f} {out['D']:8.3f} | "
+              f"{(a[0] - T0_TRUE) / TE_TRUE:+6.3f} {a[1]:7.4f} {a[2] / TE_TRUE:6.3f} | "
+              f"{(b[0] - T0_TRUE) / TE_TRUE:+6.3f} {b[1]:7.4f} {b[2] / TE_TRUE:6.3f} | "
+              f"tE x{s0[2] / TE_TRUE:.1f} u0 x{s0[1] / float(c.get('u0_true', U0_TRUE)):.1f} "
+              f"dt0 {(s0[0] - T0_TRUE) / TE_TRUE:+.1f}  ({out['n_starts']} starts)")
+
+
 def plot_gallery(ids):
     cases = read_gallery_rows(ids)
     n = len(cases)
@@ -1797,8 +1837,13 @@ def main():
                     help="gallery candidates with 0.1 <= D <= 1 and a contact sheet")
     ap.add_argument("--gallery", type=int, nargs="+", default=None, metavar="ID",
                     help="gallery figure of the chosen candidate IDs")
+    ap.add_argument("--check-starts", type=int, nargs="+", default=None, metavar="ID",
+                    help="PSPL fit from the truth vs a multistart grid, for gallery IDs")
     ap.add_argument("--workers", type=int, default=8)
     args = ap.parse_args()
+    if args.check_starts:
+        check_starts(args.check_starts)
+        return
     if args.candidates or args.gallery:
         set_paper_style()
         if args.candidates:

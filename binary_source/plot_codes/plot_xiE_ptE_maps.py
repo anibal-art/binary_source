@@ -152,7 +152,8 @@ def top_colorbar(fig, cax, mappable, label):
     return cbar
 
 
-def label_on_curve(ax, x, y, x_at, text, color, dy_pts=1.5, above=True, dark=False):
+def label_on_curve(ax, x, y, x_at, text, color, dy_pts=1.5, above=True, dark=False,
+                   fontsize=None):
     """Text aligned with a log-log curve at abscissa x_at (as in Fig. 2)."""
     import matplotlib.transforms as mtransforms
     good = np.isfinite(x) & np.isfinite(y)
@@ -163,7 +164,8 @@ def label_on_curve(ax, x, y, x_at, text, color, dy_pts=1.5, above=True, dark=Fal
     angle = np.degrees(np.arctan2(p2[1] - p1[1], p2[0] - p1[0]))
     off = mtransforms.offset_copy(ax.transData, fig=ax.figure, x=0.0,
                                   y=(dy_pts if above else -dy_pts), units="points")
-    return ax.text(x[i], y[i], text, color=color, fontsize=FS_ANNOT, rotation=angle,
+    return ax.text(x[i], y[i], text, color=color,
+                   fontsize=FS_ANNOT if fontsize is None else fontsize, rotation=angle,
                    rotation_mode="anchor", ha="center", va="bottom" if above else "top",
                    transform=off, zorder=30,
                    path_effects=halo(1.8, "black" if dark else "white"))

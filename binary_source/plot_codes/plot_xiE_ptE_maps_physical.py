@@ -62,12 +62,16 @@ def draw_companions(ax, pte):
     positions (data coordinates), which the contour labels must avoid."""
     p_line = np.logspace(np.log10(pte[0]) - 0.1, np.log10(pte[-1]) + 0.1, 400)
     avoid = []
+    m_last = COMPANIONS[-1][1]
     for _, m2, p_lab, above in COMPANIONS:
         x = companion_xi(p_line, m2)
         x_lab = float(companion_xi(p_lab, m2))
         ax.plot(x, p_line, color="white", lw=LW_MAIN, zorder=15)
-        base.label_on_curve(ax, x, p_line, x_lab, rf"${m2:g}\,M_\odot$", "white",
-                            above=above, dark=True)
+        # numbers only (unit on the last label and in the caption): the 0.6 and 1.4 Msun
+        # lines are ~8 pt apart, too close for full labels at a common P/tE
+        text = rf"${m2:g}\,M_\odot$" if m2 == m_last else rf"${m2:g}$"
+        base.label_on_curve(ax, x, p_line, x_lab, text, "white", above=above, dark=True,
+                            fontsize=FS_ANNOT - 2)
         avoid.append(np.c_[x, p_line])
         avoid.append(np.array([[x_lab / 1.5, p_lab], [x_lab * 1.5, p_lab]]))
     return avoid

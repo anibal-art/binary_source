@@ -41,12 +41,13 @@ import plot_xiE_ptE_maps as base  # noqa: E402
 REF_TE = 30.0            # d
 REF_REHAT = 5.0          # AU
 LUMINOUS_M1 = 1.0        # Msun
+LABEL_PTE = 1.0          # all M2 labels at the same P/tE, above their lines
 COMPANIONS = (           # kind (console only), M2 [Msun], P/tE of the M2 label, label above line
-    ("brown dwarf", 0.05, 1.5, False),      # labels staggered in P/tE so that the close
-    ("white dwarf", 0.6, 0.8, True),        # 0.6 and 1.4 Msun lines do not share a height;
-    ("neutron star", 1.4, 5.0, False),      # contour labels are placed away from lines
-    ("black hole", 10.0, 0.8, False),       # and labels (base.label_contours_avoiding)
-    ("black hole", 60.0, 20.0, True),       # massive BHs, as found in GW mergers
+    ("brown dwarf", 0.05, LABEL_PTE, True),     # contour labels are placed away from lines
+    ("white dwarf", 0.6, LABEL_PTE, True),      # and labels (base.label_contours_avoiding)
+    ("neutron star", 1.4, LABEL_PTE, True),
+    ("black hole", 10.0, LABEL_PTE, True),
+    ("black hole", 60.0, LABEL_PTE, True),      # massive BHs, as found in GW mergers
 )
 PERIOD_TICKS = ((10.0, "10 d"), (100.0, "100 d"), (base.YEAR_D, "1 yr"),   # plain text:
                 (10 * base.YEAR_D, "10 yr"), (100 * base.YEAR_D, "100 yr"))  # works without usetex

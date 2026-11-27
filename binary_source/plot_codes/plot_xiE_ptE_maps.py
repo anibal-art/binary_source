@@ -98,6 +98,7 @@ BIAS_A_MAX = 0.1           # first-order (constant-velocity) regime
 BIAS_PTE_MIN = 10.0
 BIAS_CMAP = "magma"
 A_LINES = (1e-3, 1e-2, 1e-1)
+VORB_LABEL_PTE = 100.0   # all v_orb labels in Fig. 3a at the same P/tE, above their lines
 
 PANEL_W = fig_width(0.48)          # same printed size as Fig. 2a
 PANEL_H = 2.75
@@ -453,7 +454,7 @@ def bias_figure(S, outdir):
     for a_val in A_LINES:
         y_line = 2.0 * np.pi * x_line / a_val
         ax_a.plot(x_line, y_line, color="white", lw=LW_THIN, ls="--", zorder=11)
-        x_at = np.clip(a_val * 300.0 / (2.0 * np.pi), xi[2], xi[-18])   # label near P/tE ~ 300
+        x_at = a_val * VORB_LABEL_PTE / (2.0 * np.pi)
         label_on_curve(ax_a, x_line, y_line, x_at, rf"$v_{{\rm orb}}={a_val:g}$", "white",
                        above=True, dark=True)
     ax_a.set_xscale("log"); ax_a.set_yscale("log")

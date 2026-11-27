@@ -111,7 +111,8 @@ def main():
         elif geo is not None and "geometries" in S.files and not np.allclose(S["geometries"], geo):
             raise SystemExit(f"{path}: orbital geometries differ from {paths[0]}")
         u0_list.append(np.atleast_1d(S["u0"]))
-        D_list.append(S["D_p16_p50_p84"][:, 1])
+        # D_p16_p50_p84 is (percentile, u0, xi, P/tE): np.nanpercentile puts the percentile axis first
+        D_list.append(S["D_p16_p50_p84"][1])
         print("summary:", path, "| commit", S["code_commit"], "dirty", bool(S["code_dirty"]),
               "| u0", S["u0"], "| grid", len(xi), "x", len(pte))
     u0s = np.concatenate(u0_list)

@@ -74,7 +74,8 @@ def main():
 
     S1 = np.load(args.one_luminous, allow_pickle=False)
     u0s, xiE1, pte = S1["u0"], S1["xi_E"], S1["P_over_tE"]
-    D1 = S1["D_p16_p50_p84"][:, 1]
+    # D_p16_p50_p84 is (percentile, u0, xi, P/tE): np.nanpercentile puts the percentile axis first
+    D1 = S1["D_p16_p50_p84"][1]
     print("one luminous:", args.one_luminous, "| commit", S1["code_commit"],
           "dirty", bool(S1["code_dirty"]), "| u0", u0s)
 
@@ -84,7 +85,7 @@ def main():
         assert np.allclose(S["u0"], u0s), f"{path}: u0 differs from the one-luminous summary"
         assert np.allclose(S["P_over_tE"], pte), f"{path}: P/tE grid differs"
         qm, qf = float(S["q_mass_used"]), float(S["q_flux_used"])
-        rows.append((qm, qf, S["xi_rel"], S["D_p16_p50_p84"][:, 1]))
+        rows.append((qm, qf, S["xi_rel"], S["D_p16_p50_p84"][1]))
         n_nan = int(np.isnan(S["D_all"]).sum())
         print(f"q_M={qm:g} q_f={qf:g}:", path, "| commit", S["code_commit"],
               "dirty", bool(S["code_dirty"]), f"| failed fits (NaN) {n_nan}")

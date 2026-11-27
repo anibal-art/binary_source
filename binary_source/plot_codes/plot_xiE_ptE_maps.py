@@ -271,7 +271,8 @@ def main():
     path = args.summary or find_summary()
     S = np.load(path, allow_pickle=False)
     u0s, xi, pte = S["u0"], S["xi_E"], S["P_over_tE"]
-    Dmed = S["D_p16_p50_p84"][:, 1]                    # (u0, xi, P/tE)
+    # D_p16_p50_p84 is (percentile, u0, xi, P/tE): np.nanpercentile puts the percentile axis first
+    Dmed = S["D_p16_p50_p84"][1]                       # median: (u0, xi, P/tE)
     print("summary:", path, "| commit", S["code_commit"], "dirty", bool(S["code_dirty"]),
           "| random orientations:", int(S["n_random_geometries"]))
 
@@ -438,7 +439,7 @@ def bias_figure(S, outdir):
     with warnings.catch_warnings():                       # all-NaN cells stay NaN
         warnings.simplefilter("ignore", RuntimeWarning)
         med = 100.0 * np.nanmedian(dte, axis=1)          # percent, (xi, P/tE)
-    Dmed = S["D_p16_p50_p84"][k, 1]
+    Dmed = S["D_p16_p50_p84"][1, k]                    # median at u0 index k
     med = np.where(Dmed < BIAS_D_MAX, med, np.nan)
     ax_a.set_facecolor("0.82")
     pcm = heatmap(ax_a, log_edges(xi), log_edges(pte), np.ma.masked_invalid(med).T,

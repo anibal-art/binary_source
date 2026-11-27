@@ -73,8 +73,12 @@ def _get_git_state():
 
     except Exception:
 
-        commit = "unknown"
-        dirty = True
+        # No git on the compute node: the submitting shell passes the state,
+        # BINARY_SOURCE_GIT_COMMIT=$(git rev-parse --short=12 HEAD) and
+        # BINARY_SOURCE_GIT_DIRTY=$(git status --porcelain | wc -l).
+        commit = os.environ.get("BINARY_SOURCE_GIT_COMMIT", "unknown")
+        dirty = (commit == "unknown"
+                 or os.environ.get("BINARY_SOURCE_GIT_DIRTY", "1").strip() not in ("0", ""))
 
     return commit, dirty
 

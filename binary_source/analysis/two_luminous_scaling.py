@@ -107,7 +107,8 @@ def main():
 
     S1 = np.load(args.one_luminous, allow_pickle=False)
     u0s, xiE1, pte = S1["u0"], S1["xi_E"], S1["P_over_tE"]
-    D1 = S1["D_p16_p50_p84"][:, 1]
+    # D_p16_p50_p84 is (percentile, u0, xi, P/tE): np.nanpercentile puts the percentile axis first
+    D1 = S1["D_p16_p50_p84"][1]
     rows = []
     for path in args.summaries:
         S = np.load(path, allow_pickle=False)
@@ -116,7 +117,7 @@ def main():
         beta = qf / (1.0 + qf)
         rows.append(dict(qm=qm, qf=qf, beta=beta, b1b=beta * (1.0 - beta),
                          fac=photocentre_factor(qm, qf), xi=S["xi_rel"],
-                         D=S["D_p16_p50_p84"][:, 1], commit=str(S["code_commit"])))
+                         D=S["D_p16_p50_p84"][1], commit=str(S["code_commit"])))
     xi = rows[0]["xi"]
     assert all(np.allclose(r["xi"], xi) for r in rows)
     print(f"one luminous: commit {S1['code_commit']}; two luminous: commit "
@@ -185,7 +186,7 @@ def main():
             "the validation pair is also a calibration row"
         vbeta = vqf / (1.0 + vqf)
         vb1b, vfac = vbeta * (1.0 - vbeta), photocentre_factor(vqm, vqf)
-        Dv = V["D_p16_p50_p84"][:, 1]
+        Dv = V["D_p16_p50_p84"][1]
         C_cal = [np.mean([Cs[(r["qm"], r["qf"], k)] for r in rows]) for k in range(len(u0s))]
         print(f"\n3. Validation: q_M={vqm:g}, q_f={vqf:g} (commit {V['code_commit']}, "
               f"dirty {bool(V['code_dirty'])}, failed fits {int(np.isnan(V['D_all']).sum())}); "

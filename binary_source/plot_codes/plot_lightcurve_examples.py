@@ -533,6 +533,17 @@ def objective_trapezoid(
 MULTISTART_TE = (0.3, 0.5, 0.7, 1.0, 1.4, 2.0)
 MULTISTART_U0 = (0.3, 1.0, 3.0)
 MULTISTART_DT0 = (-0.5, 0.0, 0.5)
+MULTISTART_MAXITER = 20_000     # extra starts only; same cap as degeneracy_fit.py
+MULTISTART_WORKERS = 1          # set from --workers in check_starts
+_MS_CTX = None                  # fit context shared with forked workers
+
+
+def _ms_fit(args):
+    x0, maxiter = args
+    model_pspl, A_truth, t, fs, ftotal = _MS_CTX
+    return so.minimize(objective_trapezoid, x0=x0,
+                       args=(model_pspl, A_truth, t, fs, ftotal), method="Nelder-Mead",
+                       options={"maxiter": maxiter, "xatol": 1.0e-10, "fatol": 1.0e-12})
 
 
 def fit_pspl(ev, A_truth, t, t0_true, u0_true, tE_true, fs, ftotal, multistart=False):
@@ -548,20 +559,15 @@ def fit_pspl(ev, A_truth, t, t0_true, u0_true, tE_true, fs, ftotal, multistart=F
         starts += [np.array([t0_true + d * tE_true, u0_true * fu, tE_true * ft])
                    for ft in MULTISTART_TE for fu in MULTISTART_U0 for d in MULTISTART_DT0
                    if not (ft == 1.0 and fu == 1.0 and d == 0.0)]
-    results = []
-    for x0 in starts:
-        r = so.minimize(
-            objective_trapezoid,
-            x0=x0,
-            args=(model_pspl, A_truth, t, fs, ftotal),
-            method="Nelder-Mead",
-            options={
-                "maxiter": 200_000,
-                "xatol": 1.0e-10,
-                "fatol": 1.0e-12,
-            },
-        )
-        results.append(r)
+    global _MS_CTX
+    _MS_CTX = (model_pspl, A_truth, t, fs, ftotal)
+    jobs = [(starts[0], 200_000)] + [(x0, MULTISTART_MAXITER) for x0 in starts[1:]]
+    if MULTISTART_WORKERS > 1 and len(jobs) > 1:
+        import multiprocessing as mp
+        with mp.get_context("fork").Pool(min(MULTISTART_WORKERS, len(jobs))) as pool:
+            results = pool.map(_ms_fit, jobs)
+    else:
+        results = [_ms_fit(j) for j in jobs]
     res = results[0]
     if not res.success:
         raise RuntimeError(f"PSPL fit failed: {res.message}")
@@ -1786,8 +1792,10 @@ def contact_sheet(rows, per_page=24):
     print(f"contact sheet: {dest}  ({len(cases)} candidates)")
 
 
-def check_starts(ids):
+def check_starts(ids, workers=1):
     """Is the PSPL fitted from the true (t0, u0, tE) the best one? Multistart per case."""
+    global MULTISTART_WORKERS
+    MULTISTART_WORKERS = workers
     print(f"{'ID':>5s} {'D_truth':>8s} {'D_multi':>8s} | truth start: t0/tE  u0  tE/tE"
           f" | multistart best: t0/tE  u0  tE/tE | start")
     for c in read_gallery_rows(ids):
@@ -1842,7 +1850,7 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     args = ap.parse_args()
     if args.check_starts:
-        check_starts(args.check_starts)
+        check_starts(args.check_starts, args.workers)
         return
     if args.candidates or args.gallery:
         set_paper_style()

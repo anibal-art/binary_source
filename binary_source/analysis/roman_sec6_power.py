@@ -447,7 +447,7 @@ def ddet(args):
     lines = ["source,F146,g,u0,P_over_tE,xi_50,D_det,SNR_event,D_det_x_SNR,sqrt_lambda_50,r,"
              "sqrt_c3s_minus_kH1"]
     print("D_det = intrinsic median D on the Roman contour (efficiency 0.5, 3 sigma):")
-    print(f"{'source':>16s} {'F146':>4s} {'u0':>5s} {'n':>3s} | {'D_det med [min, max]':>28s} | "
+    print(f"{'source':>16s} {'g':>3s} {'F146':>4s} {'u0':>5s} {'n':>3s} | {'D_det med [min, max]':>28s} | "
           f"{'D_det*SNR med [min, max]':>24s} | {'r med':>5s} | sqrt(c-k)")
     for ppath, spath in zip(args.ddet, args.ddet_summary):
         d, S = np.load(ppath), np.load(spath, allow_pickle=False)
@@ -466,7 +466,7 @@ def ddet(args):
         iso = slice(1, pw.shape[0])                           # row 0 = reference geometry
         k1 = float(d["k_h1"])
         for ib, g in enumerate(d["blend_ratio"]):
-            if not np.isclose(g, 0.0):
+            if not any(np.isclose(g, b) for b in args.ddet_blend):
                 continue
             for im, mag in enumerate(d["F146"]):
                 for iu, u0 in enumerate(d["u0_grid"]):
@@ -499,10 +499,10 @@ def ddet(args):
                         lines.append(f"{name},{mag:g},{g:g},{u0:g},{P:.6g},{x50[j]:.6g},{Dd:.6g},"
                                      f"{sn:.6g},{Dd * sn:.6g},{sl:.6g},{r:.4g},{pred:.4g}")
                     if not vals:
-                        print(f"{name:>16s} {mag:4g} {u0:5g}   0 | contour not resolved")
+                        print(f"{name:>16s} {g:3g} {mag:4g} {u0:5g}   0 | contour not resolved")
                         continue
                     v = np.array(vals)
-                    print(f"{name:>16s} {mag:4g} {u0:5g} {len(v):3d} | "
+                    print(f"{name:>16s} {g:3g} {mag:4g} {u0:5g} {len(v):3d} | "
                           f"{np.median(v[:, 0]):8.2e} [{v[:, 0].min():8.2e}, {v[:, 0].max():8.2e}] | "
                           f"{np.median(v[:, 1]):6.2f} [{v[:, 1].min():6.2f}, {v[:, 1].max():6.2f}] | "
                           f"{np.median(v[:, 2]):5.2f} | {pred:.2f}")
@@ -529,6 +529,8 @@ def main():
                     help="power files (--grid xiP*): intrinsic D on the 3 sigma, 0.5 contour")
     ap.add_argument("--ddet-summary", nargs="+", type=Path, default=None,
                     help="intrinsic summaries for --ddet, same order")
+    ap.add_argument("--ddet-blend", nargs="+", type=float, default=[0.0],
+                    help="blend ratios g = F_B/F_S used by --ddet")
     ap.add_argument("--k-h1", type=float, default=None,
                     help="degrees of freedom of the noncentral chi2 under H1 (from --validate); "
                          "default: H0 k_local of each node")
